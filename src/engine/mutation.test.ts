@@ -25,6 +25,7 @@ import {
   type Operation,
 } from "./mutation.ts";
 import { graphIndexOf } from "./graph/graph-index.ts";
+import { createLayer } from "./layers.ts";
 import { deepFreeze } from "./differential.ts";
 import { createEmptyDocument, type Document } from "./document.ts";
 import { executeCommand } from "../command/commands.ts";
@@ -4858,5 +4859,87 @@ describe("mutate — writes to existing slots commit through the index of the co
     expectSameAsWholeDocument(state, [write(circle, { kind: "literal", value: 7 }, ["radius"])], narrow);
     const widened = expectSameAsWholeDocument(state, [write(circle, { kind: "literal", value: 7 }, ["radius"])], wide);
     expect(widened).not.toEqual(mutate(state.objects, [write(circle, { kind: "literal", value: 7 }, ["radius"])], state.journal, narrow, FULL_EVALUATION_STRATEGY));
+  });
+});
+
+describe("mutate — creates, renames, deletes and cell clears commit through the index of the committed state", () => {
+  it("reads the same number of object records for a create, a rename and a delete at any document size", () => {
+    const reads = [250, 1000, 4000].map((size) => {
+      const chain = committedChain(size);
+      let slotReads = 0;
+      const wrapped = chain.objects.map((object) => new Proxy(object, {
+        get(target, property, receiver) {
+          if (property === "slots") slotReads += 1;
+          return Reflect.get(target, property, receiver);
+        },
+      }));
+      const first = mutate(wrapped, [write(`obj_${size - 1}`, { kind: "formula", ast: { type: "reference", address: addr(`obj_${size - 2}`, "value") }, value: null })], chain.journal);
+      if (!first.ok) throw new Error(first.message);
+      slotReads = 0;
+      const batches: readonly (readonly Operation[])[] = [
+        [{ kind: "createObject", object: { id: "late", name: "late_1", type: "value", slots: { value: { kind: "formula", ast: { type: "reference", address: addr(`obj_${size - 1}`, "value") }, value: null } } } }],
+        [{ kind: "renameObject", objectId: `obj_${size - 1}`, name: "renamed_tail" }],
+        [{ kind: "deleteObject", objectId: "late" }],
+      ];
+      let state: { readonly objects: readonly GraphObject[]; readonly journal: readonly MutationJournalEntry[] } = first;
+      for (const batch of batches) {
+        const result = mutate(state.objects, batch, state.journal);
+        if (!result.ok) throw new Error(result.message);
+        expect(graphIndexOf(state.objects)).toBeUndefined();
+        state = result;
+      }
+      expect(state.objects).toHaveLength(size);
+      expect(state.objects[size - 1]?.name).toBe("renamed_tail");
+      return slotReads;
+    });
+    expect(new Set(reads).size).toBe(1);
+    expect(reads[0]).toBeLessThan(40);
+  });
+
+  it("agrees with the whole-document path for names, document variables, layers and text that names an object before it exists", () => {
+    let state: { readonly objects: readonly GraphObject[]; readonly journal: readonly MutationJournalEntry[] } = runCommands([
+      "docvar speed 12",
+      'text x=0 y=0 "speed {= speed } later {= later.value }"',
+      "table x=0 y=0",
+      "set table_1.B1 = SUM(table_1.A1:table_1.A2)",
+    ]);
+    const table = idOf(state.objects, "table_1");
+    const value = (id: string, name: string, slot: Slot = { kind: "literal", value: 4 }): Operation =>
+      ({ kind: "createObject", object: { id, name, type: "value", slots: { value: slot } } });
+    const layer = createLayer("layer_a", "layer_a");
+    const steps: readonly { readonly batch: readonly Operation[]; readonly ok: boolean }[] = [
+      { batch: [value("v_later", "later")], ok: true },
+      { batch: [value("v_clash", "Speed")], ok: false },
+      { batch: [value("v_doc", "doc")], ok: false },
+      { batch: [value("v_bad", "2bad")], ok: false },
+      { batch: [{ kind: "renameObject", objectId: "v_later", name: "earlier" }], ok: true },
+      { batch: [{ kind: "renameObject", objectId: "v_later", name: "later" }], ok: true },
+      { batch: [write(table, { kind: "literal", value: 5 }, ["cells", "A2"])], ok: true },
+      { batch: [{ kind: "clearSlot", address: addr(table, "cells", "A2") }], ok: true },
+      { batch: [{ kind: "createObject", object: layer }], ok: true },
+      { batch: [write("v_later", { kind: "literal", value: "layer_a" }, ["view", "layer"])], ok: true },
+      { batch: [{ kind: "deleteObject", objectId: "layer_a" }], ok: false },
+      { batch: [{ kind: "deleteObject", objectId: "v_later" }], ok: true },
+      { batch: [{ kind: "deleteObject", objectId: "layer_a" }], ok: true },
+      { batch: [value("v_gone", "gone"), { kind: "deleteObject", objectId: "v_gone" }], ok: true },
+    ];
+    for (const step of steps) {
+      const result = expectSameAsWholeDocument(state, step.batch, stagingContext);
+      expect(result.ok, JSON.stringify(step.batch)).toBe(step.ok);
+      if (result.ok) state = result;
+    }
+    expect(state.objects.find((object) => object.type === "text")?.slots.resolvedContent?.value).toContain("speed 12 later");
+  });
+
+  it("refuses an object named doc in a document with no variables, as the whole-document path does", () => {
+    const chain = committedChain(3);
+    const named = expectSameAsWholeDocument(chain, [{ kind: "createObject", object: valueObject("obj_doc", "Doc", 1) }]);
+    expect(named.ok === false && named.message).toContain("the name doc belongs to the document variables");
+  });
+
+  it("sends a delete with force down the whole-document path, which reports the slots it broke", () => {
+    const chain = committedChain(4);
+    const forced = expectSameAsWholeDocument(chain, [{ kind: "deleteObject", objectId: "obj_1", force: true }]);
+    expect(forced.ok && forced.brokenSlots).toEqual([addr("obj_2", "value")]);
   });
 });

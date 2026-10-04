@@ -5,11 +5,11 @@
  * and a list of operations, and returns a new set of objects or a refusal.
  * No other code in the repository writes document state.
  *
- * A call takes one of two paths. A batch that only writes slots which already
- * exist, against a list this file committed, takes the indexed path in
- * commitInPlaceWrites, which reads graph/graph-index.ts and costs what the
- * batch affects. Every other call runs the same seven steps in order, over the
- * whole document:
+ * A call takes one of two paths. A batch of slot writes, table cell clears,
+ * creates, renames and deletes without force, against a list this file
+ * committed, takes the indexed path in commitIndexedBatch, which reads
+ * graph/graph-index.ts and costs what the batch affects. Every other call runs
+ * the same seven steps in order, over the whole document:
  *
  *   1. Stage.     Apply the operations to a new object list.
  *   2. Derive.    Rebuild the whole edge set from stored ASTs and the schema.
@@ -78,13 +78,13 @@
  * the tests run headless and the file can move to Rust later.
  */
 
-import { checkNameAvailable, formatAddress, isAddressError, nameSuggestion, TABLE_CELL_PATH_PREFIX, type Address } from "./address.ts";
+import { checkNameAvailable, checkNameAvailableBy, formatAddress, isAddressError, nameSuggestion, TABLE_CELL_PATH_PREFIX, type Address } from "./address.ts";
 import { documentVariableNameProblem } from "./primitives/doc.ts";
-import { rewriteTextReferences } from "./primitives/text.ts";
+import { extractTextDependencies, parseTextContent, rewriteTextReferences, TEXT_CONTENT_PATH } from "./primitives/text.ts";
 import { rewriteMathReferences } from "./primitives/math.ts";
 import { NULL_EVAL_CONTEXT, type EvalContext } from "./eval-context.ts";
 import type { FormulaAst } from "./formula/ast.ts";
-import { extractDependencies, repairAddressesInAst, rewriteAddressesInAst } from "./formula/deps.ts";
+import { extractDependencies, repairAddressesInAst, rewriteAddressesInAst, type Dependency } from "./formula/deps.ts";
 import { derivedSlotDependencyAddresses, getObjectSchema, resolveDerivedSlots, resolveNonDerivedSlotPaths } from "./primitives/schema.ts";
 import { layerProblem } from "./layers.ts";
 import {
@@ -124,8 +124,8 @@ import { detectCycle } from "./graph/cycles.ts";
 import { addressKey, type Edge } from "./graph/edge.ts";
 import { evaluate, evaluateAffected, type SlotEvaluationObserver } from "./graph/eval.ts";
 import { lookupFromEdges, type GraphLookup } from "./graph/lookup.ts";
-import { attachGraphIndex, buildGraphIndex, commitGraphIndex, edgeChanges, graphIndexOf, stagedLookup } from "./graph/graph-index.ts";
-import { hasIllegalNumber, isIllegalNumber, isLegalPortName, MATH_TYPE, POLYLINE_TYPE, slotKey, TABLE_TYPE, type GraphObject, type ObjectType, type Point, type Slot, type Value } from "./graph/node.ts";
+import { attachGraphIndex, buildGraphIndex, commitGraphIndex, edgeChanges, graphIndexOf, nameScope, stagedLookup, stagedObject, wordsOf, type GraphIndexChanges, type NameScope, type ObjectFacts } from "./graph/graph-index.ts";
+import { hasIllegalNumber, isIllegalNumber, isLegalPortName, MATH_TYPE, POLYLINE_TYPE, slotKey, TABLE_TYPE, TEXT_TYPE, type GraphObject, type ObjectType, type Point, type Slot, type Value } from "./graph/node.ts";
 
 /**
  * Step 3 rebuilds the whole edge set from stored ASTs and from the schema. It
@@ -1022,10 +1022,17 @@ function resolveSlotPathForKey(object: GraphObject, key: string): readonly strin
  * A table's extent and an object's layer membership are read by other objects:
  * by the edges of every formula that names a cell, and by the integrity check
  * of every layer member. A write to either takes the whole-document path. So
- * does a direct write to a math source, which that path refuses with a reason.
+ * does a direct write to a math source, which that path refuses with a reason,
+ * and a write that creates a document variable, whose name the name checks of
+ * every object read. A write that creates any other slot stays on the indexed
+ * path, because the objects that name the object it lands on are the only
+ * ones whose edges read its slot set.
  */
-function isInPlaceWrite(object: GraphObject, path: readonly string[], existing: Slot | undefined, slot: Slot): boolean {
-  if (existing === undefined || existing.kind === "derived" || slot.kind === "derived") {
+function isIndexedWrite(object: GraphObject, path: readonly string[], existing: Slot | undefined, slot: Slot): boolean {
+  if (existing?.kind === "derived" || slot.kind === "derived") {
+    return false;
+  }
+  if (existing === undefined && object.type === "doc") {
     return false;
   }
   const key = slotKey(path);
@@ -1038,6 +1045,10 @@ function isInPlaceWrite(object: GraphObject, path: readonly string[], existing: 
   if (object.type === MATH_TYPE && key === slotKey(MATH_SOURCE_PATH)) {
     return false;
   }
+  return isLegalSlotPayload(slot);
+}
+
+function isLegalSlotPayload(slot: Slot): boolean {
   return !hasIllegalNumber(slot.value) && (slot.kind !== "formula" || collectIllegalAstLiterals(slot.ast).length === 0);
 }
 
@@ -1048,98 +1059,304 @@ function sameEdges(left: readonly Edge[], right: readonly Edge[]): boolean {
   });
 }
 
+function textContentWords(object: GraphObject): readonly string[] {
+  const content = object.slots[slotKey(TEXT_CONTENT_PATH)];
+  return object.type === TEXT_TYPE && content?.kind === "literal" && typeof content.value === "string" ? wordsOf(content.value) : [];
+}
+
 /**
- * Commits a batch of writes to slots that already exist, reading the index of
- * the committed state rather than the whole document, or returns undefined to
- * send the batch down the whole-document path.
+ * The list a schema resolver reads for one object. Text is the one type whose
+ * resolver reads the list, and it reads it to resolve names, so the scope of
+ * its words answers it the same way the whole document would.
+ */
+function resolverObjects(object: GraphObject, scope: NameScope): readonly GraphObject[] {
+  return object.type === TEXT_TYPE ? scope(textContentWords(object)) : [];
+}
+
+/**
+ * What one object contributes to the committed-state index: the IDs it names,
+ * the words of its text content, and its slots that read the evaluation
+ * context. The IDs come from every formula reference and range, a copy's
+ * target, a layer membership, the sources of its edges, and the addresses its
+ * text content resolves to, including an empty cell inside a table's extent,
+ * which has no edge until the cell holds something.
+ */
+function objectFacts(object: GraphObject, ownEdges: readonly Edge[], scope: NameScope): ObjectFacts {
+  const references = new Set<string>();
+  for (const edge of ownEdges) {
+    references.add(edge.sourceSlot.objectId);
+  }
+  const collect = (dependencies: readonly Dependency[]): void => {
+    for (const dependency of dependencies) {
+      if (dependency.kind === "reference") {
+        references.add(dependency.address.objectId);
+      } else {
+        references.add(dependency.start.objectId);
+        references.add(dependency.end.objectId);
+      }
+    }
+  };
+  for (const slot of Object.values(object.slots)) {
+    if (slot.kind === "formula") {
+      collect(extractDependencies(slot.ast));
+    }
+  }
+  if (object.target !== undefined) {
+    references.add(object.target.objectId);
+  }
+  const membership = object.slots["view.layer"];
+  if (membership?.kind === "literal" && typeof membership.value === "string") {
+    references.add(membership.value);
+  }
+  const words = textContentWords(object);
+  const content = object.slots[slotKey(TEXT_CONTENT_PATH)];
+  if (object.type === TEXT_TYPE && content?.kind === "literal" && typeof content.value === "string") {
+    collect(extractTextDependencies(parseTextContent(content.value, scope(words))));
+  }
+  references.delete(object.id);
+  return { references: [...references], words, contextSlots: contextSlotAddresses([object]) };
+}
+
+/**
+ * The integrity checks that read other objects, for one object: its layer
+ * membership, its copy target, and the name reserved for the document
+ * variable object. validateIntegrity runs the same rules over every object,
+ * with the messages an operator reads, and the indexed path only needs to
+ * know whether any of them fails.
+ */
+function crossObjectProblem(object: GraphObject, objectById: (id: string) => GraphObject | undefined, doc: GraphObject | undefined): boolean {
+  const membership = object.slots["view.layer"];
+  if (membership !== undefined && (membership.kind !== "literal" || (membership.value !== null && typeof membership.value !== "string"))) {
+    return true;
+  }
+  if (membership?.kind === "literal" && typeof membership.value === "string" && membership.value !== "") {
+    if (object.type === "layer" || objectById(membership.value)?.type !== "layer") {
+      return true;
+    }
+  }
+  if (object.type !== "doc" && object.name.toLowerCase() === "doc") {
+    return true;
+  }
+  if (object.type === "docref") {
+    return object.target?.objectId !== doc?.id || object.target?.path.length !== 1 || doc?.slots[object.target.path[0]!] === undefined;
+  }
+  return object.target !== undefined;
+}
+
+const INDEXED_OPERATION_KINDS: ReadonlySet<Operation["kind"]> = new Set(["setSlot", "clearSlot", "createObject", "deleteObject", "renameObject"]);
+
+/**
+ * Commits a batch through the index of the committed state rather than the
+ * whole document, or returns undefined to send it down the whole-document
+ * path. It takes writes to slots, clears of table cells, creates, renames and
+ * deletes without force, and sends everything else down that path.
  *
- * Such a batch keeps every object, every name and every slot set as it was,
- * and only replaces what some slots hold. The edges of an object read nothing
- * else that such a batch can change, as deriveObjectEdges describes, so only
- * the objects it writes need their edges derived again, and only those objects
- * need the per-object integrity checks. The checks that span objects, which
- * are names, the document variables, layer membership and copy targets, read
- * nothing the batch changes. A new cycle has to pass through a slot whose
- * sources changed, so the cycle search starts from those slots alone, and
- * evaluation covers the region downstream of the writes.
+ * The batch first stages each operation against its own versions of the
+ * objects it touches, checking each one the way the preflight checks of
+ * mutate() would, with names answered by the index. It then works out which
+ * objects need their edges derived and their checks run again: every object
+ * it changed, every object that names one of those by ID, and, when a name
+ * appears or goes, every text whose content holds that name as a word. As
+ * graph-index.ts describes, nothing else can read what the batch changed. The
+ * checks that span every object at once are the singleton document variable
+ * object and its variable names, which the batch never creates, deletes,
+ * renames or adds to, and name uniqueness, which the staging checks against
+ * the index.
+ *
+ * A new cycle has to pass through a slot whose sources changed, so the cycle
+ * search starts from those slots alone, and evaluation covers the region
+ * downstream of the slots the operations touch. The roots and the dependents
+ * it follows match the incremental strategy on the whole-document path.
  *
  * Any problem sends the batch down the whole-document path as well, which
  * finds the same problem and words the refusal. A refusal names every slot
  * involved in the order a whole-document pass meets them, and reproducing that
- * order here would need the whole document anyway.
+ * order here would need the whole document anyway. A delete with force does
+ * the same, because the slots it reports broken come out in that order too.
  *
  * The slots that read the evaluation context are evaluated again only when the
  * context differs from the one the index last saw. A host that changes what
  * its measurer answers without changing the context, as main.ts does when a
  * font arrives, evaluates the document itself, and that list has no index.
  */
-function commitInPlaceWrites(
+function commitIndexedBatch(
   objects: readonly GraphObject[],
   operations: readonly Operation[],
   journal: readonly MutationJournalEntry[],
   context: EvalContext,
 ): MutationResult | undefined {
   const index = graphIndexOf(objects);
-  if (index === undefined) {
+  if (index === undefined || !operations.every((operation) => INDEXED_OPERATION_KINDS.has(operation.kind))) {
     return undefined;
   }
-  const replaced = new Map<string, GraphObject>();
-  for (const operation of operations) {
-    if (operation.kind !== "setSlot") {
-      return undefined;
+  const staged = new Map<string, GraphObject | null>();
+  const current = (id: string): GraphObject | undefined => stagedObject(index, staged, id);
+  const holders = (word: string): Iterable<string> => {
+    const ids = new Set(index.names.get(word) ?? []);
+    for (const [id, object] of staged) {
+      if (object !== null && object.name.toLowerCase() === word) ids.add(id);
     }
-    const objectId = operation.address.objectId;
-    const position = index.positions.get(objectId);
-    if (position === undefined) {
-      return undefined;
-    }
-    const object = replaced.get(objectId) ?? objects[position]!;
-    const key = slotKey(operation.address.path);
-    if (!isInPlaceWrite(object, operation.address.path, object.slots[key], operation.slot)) {
-      return undefined;
-    }
-    replaced.set(objectId, { ...object, slots: { ...object.slots, [key]: deepClone(operation.slot) } });
-  }
-
-  const staged = objects.slice();
-  for (const [objectId, object] of replaced) {
-    staged[index.positions.get(objectId)!] = object;
-  }
-  const objectById = (id: string): GraphObject | undefined => {
-    const position = index.positions.get(id);
-    return position === undefined ? undefined : staged[position];
+    return ids;
   };
+  const scope = nameScope(holders, current);
+  const doc = scope([]).find((object) => object.type === "doc");
+  const isTaken = (excludeId: string | undefined) => (name: string): boolean => {
+    const word = name.toLowerCase();
+    const holder = [...holders(word)].some((id) => id !== excludeId && current(id)?.name.toLowerCase() === word);
+    return holder || Object.keys(doc?.slots ?? {}).some((key) => key.toLowerCase() === word);
+  };
+  const created: string[] = [];
+  const nameChanges = new Set<string>();
 
-  const rewired = new Map<string, readonly Edge[]>();
-  for (const object of replaced.values()) {
-    const edges = deriveObjectEdges(object, objectById, staged);
-    const checks = [findUndeclaredFormulaOrDerivedSlots([object]), findSchemaSlotKindMismatches([object]), findIllegalSlotValues([object])];
-    if (checks.some((problems) => problems.length > 0)) {
+  for (const operation of operations) {
+    if (operation.kind === "setSlot" || operation.kind === "clearSlot") {
+      const object = current(operation.address.objectId);
+      if (object === undefined) {
+        return undefined;
+      }
+      const key = slotKey(operation.address.path);
+      if (operation.kind === "setSlot") {
+        if (!isIndexedWrite(object, operation.address.path, object.slots[key], operation.slot)) {
+          return undefined;
+        }
+        staged.set(object.id, { ...object, slots: { ...object.slots, [key]: deepClone(operation.slot) } });
+        continue;
+      }
+      const path = operation.address.path;
+      if (object.type !== TABLE_TYPE || path.length !== 2 || path[0] !== TABLE_CELL_PATH_PREFIX) {
+        return undefined;
+      }
+      const { [key]: _cleared, ...slots } = object.slots;
+      staged.set(object.id, { ...object, slots });
+      continue;
+    }
+    if (operation.kind === "createObject") {
+      const object = operation.object;
+      const malformed = Object.values(object.slots).some((slot) => slot === undefined || !isLegalSlotPayload(slot));
+      if (current(object.id) !== undefined || index.byId.has(object.id) || object.type === "doc" || object.type === "docref" || malformed) {
+        return undefined;
+      }
+      if (!checkNameAvailableBy(object.name, isTaken(undefined)).ok) {
+        return undefined;
+      }
+      staged.set(object.id, deepClone(object));
+      created.push(object.id);
+      nameChanges.add(object.name.toLowerCase());
+      continue;
+    }
+    if (operation.kind !== "renameObject" && operation.kind !== "deleteObject") {
       return undefined;
     }
-    if (edges.some((edge) => objectById(edge.sourceSlot.objectId)?.slots[slotKey(edge.sourceSlot.path)] === undefined)) {
+    const object = current(operation.objectId);
+    if (object === undefined || object.type === "doc") {
       return undefined;
     }
-    if (!sameEdges(edges, index.ownEdges.get(object.id) ?? [])) {
-      rewired.set(object.id, edges);
+    if (operation.kind === "renameObject") {
+      if (!checkNameAvailableBy(operation.name, isTaken(object.id)).ok) {
+        return undefined;
+      }
+      staged.set(object.id, { ...object, name: operation.name });
+      nameChanges.add(object.name.toLowerCase());
+      nameChanges.add(operation.name.toLowerCase());
+      continue;
     }
+    if (operation.force === true) {
+      return undefined;
+    }
+    staged.set(object.id, null);
+    nameChanges.add(object.name.toLowerCase());
   }
 
-  const changes = edgeChanges(index, rewired);
-  const lookup = stagedLookup(staged, index, changes);
+  const revisit = new Set<string>();
+  for (const id of staged.keys()) {
+    revisit.add(id);
+    for (const referrer of index.referrers.get(id) ?? []) revisit.add(referrer);
+  }
+  for (const word of nameChanges) {
+    for (const reader of index.readersOfWord.get(word) ?? []) revisit.add(reader);
+  }
+
+  const ownEdges = new Map<string, readonly Edge[]>();
+  const facts = new Map<string, ObjectFacts>();
+  for (const id of revisit) {
+    const object = current(id);
+    if (object === undefined) {
+      if (index.ownEdges.has(id)) ownEdges.set(id, []);
+      continue;
+    }
+    const edges = deriveObjectEdges(object, current, resolverObjects(object, scope));
+    const failed = findUndeclaredFormulaOrDerivedSlots([object]).length > 0
+      || findSchemaSlotKindMismatches([object]).length > 0
+      || findIllegalSlotValues([object]).length > 0
+      || crossObjectProblem(object, current, doc)
+      || edges.some((edge) => current(edge.sourceSlot.objectId)?.slots[slotKey(edge.sourceSlot.path)] === undefined);
+    if (failed) {
+      return undefined;
+    }
+    if (!sameEdges(edges, index.ownEdges.get(id) ?? [])) {
+      ownEdges.set(id, edges);
+    }
+    facts.set(id, objectFacts(object, edges, scope));
+  }
+
+  const changes: GraphIndexChanges = { objects: staged, ownEdges, facts, ...edgeChanges(index, ownEdges) };
+  const lookup = stagedLookup(index, changes);
   for (const key of changes.sources.keys()) {
     if (reachesItself(key, lookup)) {
       return undefined;
     }
   }
 
-  const roots: Address[] = operations.map((operation) => (operation as SetSlotOperation).address);
-  if (index.context !== context) {
-    roots.push(...index.contextSlots);
+  // The next list keeps the order the whole-document path gives it: each
+  // committed object where it stood, or gone, then each created object in the
+  // order the batch created it.
+  const replacements = new Map<GraphObject, GraphObject | null>();
+  for (const [id, object] of staged) {
+    const old = index.byId.get(id);
+    if (old !== undefined) replacements.set(old, object);
   }
-  const affected = closeAffectedRegion(roots, lookup.dependents, lookup);
-  const evaluated = evaluateAffected(staged, lookup, affected, context);
-  commitGraphIndex(index, changes, context, objects, evaluated);
+  const next: GraphObject[] = [];
+  for (const object of objects) {
+    const replacement = replacements.has(object) ? replacements.get(object)! : object;
+    if (replacement !== null) next.push(replacement);
+  }
+  for (const id of created) {
+    const object = staged.get(id);
+    if (object !== null && object !== undefined) next.push(object);
+  }
+
+  const roots: Address[] = [];
+  for (const operation of operations) {
+    if (operation.kind === "setSlot" || operation.kind === "clearSlot") {
+      roots.push(operation.address);
+      continue;
+    }
+    const id = operationTargetId(operation);
+    for (const object of [index.byId.get(id), current(id)]) {
+      if (object === undefined) continue;
+      const addresses = objectSlotAddresses(object);
+      if (addresses === undefined) return undefined;
+      roots.push(...addresses);
+    }
+  }
+  if (index.context !== context) {
+    for (const [id, addresses] of index.contextSlots) {
+      if (!staged.has(id)) roots.push(...addresses);
+    }
+    for (const [id, objectFacts] of facts) {
+      if (staged.has(id)) roots.push(...objectFacts.contextSlots);
+    }
+  }
+  const removes = operations.some((operation) => operation.kind === "clearSlot" || operation.kind === "deleteObject" || operation.kind === "renameObject");
+  const committed = stagedLookup(index);
+  const dependents = removes ? (key: string) => [...committed.dependents(key), ...lookup.dependents(key)] : lookup.dependents;
+  const evaluated = evaluateAffected(next, lookup, closeAffectedRegion(roots, dependents, lookup), context);
+
+  const reevaluated: GraphObject[] = [];
+  evaluated.forEach((object, position) => {
+    if (object !== next[position]) reevaluated.push(object);
+  });
+  commitGraphIndex(index, changes, reevaluated, context, objects, evaluated);
   return {
     ok: true,
     objects: evaluated,
@@ -1194,9 +1411,9 @@ export function mutate(
   }
 
   if (evaluationStrategy === INCREMENTAL_EVALUATION_STRATEGY) {
-    const inPlace = commitInPlaceWrites(objects, operations, journal, context);
-    if (inPlace !== undefined) {
-      return inPlace;
+    const indexed = commitIndexedBatch(objects, operations, journal, context);
+    if (indexed !== undefined) {
+      return indexed;
     }
   }
 
@@ -1360,7 +1577,7 @@ export function mutate(
   if (!result.ok) {
     return result;
   }
-  attachGraphIndex(result.objects, buildGraphIndex(result.objects, result.edges, contextSlotAddresses(result.objects), context));
+  attachGraphIndex(result.objects, buildGraphIndex(result.objects, result.edges, objectFacts, context));
 
   return {
     ok: true,

@@ -26,7 +26,8 @@
 import type { Address } from "./address.ts";
 import { NULL_EVAL_CONTEXT, type EvalContext } from "./eval-context.ts";
 import type { FormulaAst } from "./formula/ast.ts";
-import type { GraphObject, Slot } from "./graph/node.ts";
+import { slotKey, type GraphObject, type Slot } from "./graph/node.ts";
+import { getObjectSchema, resolveDerivedSlots } from "./primitives/schema.ts";
 import {
   mutate,
   type EvaluationStrategy,
@@ -226,7 +227,76 @@ function setValue(objectIndex: number, slot: Slot): Operation {
   return { kind: "setSlot", address: address(objectIndex), slot };
 }
 
-/** Builds a repeatable acyclic graph, valid edits, refusals, cycle attempts and a forced repair. */
+function cell(reference: string): Address {
+  return { objectId: "obj_grid", path: ["cells", reference] };
+}
+
+/** A text object holding the content, the sizes and fonts its measurements read, and the derived slots its schema declares. */
+function textObject(id: string, name: string, content: string): GraphObject {
+  const slots: Record<string, Slot> = {
+    content: { kind: "literal", value: content },
+    width: { kind: "literal", value: "auto" },
+    height: { kind: "literal", value: "auto" },
+    "style.font": { kind: "literal", value: "sans-serif" },
+    "style.fontSize": { kind: "literal", value: 16 },
+    "style.lineHeight": { kind: "literal", value: 20 },
+  };
+  const stub: GraphObject = { id, name, type: "text", slots };
+  for (const entry of resolveDerivedSlots(stub, getObjectSchema("text")?.derivedSlots ?? [])) {
+    slots[slotKey(entry.path)] = { kind: "derived", value: null };
+  }
+  return stub;
+}
+
+/**
+ * Creates, renames, deletes, cell writes and clears, over a text that names an
+ * object before it exists, after it is renamed away, and after it is deleted.
+ * Text is the one reader that names an object by the name it carries rather
+ * than by its ID, so these batches reach every way a structural change can
+ * reach an object that does not name it by ID.
+ */
+function structuralBatches(random: SeededRandom, objectCount: number): Operation[][] {
+  const extra = `extra_${random.integer(5)}`;
+  const read = address(1 + random.integer(objectCount - 1));
+  const extraAddress: Address = { objectId: "obj_extra", path: ["value"] };
+  return [
+    [{ kind: "createObject", object: textObject("obj_note", "note", `seen {= ${extra}.value } of {= value_2.value }`) }],
+    [{ kind: "createObject", object: { id: "obj_extra", name: extra, type: "value", slots: { value: formulaSlot({ type: "reference", address: read }) } } }],
+    [{ kind: "setSlot", address: read, slot: literalSlot(random.integer(41) - 20) }],
+    [{ kind: "renameObject", objectId: "obj_extra", name: `${extra}_renamed` }],
+    [{ kind: "renameObject", objectId: "obj_extra", name: extra }],
+    [{ kind: "renameObject", objectId: "obj_extra", name: "value_3" }],
+    [{
+      kind: "createObject",
+      object: { id: "obj_grid", name: "grid", type: "table", slots: { rows: literalSlot(2), cols: literalSlot(2) } },
+    }, {
+      kind: "setSlot", address: cell("A1"), slot: formulaSlot({ type: "reference", address: extraAddress }),
+    }, {
+      kind: "setSlot", address: cell("B1"), slot: formulaSlot({ type: "functionCall", name: "SUM", args: [{ type: "range", start: cell("A1"), end: cell("A2") }] }),
+    }],
+    [{ kind: "setSlot", address: cell("B2"), slot: formulaSlot({ type: "functionCall", name: "SUM", args: [{ type: "range", start: cell("A1"), end: cell("B2") }] }) }],
+    [{ kind: "setSlot", address: cell("A2"), slot: literalSlot(random.integer(9) + 1) }],
+    [{ kind: "setSlot", address: read, slot: formulaSlot({ type: "reference", address: cell("B1") }) }],
+    [{ kind: "createObject", object: { id: "obj_watch", name: "watch", type: "value", slots: { value: formulaSlot({ type: "reference", address: cell("B1") }) } } }],
+    [{ kind: "clearSlot", address: cell("A1") }],
+    [{ kind: "deleteObject", objectId: "obj_extra" }],
+    [{ kind: "deleteObject", objectId: "obj_grid" }],
+    [{ kind: "setSlot", address: { objectId: "obj_watch", path: ["value"] }, slot: literalSlot(3) }],
+    [{ kind: "deleteObject", objectId: "obj_grid" }],
+    [
+      { kind: "createObject", object: { id: "obj_brief", name: "brief", type: "value", slots: { value: literalSlot(1) } } },
+      { kind: "renameObject", objectId: "obj_brief", name: extra },
+      { kind: "setSlot", address: { objectId: "obj_brief", path: ["value"] }, slot: literalSlot(2) },
+    ],
+    [
+      { kind: "createObject", object: { id: "obj_gone", name: "gone", type: "value", slots: { value: literalSlot(1) } } },
+      { kind: "deleteObject", objectId: "obj_gone" },
+    ],
+    [{ kind: "deleteObject", objectId: "obj_note" }],
+  ];
+}
+
+/** Builds a repeatable acyclic graph, valid edits, refusals, cycle attempts, structural changes and a forced repair. */
 export function generateMutationScenario(
   seed: number,
   options: MutationScenarioOptions = {},
@@ -278,6 +348,7 @@ export function generateMutationScenario(
   batches.push([setValue(1, formulaSlot({ type: "reference", address: address(1) }))]);
   batches.push([setValue(1, formulaSlot({ type: "reference", address: address(objectCount - 1) }))]);
   batches.push([setValue(objectCount, literalSlot(1))]);
+  batches.push(...structuralBatches(random, objectCount));
   batches.push([setValue(1, formulaSlot({ type: "reference", address: address(0) }))]);
   batches.push([{ kind: "deleteObject", objectId: address(0).objectId, force: true }]);
 

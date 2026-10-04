@@ -25,26 +25,25 @@ the file it is about.
   Verify inheritance, overrides, visibility, ordering, save/load, resizing and
   formatting in tests and in the browser.
 
-The item below finishes Rule 5 of `SPEC.md`. A batch that writes slots which
-already exist reads the index in `graph/graph-index.ts` and costs what it
-affects. Every other batch still derives, checks and searches the whole
-document, which over value chains of 1000, 4000 and 16000 objects took about
-1.8, 6.3 and 33 milliseconds for a refusal at the integrity check.
+The item below finishes Rule 5 of `SPEC.md`. Slot writes, cell clears,
+creates, renames and deletes without force read the index in
+`graph/graph-index.ts` and cost what they affect. The operations below still
+derive, check and search the whole document, which over a value chain of 16000
+objects costs 150 to 250 milliseconds.
 
-- Carry the indexed path in `mutation.ts` to structural batches: creating,
-  deleting and renaming objects, resizing a table, adding and removing
-  vertices and ports, creating and clearing slots, and writing a table extent
-  or a layer membership. Each changes which objects read which, so the index
-  needs a record of the objects that name each object, including names inside
-  text content and math sources, before the batch can tell whose edges to
-  derive again. The preflight checks at the top of `mutate` read every object
-  for every batch too, through the name list, the port map and the math
-  source map, and each needs the same index. A refusal can keep the
-  whole-document path, because its message lists slots in the order that pass
-  meets them. A reader will know it is finished when a create, a delete and a
-  rename each read the same number of object records at three document sizes,
-  in the way `mutation.test.ts` already measures an edit, and the differential
-  test passes over generated scenarios that include those operations.
+- Carry the indexed path in `mutation.ts` to the remaining structural
+  operations: resizing a table and writing its extent, adding, deleting and
+  splitting vertices, exploding a path, adding and removing ports, writing a
+  math source, creating, clearing and renaming a document variable, writing a
+  layer membership, and deleting with force. Each rewrites the formulas of the
+  objects that name its target, which the index can now find through its
+  referrers, or changes a name that text and the name checks read, which the
+  word and name maps cover. A forced delete also reports broken slots in list
+  order, which an identity pass over the list can give. A refusal can keep the
+  whole-document path. A reader will know it is finished when each of those
+  operations reads the same number of object records at three document sizes,
+  in the way `mutation.test.ts` measures a create, and the differential
+  generator produces each of them.
 
 The items below are the rest of the baseline that section 22 of `SPEC.md`
 opens. Undo from section 21 is in place, so a paste that lands wrong can already

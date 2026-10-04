@@ -135,6 +135,16 @@ export function checkNameAvailable(
   objects: readonly AddressableObject[],
   excludeId?: string,
 ): NameCheckResult {
+  return checkNameAvailableBy(name, (taken) => isNameTaken(taken, objects, excludeId));
+}
+
+/**
+ * The same test with the question of whether a name is in use answered by the
+ * caller, which is how the committed-state index answers it without a pass
+ * over every object. The pattern and reserved word tests run here as well, so
+ * the two forms cannot drift apart.
+ */
+export function checkNameAvailableBy(name: string, isTaken: (name: string) => boolean): NameCheckResult {
   if (!isValidName(name)) {
     return {
       ok: false,
@@ -147,7 +157,7 @@ export function checkNameAvailable(
       message: `"${name}" is a reserved word — the formula language reads ${[...RESERVED_WORDS].join(", ")} as formula keywords in any case, so no formula could reference this object; choose another name`,
     };
   }
-  if (isNameTaken(name, objects, excludeId)) {
+  if (isTaken(name)) {
     return { ok: false, message: `the name "${name}" is already in use` };
   }
   return { ok: true };

@@ -15,9 +15,9 @@ register, and the measurements behind leaving that migration unscheduled.
 | --- | --- |
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
-| Tests | 2804 Vitest tests and 2 tooling tests pass, with 0 skipped. |
+| Tests | 2810 Vitest tests and 2 tooling tests pass, with 0 skipped. |
 | Spec | Built through section 18, except the parts section 17 postpones, and section 21. Sections 19, 20 and 22 are unbuilt, and Rule 5 is partly built. |
-| Rule 5 | Met for batches that write existing slots. Structural batches and refusals still derive, check and search the whole document. |
+| Rule 5 | Met for slot writes, cell clears, creates, renames and plain deletes. Other structural batches and refusals still cost the whole document. |
 | Workspace | Compact typography, a profile helmet, in-row style source controls, and full, compact and hidden sidebar modes with pointer and keyboard resizing. |
 
 ### How to run it
@@ -119,7 +119,7 @@ tables, and other suites drive them anyway.
 | `graph/cycles.ts` | Cycle detection over the edge set. |
 | `graph/eval.ts` | Full and affected topological evaluation passes. |
 | `graph/lookup.ts` | Objects, dependents and sources read without a pass over every edge. |
-| `graph/graph-index.ts` | The cached index of a committed state that in-place writes read. |
+| `graph/graph-index.ts` | The cached index of a committed state that most batches read. |
 | `formula/lexer.ts` | Formula text to tokens. |
 | `formula/parser.ts` | Tokens to an AST, with object names resolved to IDs. |
 | `formula/ast.ts` | The AST node types, and their shape and depth checks. |
@@ -312,9 +312,10 @@ the code it constrains.
 20. **The differential runner compares the two paths through `mutate`.** The
    reference side passes the full recomputation strategy, which always takes
    the whole-document path. The candidate side passes no strategy, so a batch
-   of writes to existing slots takes the indexed path in `mutation.ts` and
-   every other batch takes the whole-document path with incremental
-   evaluation. Both sides share preflight, application and the journal.
+   the indexed path in `mutation.ts` accepts takes that path, and every other
+   batch takes the whole-document path with incremental evaluation. The
+   generated scenarios include creates, renames, deletes, cell writes and
+   clears, and a text that names an object before it exists.
 21. **A host context is an input outside the graph.** Text and math measurement
    slots declare that dependency in their schema entries. The whole-document
    path refreshes them on every mutation, and the indexed path refreshes them
@@ -343,6 +344,17 @@ the code it constrains.
    press and the release keeps its frames, because the journal no longer
    continues from the press. An undo refuses while a gesture is under way for
    the same reason.
+
+24. **Every read across objects in edge derivation or the integrity checks is
+   listed in `objectFacts` in `mutation.ts`.** The indexed path re-derives and
+   re-checks an object only when the batch changed it, changed an object it
+   names, or changed a name its text content holds, and `objectFacts` is what
+   records the objects it names. Those reads live in the schema resolvers in
+   `primitives/`, in the edge derivation and integrity checks of `mutation.ts`,
+   and in `layers.ts`. A new read of another object in any of them that
+   `objectFacts` does not record leaves a stale edge or a missed refusal on
+   the indexed path while the whole-document path stays right. The
+   differential test finds it only for an operation its generator produces.
 
 ---
 
