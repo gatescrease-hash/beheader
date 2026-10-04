@@ -43,6 +43,8 @@ import {
   pointerUpNow,
   replaceDocument,
   respondToPrompt,
+  commitScriptSource,
+  scriptStatusLines,
   submitLine,
   unlinkPanelSlot,
   wheelZoomAt,
@@ -2268,5 +2270,26 @@ describe("undo and redo — the journal position as host state", () => {
     partial = typed(partial, "undo");
     expect(lastLine(partial)).toContain("does not rebuild it");
     expect(numberAt(objectNamed(partial, "circle_1"), ["radius"])).toBe(20);
+  });
+});
+
+describe("the Python editor's transitions", () => {
+  it("writes a changed source as one journal entry, and leaves an unchanged one alone", () => {
+    let state = typed(typed(typed(opened(), "script x=0 y=0"), "addport script_1.out.result"), "set script_1.placeholder.result 4");
+    const id = objectNamed(state, "script_1").id;
+    const before = state.document.journal.length;
+    state = commitScriptSource(state, id, "return {'result': 1}");
+    expect(state.document.journal).toHaveLength(before + 1);
+    expect(getSlot(objectNamed(state, "script_1"), ["source"])?.value).toBe("return {'result': 1}");
+    expect(state.log.at(-1)).toBe("script_1.source holds 1 line of Python");
+    expect(commitScriptSource(state, id, "return {'result': 1}")).toBe(state);
+  });
+
+  it("lists each output with its value, or its error code and message", () => {
+    const state = typed(typed(typed(opened(), "script x=0 y=0"), "addport script_1.out.result"), "set script_1.placeholder.result 4");
+    expect(scriptStatusLines(objectNamed(state, "script_1"))).toEqual(["result = 4"]);
+    expect(scriptStatusLines(objectNamed(typed(opened(), "script x=0 y=0"), "script_1"))).toEqual(["no outputs yet"]);
+    const failed: GraphObject = { id: "s", name: "s", type: "script", ports: { in: [], out: ["a"] }, slots: { "out.a": { kind: "derived", value: { error: "#SCRIPT", message: "line 2: NameError" } } } };
+    expect(scriptStatusLines(failed)).toEqual(["a: #SCRIPT line 2: NameError"]);
   });
 });

@@ -61,7 +61,7 @@ import {
   enumerateScriptPlaceholderPaths,
   SCRIPT_LANGUAGE_PATH,
   SCRIPT_SOURCE_PATH,
-} from "../script/stub.ts";
+} from "../script/script.ts";
 import {
   enumerateMathInPaths,
   enumerateMathOutDerivedSlots,

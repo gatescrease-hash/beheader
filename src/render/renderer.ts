@@ -65,6 +65,7 @@ import {
   type Point,
   RADIUS_PATH,
   SCRIPT_LANGUAGE_PATH,
+  SCRIPT_SOURCE_PATH,
   TABLE_CELL_PATH_PREFIX,
   TABLE_TYPE,
   TEXT_AUTORESIZE_PATH,
@@ -123,6 +124,37 @@ const SCRIPT_PORT_STUB_STYLE = "#5b6472";
 const SCRIPT_FONT = "12px sans-serif";
 const SCRIPT_TEXT_PADDING = 6;
 const SCRIPT_PORT_STUB_SIZE = 6;
+const SCRIPT_STATE_DOT_RADIUS = 4;
+const SCRIPT_STATE_STYLES: Readonly<Record<ScriptRunState, string>> = { idle: "#a3a8b0", done: "#5f8f4e", pending: "#c19b50", failed: "#b5533c" };
+const SCRIPT_VALUE_MAX_CHARACTERS = 12;
+
+export type ScriptRunState = "idle" | "done" | "pending" | "failed";
+
+/**
+ * How the last run of a script node went, read from its outputs: failed when
+ * any holds #SCRIPT, pending when any is still running, done when it has code
+ * and outputs, and idle otherwise.
+ */
+export function scriptRunState(object: GraphObject): ScriptRunState {
+  const values = (object.ports?.out ?? []).map((name) => getSlot(object, ["out", name])?.value ?? null);
+  if (values.some((value) => isErrorValue(value) && value.error === "#SCRIPT")) return "failed";
+  if (values.some((value) => isErrorValue(value) && value.error === "#PENDING")) return "pending";
+  const source = readText(object, SCRIPT_SOURCE_PATH);
+  return values.length > 0 && source !== undefined && source.trim() !== "" ? "done" : "idle";
+}
+
+/** An output port as its row draws it: the name, and the value it holds now, cut to fit the box. */
+export function scriptPortLabel(name: string, value: Value | undefined): string {
+  if (value === undefined || value === null) return name;
+  const shown = isErrorValue(value) ? value.error
+    : typeof value === "number" ? String(Number(value.toPrecision(6)))
+    : typeof value === "string" ? JSON.stringify(value)
+    : typeof value === "boolean" ? (value ? "TRUE" : "FALSE")
+    : Array.isArray(value) ? `${value.length} points`
+    : "point";
+  const cut = shown.length > SCRIPT_VALUE_MAX_CHARACTERS ? `${shown.slice(0, SCRIPT_VALUE_MAX_CHARACTERS - 1)}…` : shown;
+  return `${name} = ${cut}`;
+}
 
 const IMAGE_FRAME_STROKE_STYLE = "#999999";
 
@@ -207,6 +239,10 @@ function drawScript(ctx: CanvasRenderingContext2D, object: GraphObject): void {
   ctx.textBaseline = "middle";
   ctx.textAlign = "left";
   ctx.fillText(readText(object, SCRIPT_LANGUAGE_PATH) ?? "", box.minX + SCRIPT_TEXT_PADDING, box.minY + SCRIPT_HEADER_HEIGHT / 2);
+  ctx.fillStyle = SCRIPT_STATE_STYLES[scriptRunState(object)];
+  ctx.beginPath();
+  ctx.arc(box.maxX - SCRIPT_TEXT_PADDING - SCRIPT_STATE_DOT_RADIUS, box.minY + SCRIPT_HEADER_HEIGHT / 2, SCRIPT_STATE_DOT_RADIUS, 0, Math.PI * 2);
+  ctx.fill();
 
   const inPorts = object.ports?.in ?? [];
   const outPorts = object.ports?.out ?? [];
@@ -224,7 +260,8 @@ function drawScript(ctx: CanvasRenderingContext2D, object: GraphObject): void {
     ctx.fillRect(box.maxX - SCRIPT_PORT_STUB_SIZE / 2, centre - SCRIPT_PORT_STUB_SIZE / 2, SCRIPT_PORT_STUB_SIZE, SCRIPT_PORT_STUB_SIZE);
     ctx.fillStyle = SCRIPT_TEXT_STYLE;
     ctx.textAlign = "right";
-    ctx.fillText(outPorts[index] ?? "", box.maxX - SCRIPT_TEXT_PADDING, centre);
+    const name = outPorts[index] ?? "";
+    ctx.fillText(scriptPortLabel(name, getSlot(object, ["out", name])?.value), box.maxX - SCRIPT_TEXT_PADDING, centre);
   }
 }
 

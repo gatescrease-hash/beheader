@@ -199,3 +199,45 @@ kbd { font: inherit; border: 1px solid var(--line); border-radius: 3px; padding:
   .view-controls button { padding: 7px; }
   .command-dock { padding: 7px 10px 10px; }
 }
+
+/* The Python editor of a script node or a group sits over the top right of
+   the canvas, in screen space, so it keeps one size at any zoom. */
+.script-editor {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 20;
+  width: min(520px, calc(100% - 32px));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: var(--paper-light);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: 0 6px 24px rgba(40, 36, 28, 0.18);
+}
+.script-editor__title { font-weight: 600; font-size: 14px; }
+.script-editor__source {
+  font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  min-height: 180px;
+  resize: vertical;
+  padding: 8px;
+  tab-size: 4;
+  white-space: pre;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #fff;
+}
+.script-editor__ports { font-size: 12px; color: var(--muted); }
+.script-editor__status {
+  margin: 0;
+  font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+  max-height: 120px;
+  overflow: auto;
+  padding: 6px 8px;
+  background: var(--paper-deep);
+  border-radius: 4px;
+}
+.script-editor__actions { display: flex; gap: 8px; justify-content: flex-end; }

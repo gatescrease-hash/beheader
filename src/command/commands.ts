@@ -794,7 +794,7 @@ function addPortCommand(command: AddPortCommand, document: Document, context: Ev
     lines:
       family === "in"
         ? [`added input port ${address} — bind it with \`link ${address} <address>\``]
-        : [`added output port ${address} — set its stub value with \`set ${object.name}.placeholder.${name} <value>\``],
+        : [`added output port ${address} — fill it from the script's returned dict, or set what it shows before any code with \`set ${object.name}.placeholder.${name} <value>\``],
   };
 }
 

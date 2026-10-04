@@ -34,6 +34,7 @@ import {
   createEmptyDocument,
   computePolygonVertices,
   deriveValidateAndEvaluate,
+  refreshHostInputs,
   MATH_FONT_SIZE,
   mathSourceWithIds,
   mathSourceWithNames,
@@ -59,6 +60,7 @@ import {
   NULL_EVAL_CONTEXT,
   saveDocument,
   isColorValue,
+  isErrorValue,
   polylineEdgeCount,
   slotKey,
   VERTEX_PART_SUFFIXES,
@@ -109,6 +111,7 @@ import "mathlive/static.css";
 import "mathlive/fonts.css";
 import "./workspace.css";
 import { createCanvas2dTextMeasurer, createSourceTextMeasurer } from "./render/measure.ts";
+import { createScriptRunner, createWorkerBackend, type WorkerLike } from "./python/runner.ts";
 import { createMathMeasurer, MATH_MACROS, mathMarkup, mathOverlayPlacement, readMathDrawnLatex, readMathLatex } from "./render/math.ts";
 import { hitTest } from "./render/hittest.ts";
 import { worldToScreen } from "./render/camera.ts";
@@ -354,6 +357,9 @@ function sessionMessage(session: CommandSession): string {
 }
 
 export const FIT_VIEWPORT_FRACTION = 0.9;
+
+/** How long one script run may take before its worker is stopped. */
+export const SCRIPT_TIMEOUT_MS = 5000;
 
 export const WHEEL_ZOOM_STEP = 1.1;
 
@@ -907,6 +913,53 @@ export function commitTextContent(
  * A source that does not read leaves the object as it was and says so, which
  * is the same answer the command line gives for the same text.
  */
+/**
+ * One line for each output of a script node or a group, holding the value it
+ * shows now: a number or a string, or the code and message of an error, which
+ * is where a Python traceback or a run still under way shows.
+ */
+export function scriptStatusLines(object: GraphObject): readonly string[] {
+  const outputs = object.ports?.out ?? [];
+  if (outputs.length === 0) {
+    return ["no outputs yet"];
+  }
+  return outputs.map((name) => {
+    const value = getSlot(object, ["out", name])?.value ?? null;
+    return isErrorValue(value) ? `${name}: ${value.error} ${value.message}` : `${name} = ${describeSlotValue(value)}`;
+  });
+}
+
+/**
+ * Writes the Python source of a script node, or of a group, which carries the
+ * same ports and source. An unchanged source writes nothing, so
+ * closing the editor without an edit adds nothing to the journal.
+ */
+export function commitScriptSource(
+  state: AppState,
+  objectId: string,
+  source: string,
+  context: EvalContext = NULL_EVAL_CONTEXT,
+): AppState {
+  const object = state.document.objects.find((candidate) => candidate.id === objectId);
+  if (object === undefined || getSlot(object, ["source"])?.value === source) {
+    return state;
+  }
+  const result = mutate(
+    state.document.objects,
+    [{ kind: "setSlot", address: { objectId, path: ["source"] }, slot: { kind: "literal", value: source } }],
+    state.document.journal,
+    context,
+  );
+  if (!result.ok) {
+    return withLog(state, [result.message]);
+  }
+  const lines = source.split("\n").length;
+  return withLog(
+    { ...state, document: { ...state.document, objects: result.objects, journal: result.journal } },
+    [`${object.name}.source holds ${lines} line${lines === 1 ? "" : "s"} of Python`],
+  );
+}
+
 export function commitMathSource(
   state: AppState,
   objectId: string,
@@ -1192,10 +1245,18 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   const measureMath = createMathMeasurer(mathMeasureHost);
   const measureMathForLayout = (latex: string, fontSize: number): { width: number; height: number } =>
     measureMath(latex, { fontSize });
+  // A script answer arrives after the evaluation that asked for it, so the
+  // runner calls settleScripts, which is filled in once the state it refreshes
+  // exists below.
+  let settleScripts = (): void => {};
+  const scripts = createScriptRunner(
+    createWorkerBackend(() => new Worker(new URL("./python/worker.ts", import.meta.url), { type: "module" }) as unknown as WorkerLike, SCRIPT_TIMEOUT_MS),
+    () => settleScripts(),
+  );
   const evalContext: EvalContext =
     measureContext === null
-      ? NULL_EVAL_CONTEXT
-      : { measurer: createCanvas2dTextMeasurer(measureContext, measureMathForLayout) };
+      ? { ...NULL_EVAL_CONTEXT, scripts }
+      : { measurer: createCanvas2dTextMeasurer(measureContext, measureMathForLayout), scripts };
   const sourceMeasurer = measureContext === null ? evalContext.measurer : createSourceTextMeasurer(measureContext);
 
   let state = initialAppState(createEmptyDocument(), ["Beheader. Type a command, or a command word alone to be prompted."]);
@@ -1230,6 +1291,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   candidateList.hidden = true;
   input.parentElement?.insertBefore(candidateList, input);
   let editingMathId: string | undefined;
+  let scriptEditor: { readonly objectId: string; readonly status: HTMLElement; readonly element: HTMLElement } | undefined;
   let mathField: HTMLElement & { value: string } | undefined;
   const imageBitmaps = createImageBitmapCache(() => paint());
 
@@ -1287,6 +1349,15 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       cellHighlight.hidden = false;
       cellHighlight.style.left = `${placement.left}px`; cellHighlight.style.top = `${placement.top}px`;
       cellHighlight.style.width = `${placement.width * placement.scale}px`; cellHighlight.style.height = `${placement.height * placement.scale}px`;
+    }
+    if (scriptEditor !== undefined) {
+      const object = state.document.objects.find((candidate) => candidate.id === scriptEditor?.objectId);
+      if (object === undefined) {
+        scriptEditor.element.remove();
+        scriptEditor = undefined;
+      } else {
+        scriptEditor.status.textContent = scriptStatusLines(object).join("\n");
+      }
     }
   };
 
@@ -1447,10 +1518,91 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     apply(commitMathSource(state, objectId, latex, evalContext));
   };
 
+  /**
+   * Opens the Python editor of a script node or a group: a panel over the
+   * canvas with the source, a Run button, and the value each output holds now,
+   * which paint keeps current while answers arrive. Ctrl+Enter runs, Escape
+   * closes, and Tab indents rather than leaving the field, because Python
+   * reads indentation.
+   */
+  const openScriptEditor = (objectId: string): void => {
+    const object = state.document.objects.find((candidate) => candidate.id === objectId);
+    if (object === undefined) return;
+    scriptEditor?.element.remove();
+    const element = document.createElement("form");
+    element.className = "script-editor";
+    const title = document.createElement("div");
+    title.className = "script-editor__title";
+    title.textContent = `${object.name} · Python`;
+    const field = document.createElement("textarea");
+    field.className = "script-editor__source";
+    field.spellcheck = false;
+    field.value = String(getSlot(object, ["source"])?.value ?? "");
+    field.placeholder = "return {\"result\": speed * 2}";
+    const ports = document.createElement("div");
+    ports.className = "script-editor__ports";
+    ports.textContent = `inputs: ${(object.ports?.in ?? []).join(", ") || "none"} · outputs: ${(object.ports?.out ?? []).join(", ") || "none"} · add one with addport ${object.name}.in.<name> or .out.<name>`;
+    const status = document.createElement("pre");
+    status.className = "script-editor__status";
+    const run = document.createElement("button");
+    run.type = "submit";
+    run.textContent = "Run";
+    const close = document.createElement("button");
+    close.type = "button";
+    close.textContent = "Close";
+    const actions = document.createElement("div");
+    actions.className = "script-editor__actions";
+    actions.append(run, close);
+    element.append(title, field, ports, status, actions);
+    const commit = (): void => apply(commitScriptSource(state, objectId, field.value, evalContext));
+    const dismiss = (): void => {
+      element.remove();
+      if (scriptEditor?.element === element) scriptEditor = undefined;
+      input.focus();
+    };
+    element.addEventListener("submit", (event) => { event.preventDefault(); commit(); });
+    close.addEventListener("click", () => { commit(); dismiss(); });
+    field.addEventListener("keydown", (event) => {
+      event.stopPropagation();
+      if (event.key === "Escape") { event.preventDefault(); dismiss(); }
+      else if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) { event.preventDefault(); commit(); }
+      else if (event.key === "Tab") {
+        event.preventDefault();
+        const at = field.selectionStart;
+        field.setRangeText("    ", at, field.selectionEnd, "end");
+      }
+    });
+    editorLayer.append(element);
+    scriptEditor = { objectId, status, element };
+    paint();
+    field.focus();
+    field.setSelectionRange(0, 0);
+  };
+
   const openMathEditor = (objectId: string): void => {
     editingMathId = objectId;
     mathField = undefined;
     paint();
+  };
+
+  /**
+   * Evaluates the slots that read the evaluation context again once script
+   * answers have arrived, which takes in every script output, without a
+   * journal entry, because no state changed: only answers the runner was
+   * waiting for are now known. Answers that land in one frame share one pass.
+   */
+  let settleQueued = false;
+  settleScripts = (): void => {
+    if (settleQueued) return;
+    settleQueued = true;
+    requestAnimationFrame(() => {
+      settleQueued = false;
+      const refreshed = refreshHostInputs(state.document.objects, evalContext);
+      if (refreshed.ok) {
+        state = { ...state, document: { ...state.document, objects: refreshed.objects } };
+        paint();
+      }
+    });
   };
 
   /**
@@ -2365,6 +2517,10 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     const underPointer = hitTest(point, state.document.objects, state.document.camera);
     if (underPointer?.type === "math") {
       openMathEditor(underPointer.id);
+      return;
+    }
+    if (underPointer?.type === "script") {
+      openScriptEditor(underPointer.id);
       return;
     }
 

@@ -32,7 +32,7 @@ export interface Point {
   readonly y: number;
 }
 
-export type ErrorCode = "#REF" | "#TYPE" | "#DIV0" | "#PARSE" | "#SCRIPT" | "#MEASURE" | "#MATH";
+export type ErrorCode = "#REF" | "#TYPE" | "#DIV0" | "#PARSE" | "#SCRIPT" | "#PENDING" | "#MEASURE" | "#MATH";
 
 export interface ErrorValue {
   readonly error: ErrorCode;

@@ -140,7 +140,7 @@ tables, and other suites drive them anyway.
 | `math/parser.ts` | Tokens to a program, with implicit multiplication, the binding forms and the implicit line. |
 | `math/names.ts` | Which names are bound, which are defined, which are solved for, and which become input ports. |
 | `math/eval.ts` | A program and its inputs to a value for each export, the search for a root included. |
-| `script/stub.ts` | The script node and its ports. |
+| `script/script.ts` | The script node and its ports. |
 | `mutation.ts` | The state-change channel, its operations and evaluation strategies. |
 | `journal.ts` | Replay of the journal, and the undo that rests on it. |
 | `document.ts` | Save and load, and the versioned JSON format. |

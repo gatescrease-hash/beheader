@@ -14,7 +14,7 @@ import {
   resolveDerivedSlots,
   type Slot,
 } from "../engine/index.ts";
-import { renderDocument } from "./renderer.ts";
+import { renderDocument, scriptPortLabel, scriptRunState } from "./renderer.ts";
 import type { ImageBitmaps } from "./images.ts";
 import { objectExtent } from "./extent.ts";
 import { SCRIPT_BOX_WIDTH, SCRIPT_HEADER_HEIGHT, SCRIPT_PORT_ROW_HEIGHT } from "./slots.ts";
@@ -1761,5 +1761,33 @@ describe("the preview a half finished command draws", () => {
     expect(screenSpaceAt).toBeGreaterThan(cameraAt);
     expect(dashAt).toBeGreaterThan(cameraAt);
     expect(dashAt).toBeLessThan(screenSpaceAt);
+  });
+});
+
+describe("a script node's run state and output labels", () => {
+  const script = (source: string, out: Record<string, unknown>): GraphObject => ({
+    id: "s", name: "script_1", type: "script",
+    ports: { in: [], out: Object.keys(out) },
+    slots: {
+      source: { kind: "literal", value: source },
+      ...Object.fromEntries(Object.entries(out).map(([name, value]) => [`out.${name}`, { kind: "derived", value: value as never }])),
+    },
+  });
+
+  it("reads failed, pending, done and idle from the outputs and the source", () => {
+    expect(scriptRunState(script("x", { a: { error: "#SCRIPT", message: "boom" }, b: { error: "#PENDING", message: "" } }))).toBe("failed");
+    expect(scriptRunState(script("x", { a: 1, b: { error: "#PENDING", message: "" } }))).toBe("pending");
+    expect(scriptRunState(script("x", { a: 1 }))).toBe("done");
+    expect(scriptRunState(script("", { a: 1 }))).toBe("idle");
+    expect(scriptRunState(script("x", {}))).toBe("idle");
+  });
+
+  it("labels an output with its value, rounded and cut to fit", () => {
+    expect(scriptPortLabel("area", 2827.4333882308138)).toBe("area = 2827.43");
+    expect(scriptPortLabel("label", "a rather long label")).toBe("label = \"a rather l…");
+    expect(scriptPortLabel("ok", true)).toBe("ok = TRUE");
+    expect(scriptPortLabel("path", [{ x: 0, y: 0 }, { x: 1, y: 1 }])).toBe("path = 2 points");
+    expect(scriptPortLabel("bad", { error: "#SCRIPT", message: "x" })).toBe("bad = #SCRIPT");
+    expect(scriptPortLabel("empty", null)).toBe("empty");
   });
 });

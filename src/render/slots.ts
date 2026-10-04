@@ -71,7 +71,7 @@ export function asPointArray(value: Value | undefined): readonly Point[] | undef
 export const TABLE_CELL_WIDTH = 80;
 export const TABLE_CELL_HEIGHT = 24;
 
-export const SCRIPT_BOX_WIDTH = 140;
+export const SCRIPT_BOX_WIDTH = 200;
 export const SCRIPT_HEADER_HEIGHT = 24;
 export const SCRIPT_PORT_ROW_HEIGHT = 18;
 

@@ -65,5 +65,5 @@ export * from "./math/parser.ts";
 export * from "./math/names.ts";
 export * from "./math/eval.ts";
 
-export * from "./script/stub.ts";
+export * from "./script/script.ts";
 export * from "./layers.ts";

@@ -219,7 +219,7 @@ source file's adjacent test file travels with its behavior.
 | [primitives/image.ts](../src/engine/primitives/image.ts) | `primitives::image` | `RUST-007` |
 | [primitives/doc.ts](../src/engine/primitives/doc.ts) | `primitives::doc` | `RUST-007` |
 | [primitives/schema.ts](../src/engine/primitives/schema.ts) | `schema` | `RUST-007`, `RUST-010` |
-| [script/stub.ts](../src/engine/script/stub.ts) | `script` | `RUST-007` |
+| [script/script.ts](../src/engine/script/script.ts) | `script` | `RUST-007` |
 | [math/ast.ts](../src/engine/math/ast.ts) | `math::ast` | `RUST-008` |
 | [math/lexer.ts](../src/engine/math/lexer.ts) | `math::lexer` | `RUST-008` |
 | [math/parser.ts](../src/engine/math/parser.ts) | `math::parser` | `RUST-008` |

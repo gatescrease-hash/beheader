@@ -16,6 +16,8 @@
  * Engine-layer code: pure logic with no DOM, window or canvas access, so the
  * tests run headless and the file can move to Rust later.
  */
+
+import type { Value } from "./graph/node.ts";
 export interface TextStyle {
   readonly bold?: boolean;
   readonly italic?: boolean;
@@ -48,8 +50,32 @@ export interface TextMeasurer {
   measureMath?(latex: string, style: MathStyle): TextMeasurement;
 }
 
+/** One run of a script: its source and the value of each input port. */
+export interface ScriptRequest {
+  readonly source: string;
+  readonly inputs: Readonly<Record<string, Value>>;
+}
+
+export type ScriptAnswer =
+  /** What the script returned, before scriptValue in script.ts checks each entry. */
+  | { readonly status: "done"; readonly outputs: Readonly<Record<string, unknown>> }
+  | { readonly status: "pending" }
+  | { readonly status: "failed"; readonly message: string };
+
+/**
+ * Answers a script request at once, from whatever the host already knows.
+ * Running Python takes time and happens outside the engine, so a host answers
+ * "pending" for a request it has not finished, runs it elsewhere, and
+ * evaluates again when the answer arrives. The engine never waits.
+ */
+export interface ScriptRunner {
+  run(request: ScriptRequest): ScriptAnswer;
+}
+
 export interface EvalContext {
   readonly measurer: TextMeasurer;
+  /** Absent in a context with no script runtime, where a script output shows its placeholder. */
+  readonly scripts?: ScriptRunner;
 }
 
 const NULL_TEXT_MEASURER: TextMeasurer = Object.freeze({
