@@ -15,9 +15,9 @@ register, and the measurements behind leaving that migration unscheduled.
 | --- | --- |
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
-| Tests | 2794 Vitest tests and 2 tooling tests pass, with 0 skipped. |
+| Tests | 2804 Vitest tests and 2 tooling tests pass, with 0 skipped. |
 | Spec | Built through section 18, except the parts section 17 postpones, and section 21. Sections 19, 20 and 22 are unbuilt, and Rule 5 is partly built. |
-| Rule 5 | Not met. Evaluation covers the dirty region, and staging shares untouched records. Edge derivation, the integrity check and the cycle search still cost the whole document. |
+| Rule 5 | Met for batches that write existing slots. Structural batches and refusals still derive, check and search the whole document. |
 | Workspace | Compact typography, a profile helmet, in-row style source controls, and full, compact and hidden sidebar modes with pointer and keyboard resizing. |
 
 ### How to run it
@@ -118,6 +118,8 @@ tables, and other suites drive them anyway.
 | `graph/edge.ts` | The `Edge` record and `addressKey`. |
 | `graph/cycles.ts` | Cycle detection over the edge set. |
 | `graph/eval.ts` | Full and affected topological evaluation passes. |
+| `graph/lookup.ts` | Objects, dependents and sources read without a pass over every edge. |
+| `graph/graph-index.ts` | The cached index of a committed state that in-place writes read. |
 | `formula/lexer.ts` | Formula text to tokens. |
 | `formula/parser.ts` | Tokens to an AST, with object names resolved to IDs. |
 | `formula/ast.ts` | The AST node types, and their shape and depth checks. |
@@ -307,16 +309,21 @@ the code it constrains.
    letters it belongs to, which is the failure the invariant above describes,
    reached from the other direction. Each pair is written as one selector in
    both files for that reason.
-20. **The differential runner changes evaluation only.** Both strategies pass
-   through `mutate`, so they share preflight, application, integrity, cycle and
-   journal behavior. `mutate` uses incremental evaluation when its caller
-   supplies no strategy, while full recomputation remains the reference side
-   of the differential test.
+20. **The differential runner compares the two paths through `mutate`.** The
+   reference side passes the full recomputation strategy, which always takes
+   the whole-document path. The candidate side passes no strategy, so a batch
+   of writes to existing slots takes the indexed path in `mutation.ts` and
+   every other batch takes the whole-document path with incremental
+   evaluation. Both sides share preflight, application and the journal.
 21. **A host context is an input outside the graph.** Text and math measurement
-   slots declare that dependency in their schema entries, so every mutation
-   refreshes those slots from the supplied context even when its operations
-   dirty another component. Other derived slots enter the affected set through
-   graph edges alone.
+   slots declare that dependency in their schema entries. The whole-document
+   path refreshes them on every mutation, and the indexed path refreshes them
+   when the context object differs from the one `graph-index.ts` last recorded.
+   A host that changes what its measurer answers while it keeps the same
+   context object evaluates the document itself, as `main.ts` does when a font
+   arrives, and the list that evaluation returns has no index, so the next
+   batch takes the whole-document path. Other derived slots enter the affected
+   set through graph edges alone.
 22. **A committed object record is never written after it is made.** Staging in
    `mutation.ts` shares every record a batch leaves alone, so two states, and
    every earlier state a host keeps for undo, hold the same records. A write

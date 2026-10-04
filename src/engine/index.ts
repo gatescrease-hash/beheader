@@ -36,6 +36,8 @@ export * from "./mutation.ts";
 export * from "./graph/edge.ts";
 export * from "./graph/cycles.ts";
 export * from "./graph/node.ts";
+export * from "./graph/lookup.ts";
+export * from "./graph/graph-index.ts";
 export type { SlotEvaluationObserver } from "./graph/eval.ts";
 export { evaluate as evaluateGraph, evaluateAffected } from "./graph/eval.ts";
 

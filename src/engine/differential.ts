@@ -226,7 +226,7 @@ function setValue(objectIndex: number, slot: Slot): Operation {
   return { kind: "setSlot", address: address(objectIndex), slot };
 }
 
-/** Builds a repeatable acyclic graph, valid edits, refusals and a forced repair. */
+/** Builds a repeatable acyclic graph, valid edits, refusals, cycle attempts and a forced repair. */
 export function generateMutationScenario(
   seed: number,
   options: MutationScenarioOptions = {},
@@ -272,6 +272,11 @@ export function generateMutationScenario(
       address: { objectId: "missing", path: ["value"] },
     })),
   ]);
+  // A slot that reads itself, and a reader at the head of the chains that
+  // reads the last object, which closes a loop whenever the last object reads
+  // back to it. Both reach the cycle check with only existing slots written.
+  batches.push([setValue(1, formulaSlot({ type: "reference", address: address(1) }))]);
+  batches.push([setValue(1, formulaSlot({ type: "reference", address: address(objectCount - 1) }))]);
   batches.push([setValue(objectCount, literalSlot(1))]);
   batches.push([setValue(1, formulaSlot({ type: "reference", address: address(0) }))]);
   batches.push([{ kind: "deleteObject", objectId: address(0).objectId, force: true }]);

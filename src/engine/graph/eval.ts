@@ -5,6 +5,11 @@
  * sort the slots they evaluate into dependency order, so a slot always reads
  * inputs that have already been recomputed. The affected path reads a cached
  * value from the committed graph when an input sits outside that set.
+ *
+ * Both paths read the graph through a GraphLookup from lookup.ts. The affected
+ * path never visits an edge or an object outside the slots it evaluates and
+ * their direct inputs, apart from the one pass that builds the next object
+ * list, so its cost follows the size of the affected set.
  * The depth first sort uses an explicit stack, so long dependency chains
  * retain their traversal order without exhausting the JavaScript call stack.
  *
@@ -29,9 +34,10 @@ import type { Address } from "../address.ts";
 import { NULL_EVAL_CONTEXT, type EvalContext } from "../eval-context.ts";
 import type { FormulaAst } from "../formula/ast.ts";
 import { evaluate as evaluateFormulaAst, type ReadRange, type ReadSlot } from "../formula/eval.ts";
-import { enumerateRangeCellAddresses, isInExtentTableCellAddress, isRangeEnumerationError } from "../primitives/table.ts";
+import { enumerateRangeCellAddresses, isInExtentTableCellAddressForObject, isRangeEnumerationError } from "../primitives/table.ts";
 import { getObjectSchema, resolveDerivedSlots, type DerivedSlotSchema } from "../primitives/schema.ts";
 import { addressKey, type Edge } from "./edge.ts";
+import { lookupFromEdges, type GraphLookup } from "./lookup.ts";
 import { slotKey, type GraphObject, type Slot, type Value } from "./node.ts";
 
 export type SlotEvaluationObserver = (address: Address) => void;
@@ -53,18 +59,8 @@ export function evaluate(
     }
   }
 
-  const outgoing = new Map<string, string[]>();
-  for (const edge of edges) {
-    const sourceKey = addressKey(edge.sourceSlot);
-    const arcs = outgoing.get(sourceKey);
-    if (arcs === undefined) {
-      outgoing.set(sourceKey, [addressKey(edge.dependentSlot)]);
-    } else {
-      arcs.push(addressKey(edge.dependentSlot));
-    }
-  }
-
-  const topologicalOrder = sortNodeKeys(nodesByKey.keys(), outgoing);
+  const lookup = lookupFromEdges(objects, edges);
+  const topologicalOrder = sortNodeKeys(nodesByKey.keys(), (key) => lookup.dependents(key).map(addressKey));
 
   const evaluatedValues = new Map<string, Value>();
   const readEvaluated = (address: Address): Value | undefined => evaluatedValues.get(addressKey(address));
@@ -91,7 +87,7 @@ export function evaluate(
       continue;
     }
 
-    const value = evaluateSlot(object, key, slot, objects, edges, readEvaluated, context);
+    const value = evaluateSlot(object, key, slot, objects, lookup, readEvaluated, context);
     evaluatedValues.set(nodeKey, value);
     slotsFor(object.id)[key] = nextSlot(slot, value);
   }
@@ -106,47 +102,33 @@ export function evaluate(
  * Evaluates only the supplied addresses and keeps cached values everywhere
  * else. The caller supplies the downstream closure, including addresses that
  * disappeared, and this function skips any address with no surviving slot.
+ * The lookup has to describe the objects passed in.
  */
 export function evaluateAffected(
   objects: readonly GraphObject[],
-  edges: readonly Edge[],
+  lookup: GraphLookup,
   affectedAddresses: readonly Address[],
   context: EvalContext = NULL_EVAL_CONTEXT,
   observer?: SlotEvaluationObserver,
 ): readonly GraphObject[] {
-  const objectsById = new Map(objects.map((object) => [object.id, object]));
   const nodesByKey = new Map<string, { readonly object: GraphObject; readonly key: string; readonly address: Address }>();
   for (const address of affectedAddresses) {
-    const object = objectsById.get(address.objectId);
+    const object = lookup.objectById(address.objectId);
     const key = slotKey(address.path);
     if (object?.slots[key] !== undefined) {
       nodesByKey.set(addressKey(address), { object, key, address });
     }
   }
 
-  const outgoing = new Map<string, string[]>();
-  for (const edge of edges) {
-    const sourceKey = addressKey(edge.sourceSlot);
-    const dependentKey = addressKey(edge.dependentSlot);
-    if (!nodesByKey.has(sourceKey) || !nodesByKey.has(dependentKey)) {
-      continue;
-    }
-    const arcs = outgoing.get(sourceKey);
-    if (arcs === undefined) {
-      outgoing.set(sourceKey, [dependentKey]);
-    } else {
-      arcs.push(dependentKey);
-    }
-  }
-
-  const topologicalOrder = sortNodeKeys(nodesByKey.keys(), outgoing);
+  const topologicalOrder = sortNodeKeys(nodesByKey.keys(), (key) =>
+    lookup.dependents(key).map(addressKey).filter((dependentKey) => nodesByKey.has(dependentKey)));
   const evaluatedValues = new Map<string, Value>();
   const readEvaluatedOrCached = (address: Address): Value | undefined => {
     const key = addressKey(address);
     if (evaluatedValues.has(key)) {
       return evaluatedValues.get(key);
     }
-    return objectsById.get(address.objectId)?.slots[slotKey(address.path)]?.value;
+    return lookup.objectById(address.objectId)?.slots[slotKey(address.path)]?.value;
   };
   const updatedSlotsByObjectId = new Map<string, Record<string, Slot>>();
 
@@ -164,7 +146,7 @@ export function evaluateAffected(
       node.key,
       slot,
       objects,
-      edges,
+      lookup,
       readEvaluatedOrCached,
       context,
     );
@@ -183,24 +165,24 @@ export function evaluateAffected(
 
 function sortNodeKeys(
   nodeKeys: Iterable<string>,
-  outgoing: ReadonlyMap<string, readonly string[]>,
+  outgoing: (key: string) => readonly string[],
 ): readonly string[] {
   const visited = new Set<string>();
   const postorder: string[] = [];
-  const stack: { key: string; next: number }[] = [];
+  const stack: { key: string; next: number; readonly arcs: readonly string[] }[] = [];
   for (const nodeKey of nodeKeys) {
     if (visited.has(nodeKey)) continue;
     visited.add(nodeKey);
-    stack.push({ key: nodeKey, next: 0 });
+    stack.push({ key: nodeKey, next: 0, arcs: outgoing(nodeKey) });
     while (stack.length > 0) {
       const frame = stack[stack.length - 1]!;
-      const next = outgoing.get(frame.key)?.[frame.next++];
+      const next = frame.arcs[frame.next++];
       if (next === undefined) {
         postorder.push(frame.key);
         stack.pop();
       } else if (!visited.has(next)) {
         visited.add(next);
-        stack.push({ key: next, next: 0 });
+        stack.push({ key: next, next: 0, arcs: outgoing(next) });
       }
     }
   }
@@ -212,7 +194,7 @@ function evaluateSlot(
   key: string,
   slot: Slot,
   objects: readonly GraphObject[],
-  edges: readonly Edge[],
+  lookup: GraphLookup,
   readValue: (address: Address) => Value | undefined,
   context: EvalContext,
 ): Value {
@@ -220,9 +202,9 @@ function evaluateSlot(
     case "literal":
       return slot.value;
     case "formula":
-      return evaluateFormula(slot.ast, objects, readValue);
+      return evaluateFormula(slot.ast, lookup, readValue);
     case "derived":
-      return evaluateDerivedSlot(object, key, objects, edges, readValue, context);
+      return evaluateDerivedSlot(object, key, objects, lookup, readValue, context);
   }
 }
 
@@ -239,26 +221,26 @@ function nextSlot(slot: Slot, value: Value): Slot {
 
 function evaluateFormula(
   ast: FormulaAst,
-  objects: readonly GraphObject[],
+  lookup: GraphLookup,
   readValue: (address: Address) => Value | undefined,
 ): Value {
   const read: ReadSlot = (address) => {
     const value = readValue(address);
-    return isEmptyInExtentCell(address, value, objects) ? 0 : value;
+    return isEmptyInExtentCell(address, value, lookup) ? 0 : value;
   };
-  return evaluateFormulaAst(ast, read, buildRangeReader(objects, readValue));
+  return evaluateFormulaAst(ast, read, buildRangeReader(lookup, readValue));
 }
 
-function isEmptyInExtentCell(address: Address, rawValue: Value | undefined, objects: readonly GraphObject[]): boolean {
-  return (rawValue === undefined || rawValue === null) && isInExtentTableCellAddress(address, objects);
+function isEmptyInExtentCell(address: Address, rawValue: Value | undefined, lookup: GraphLookup): boolean {
+  return (rawValue === undefined || rawValue === null) && isInExtentTableCellAddressForObject(address, lookup.objectById(address.objectId));
 }
 
 function buildRangeReader(
-  objects: readonly GraphObject[],
+  lookup: GraphLookup,
   readValue: (address: Address) => Value | undefined,
 ): ReadRange {
   return (start, end) => {
-    const tableObject = objects.find((candidate) => candidate.id === start.objectId);
+    const tableObject = lookup.objectById(start.objectId);
     if (tableObject === undefined) {
       return { error: "#REF", message: "a range references an object that does not exist" };
     }
@@ -282,7 +264,7 @@ function evaluateDerivedSlot(
   object: GraphObject,
   key: string,
   objects: readonly GraphObject[],
-  edges: readonly Edge[],
+  lookup: GraphLookup,
   readValue: (address: Address) => Value | undefined,
   context: EvalContext,
 ): Value {
@@ -296,14 +278,12 @@ function evaluateDerivedSlot(
   }
 
   const ownKey = addressKey({ objectId: object.id, path: schemaEntry.path });
-  const declaredDependencyKeys = new Set(
-    edges.filter((edge) => addressKey(edge.dependentSlot) === ownKey).map((edge) => addressKey(edge.sourceSlot)),
-  );
+  const declaredDependencyKeys = new Set(lookup.sources(ownKey).map(addressKey));
 
   const read = (address: Address): Value | undefined => {
     const addressAsKey = addressKey(address);
     const rawValue = readValue(address);
-    if (isEmptyInExtentCell(address, rawValue, objects)) {
+    if (isEmptyInExtentCell(address, rawValue, lookup)) {
       return 0;
     }
     if (!declaredDependencyKeys.has(addressAsKey)) {
@@ -315,7 +295,7 @@ function evaluateDerivedSlot(
     return rawValue;
   };
 
-  const readRange = buildRangeReader(objects, readValue);
+  const readRange = buildRangeReader(lookup, readValue);
 
   return schemaEntry.compute(object, read, context, { readRange, objects });
 }

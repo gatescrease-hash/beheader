@@ -5,7 +5,11 @@
  * and a list of operations, and returns a new set of objects or a refusal.
  * No other code in the repository writes document state.
  *
- * Every call runs the same seven steps in order:
+ * A call takes one of two paths. A batch that only writes slots which already
+ * exist, against a list this file committed, takes the indexed path in
+ * commitInPlaceWrites, which reads graph/graph-index.ts and costs what the
+ * batch affects. Every other call runs the same seven steps in order, over the
+ * whole document:
  *
  *   1. Stage.     Apply the operations to a new object list.
  *   2. Derive.    Rebuild the whole edge set from stored ASTs and the schema.
@@ -41,9 +45,16 @@
  * Evaluation defaults to the downstream closure of each operation target and
  * any uncached input needed by that closure. Operations that remove or rewire
  * dependencies also consult the committed edge set, so their former consumers
- * remain affected. Text and math measurement slots are roots on every mutation
- * because EvalContext is an input outside the graph. Full recomputation remains
- * available as the reference strategy for differential tests.
+ * remain affected. On the whole-document path, text and math measurement slots
+ * are roots on every mutation because EvalContext is an input outside the
+ * graph. The indexed path makes them roots when the context differs from the
+ * one the index last saw. Full recomputation remains available as the
+ * reference strategy for differential tests, and the indexed path runs only
+ * with the default strategy, so a differential run compares the indexed path
+ * against the whole-document path end to end.
+ *
+ * Every commit on the whole-document path builds an index of the list it
+ * returns, so the batch after a structural change reads an index as well.
  *
  * deleteVertex is the one operation that refuses before staging rather than
  * after. Every other refuse-by-default deletion frees an ID or a coordinate
@@ -112,6 +123,8 @@ import { applyMathSource, isMathSourceError, MATH_SOURCE_PATH, readMathNames, un
 import { detectCycle } from "./graph/cycles.ts";
 import { addressKey, type Edge } from "./graph/edge.ts";
 import { evaluate, evaluateAffected, type SlotEvaluationObserver } from "./graph/eval.ts";
+import { lookupFromEdges, type GraphLookup } from "./graph/lookup.ts";
+import { attachGraphIndex, buildGraphIndex, commitGraphIndex, edgeChanges, graphIndexOf, stagedLookup } from "./graph/graph-index.ts";
 import { hasIllegalNumber, isIllegalNumber, isLegalPortName, MATH_TYPE, POLYLINE_TYPE, slotKey, TABLE_TYPE, type GraphObject, type ObjectType, type Point, type Slot, type Value } from "./graph/node.ts";
 
 /**
@@ -121,55 +134,72 @@ import { hasIllegalNumber, isIllegalNumber, isLegalPortName, MATH_TYPE, POLYLINE
 export function deriveEdges(objects: readonly GraphObject[]): readonly Edge[] {
   const edges: Edge[] = [];
   const objectsById = new Map(objects.map((object) => [object.id, object]));
-
   for (const object of objects) {
-    const schema = getObjectSchema(object.type);
-    if (schema === undefined) {
+    edges.push(...deriveObjectEdges(object, (id) => objectsById.get(id), objects));
+  }
+  return edges;
+}
+
+/**
+ * The edges whose dependent slot belongs to one object, in the order
+ * deriveEdges lists them. Besides the object itself, they read the slot set and
+ * the table extent of each object a formula names, and whatever a dynamic
+ * schema resolver reads from the list, which is names, slot sets and table
+ * extents. The batch that writes slots in place relies on that list, because
+ * none of it changes when a batch only replaces the contents of slots that
+ * already exist.
+ */
+function deriveObjectEdges(
+  object: GraphObject,
+  objectById: (id: string) => GraphObject | undefined,
+  objects: readonly GraphObject[],
+): readonly Edge[] {
+  const edges: Edge[] = [];
+  const schema = getObjectSchema(object.type);
+  if (schema === undefined) {
+    return edges;
+  }
+  for (const path of resolveNonDerivedSlotPaths(object, schema.nonDerivedSlotPaths)) {
+    const slot = object.slots[slotKey(path)];
+    if (slot === undefined || slot.kind !== "formula") {
       continue;
     }
-
-    for (const path of resolveNonDerivedSlotPaths(object, schema.nonDerivedSlotPaths)) {
-      const slot = object.slots[slotKey(path)];
-      if (slot === undefined || slot.kind !== "formula") {
+    const dependentSlot = { objectId: object.id, path };
+    for (const dependency of extractDependencies(slot.ast)) {
+      if (dependency.kind === "reference") {
+        const sourceObject = objectById(dependency.address.objectId);
+        if (sourceObject?.slots[slotKey(dependency.address.path)] === undefined && isInExtentTableCellAddressForObject(dependency.address, sourceObject)) {
+          continue;
+        }
+        edges.push({ sourceSlot: dependency.address, dependentSlot });
         continue;
       }
-      const dependentSlot = { objectId: object.id, path };
-      for (const dependency of extractDependencies(slot.ast)) {
-        if (dependency.kind === "reference") {
-          const sourceObject = objectsById.get(dependency.address.objectId);
-          if (sourceObject?.slots[slotKey(dependency.address.path)] === undefined && isInExtentTableCellAddressForObject(dependency.address, sourceObject)) {
-            continue;
-          }
-          edges.push({ sourceSlot: dependency.address, dependentSlot });
+      const tableObject = objectById(dependency.start.objectId);
+      if (tableObject === undefined) {
+        edges.push({ sourceSlot: dependency.start, dependentSlot });
+        continue;
+      }
+      const cellAddresses = enumerateRangeCellAddresses(dependency.start, dependency.end, tableObject);
+      if (isRangeEnumerationError(cellAddresses)) {
+        edges.push({ sourceSlot: dependency.start, dependentSlot });
+        continue;
+      }
+      for (const cellAddress of cellAddresses) {
+        if (tableObject.slots[slotKey(cellAddress.path)] === undefined) {
           continue;
         }
-        const tableObject = objectsById.get(dependency.start.objectId);
-        if (tableObject === undefined) {
-          edges.push({ sourceSlot: dependency.start, dependentSlot });
-          continue;
-        }
-        const cellAddresses = enumerateRangeCellAddresses(dependency.start, dependency.end, tableObject);
-        if (isRangeEnumerationError(cellAddresses)) {
-          edges.push({ sourceSlot: dependency.start, dependentSlot });
-          continue;
-        }
-        for (const cellAddress of cellAddresses) {
-          if (tableObject.slots[slotKey(cellAddress.path)] === undefined) {
-            continue;
-          }
-          edges.push({ sourceSlot: cellAddress, dependentSlot });
-        }
+        edges.push({ sourceSlot: cellAddress, dependentSlot });
       }
     }
+  }
 
-    for (const derivedSlotEntry of resolveDerivedSlots(object, schema.derivedSlots)) {
-      const dependencyAddresses = derivedSlotDependencyAddresses(object, derivedSlotEntry.dependencies, objects);
-      for (const sourceSlot of dependencyAddresses) {
-        edges.push({
-          sourceSlot,
-          dependentSlot: { objectId: object.id, path: derivedSlotEntry.path },
-        });
-      }
+  for (const derivedSlotEntry of resolveDerivedSlots(object, schema.derivedSlots)) {
+    const dependencyAddresses = derivedSlotDependencyAddresses(object, derivedSlotEntry.dependencies, objects);
+    for (const sourceSlot of dependencyAddresses) {
+      edges.push({
+        sourceSlot,
+        dependentSlot: { objectId: object.id, path: derivedSlotEntry.path },
+      });
     }
   }
 
@@ -279,22 +309,27 @@ function objectSlotAddresses(object: GraphObject): readonly Address[] | undefine
     .map((path) => ({ objectId: object.id, path }));
 }
 
-function operationDirtyRoots(input: EvaluationStrategyInput): readonly Address[] | undefined {
-  const previousById = new Map(input.previousObjects.map((object) => [object.id, object]));
-  const stagedById = new Map(input.stagedObjects.map((object) => [object.id, object]));
-  const roots: Address[] = [];
-
-  for (const object of input.stagedObjects) {
+/** Every derived slot whose schema entry reads the evaluation context. */
+function contextSlotAddresses(objects: readonly GraphObject[]): readonly Address[] {
+  const addresses: Address[] = [];
+  for (const object of objects) {
     const schema = getObjectSchema(object.type);
     if (schema === undefined) {
       continue;
     }
     for (const entry of resolveDerivedSlots(object, schema.derivedSlots)) {
       if (entry.usesContext === true && object.slots[slotKey(entry.path)] !== undefined) {
-        roots.push({ objectId: object.id, path: entry.path });
+        addresses.push({ objectId: object.id, path: entry.path });
       }
     }
   }
+  return addresses;
+}
+
+function operationDirtyRoots(input: EvaluationStrategyInput): readonly Address[] | undefined {
+  const previousById = new Map(input.previousObjects.map((object) => [object.id, object]));
+  const stagedById = new Map(input.stagedObjects.map((object) => [object.id, object]));
+  const roots: Address[] = [...contextSlotAddresses(input.stagedObjects)];
 
   for (const operation of input.operations) {
     if (operation.kind === "setSlot" || operation.kind === "clearSlot") {
@@ -316,41 +351,17 @@ function operationDirtyRoots(input: EvaluationStrategyInput): readonly Address[]
   return roots;
 }
 
-function affectedSlotAddresses(input: EvaluationStrategyInput): readonly Address[] | undefined {
-  const roots = operationDirtyRoots(input);
-  if (roots === undefined) {
-    return undefined;
-  }
-  const needsPreviousEdges = input.operations.some((operation) =>
-    operation.kind === "clearSlot"
-    || operation.kind === "deleteObject"
-    || operation.kind === "deleteTableLine"
-    || operation.kind === "renameObject"
-    || operation.kind === "deleteVertex"
-    || operation.kind === "explode");
-  const previousEdges = needsPreviousEdges ? deriveEdges(input.previousObjects) : [];
-  const stagedById = new Map(input.stagedObjects.map((object) => [object.id, object]));
-  const outgoing = new Map<string, Address[]>();
-  const incoming = new Map<string, Address[]>();
-  for (const edge of [...previousEdges, ...input.edges]) {
-    const key = addressKey(edge.sourceSlot);
-    const dependents = outgoing.get(key);
-    if (dependents === undefined) {
-      outgoing.set(key, [edge.dependentSlot]);
-    } else {
-      dependents.push(edge.dependentSlot);
-    }
-  }
-  for (const edge of input.edges) {
-    const key = addressKey(edge.dependentSlot);
-    const sources = incoming.get(key);
-    if (sources === undefined) {
-      incoming.set(key, [edge.sourceSlot]);
-    } else {
-      sources.push(edge.sourceSlot);
-    }
-  }
-
+/**
+ * The roots, everything downstream of them, and any uncached input that part
+ * reads. `dependents` can answer for more than the staged graph, which is how
+ * an operation that removes or rewires a slot keeps its former readers in the
+ * set, and `staged` answers the sources and the cached values.
+ */
+function closeAffectedRegion(
+  roots: readonly Address[],
+  dependents: (key: string) => readonly Address[],
+  staged: GraphLookup,
+): readonly Address[] {
   const affected = new Map<string, Address>();
   const queue: Address[] = [];
   for (const root of roots) {
@@ -362,7 +373,7 @@ function affectedSlotAddresses(input: EvaluationStrategyInput): readonly Address
   }
   for (let index = 0; index < queue.length; index += 1) {
     const source = queue[index]!;
-    for (const dependent of outgoing.get(addressKey(source)) ?? []) {
+    for (const dependent of dependents(addressKey(source))) {
       const key = addressKey(dependent);
       if (affected.has(key)) {
         continue;
@@ -377,12 +388,12 @@ function affectedSlotAddresses(input: EvaluationStrategyInput): readonly Address
   // set recursively, while populated caches and literal values stay outside.
   for (let index = 0; index < queue.length; index += 1) {
     const dependent = queue[index]!;
-    for (const source of incoming.get(addressKey(dependent)) ?? []) {
+    for (const source of staged.sources(addressKey(dependent))) {
       const key = addressKey(source);
       if (affected.has(key)) {
         continue;
       }
-      const sourceSlot = stagedById.get(source.objectId)?.slots[slotKey(source.path)];
+      const sourceSlot = staged.objectById(source.objectId)?.slots[slotKey(source.path)];
       if (sourceSlot?.kind === "literal" || sourceSlot?.value !== null) {
         continue;
       }
@@ -398,11 +409,24 @@ export function createIncrementalEvaluationStrategy(
   observer?: SlotEvaluationObserver,
 ): EvaluationStrategy {
   return (input) => {
-    const affected = affectedSlotAddresses(input);
-    if (affected === undefined) {
+    const roots = operationDirtyRoots(input);
+    if (roots === undefined) {
       return FULL_EVALUATION_STRATEGY(input);
     }
-    return evaluateAffected(input.stagedObjects, input.edges, affected, input.context, observer);
+    const staged = lookupFromEdges(input.stagedObjects, input.edges);
+    const needsPreviousEdges = input.operations.some((operation) =>
+      operation.kind === "clearSlot"
+      || operation.kind === "deleteObject"
+      || operation.kind === "deleteTableLine"
+      || operation.kind === "renameObject"
+      || operation.kind === "deleteVertex"
+      || operation.kind === "explode");
+    const previous = needsPreviousEdges ? lookupFromEdges(input.previousObjects, deriveEdges(input.previousObjects)) : undefined;
+    const dependents = previous === undefined
+      ? staged.dependents
+      : (key: string) => [...previous.dependents(key), ...staged.dependents(key)];
+    const affected = closeAffectedRegion(roots, dependents, staged);
+    return evaluateAffected(input.stagedObjects, staged, affected, input.context, observer);
   };
 }
 
@@ -412,7 +436,11 @@ export function deriveValidateAndEvaluate(
   objects: readonly GraphObject[],
   context: EvalContext = NULL_EVAL_CONTEXT,
 ): GraphEvaluationResult {
-  return deriveValidateAndEvaluateWithStrategy(objects, objects, [], context, FULL_EVALUATION_STRATEGY);
+  return withoutEdges(deriveValidateAndEvaluateWithStrategy(objects, objects, [], context, FULL_EVALUATION_STRATEGY));
+}
+
+function withoutEdges(result: CheckedEvaluation): GraphEvaluationResult {
+  return result.ok ? { ok: true, objects: result.objects } : result;
 }
 
 /**
@@ -425,8 +453,13 @@ export function refreshHostInputs(
   objects: readonly GraphObject[],
   context: EvalContext = NULL_EVAL_CONTEXT,
 ): GraphEvaluationResult {
-  return deriveValidateAndEvaluateWithStrategy(objects, objects, [], context, INCREMENTAL_EVALUATION_STRATEGY);
+  return withoutEdges(deriveValidateAndEvaluateWithStrategy(objects, objects, [], context, INCREMENTAL_EVALUATION_STRATEGY));
 }
+
+/** A whole-document pass hands back the edges it derived, so a commit can index them. */
+type CheckedEvaluation =
+  | { readonly ok: true; readonly objects: readonly GraphObject[]; readonly edges: readonly Edge[] }
+  | { readonly ok: false; readonly message: string };
 
 function deriveValidateAndEvaluateWithStrategy(
   objects: readonly GraphObject[],
@@ -434,7 +467,7 @@ function deriveValidateAndEvaluateWithStrategy(
   operations: readonly Operation[],
   context: EvalContext,
   evaluationStrategy: EvaluationStrategy,
-): GraphEvaluationResult {
+): CheckedEvaluation {
   const edges = deriveEdges(objects);
 
   const integrity = validateIntegrity(objects, edges);
@@ -450,6 +483,7 @@ function deriveValidateAndEvaluateWithStrategy(
   return {
     ok: true,
     objects: evaluationStrategy({ previousObjects, stagedObjects: objects, edges, operations, context }),
+    edges,
   };
 }
 
@@ -984,6 +1018,153 @@ function resolveSlotPathForKey(object: GraphObject, key: string): readonly strin
   return resolveNonDerivedSlotPaths(object, schema.nonDerivedSlotPaths).find((path) => slotKey(path) === key);
 }
 
+/**
+ * A table's extent and an object's layer membership are read by other objects:
+ * by the edges of every formula that names a cell, and by the integrity check
+ * of every layer member. A write to either takes the whole-document path. So
+ * does a direct write to a math source, which that path refuses with a reason.
+ */
+function isInPlaceWrite(object: GraphObject, path: readonly string[], existing: Slot | undefined, slot: Slot): boolean {
+  if (existing === undefined || existing.kind === "derived" || slot.kind === "derived") {
+    return false;
+  }
+  const key = slotKey(path);
+  if (key === "view.layer") {
+    return false;
+  }
+  if (object.type === TABLE_TYPE && (key === slotKey(TABLE_ROWS_PATH) || key === slotKey(TABLE_COLS_PATH))) {
+    return false;
+  }
+  if (object.type === MATH_TYPE && key === slotKey(MATH_SOURCE_PATH)) {
+    return false;
+  }
+  return !hasIllegalNumber(slot.value) && (slot.kind !== "formula" || collectIllegalAstLiterals(slot.ast).length === 0);
+}
+
+function sameEdges(left: readonly Edge[], right: readonly Edge[]): boolean {
+  return left.length === right.length && left.every((edge, index) => {
+    const other = right[index]!;
+    return addressKey(edge.sourceSlot) === addressKey(other.sourceSlot) && addressKey(edge.dependentSlot) === addressKey(other.dependentSlot);
+  });
+}
+
+/**
+ * Commits a batch of writes to slots that already exist, reading the index of
+ * the committed state rather than the whole document, or returns undefined to
+ * send the batch down the whole-document path.
+ *
+ * Such a batch keeps every object, every name and every slot set as it was,
+ * and only replaces what some slots hold. The edges of an object read nothing
+ * else that such a batch can change, as deriveObjectEdges describes, so only
+ * the objects it writes need their edges derived again, and only those objects
+ * need the per-object integrity checks. The checks that span objects, which
+ * are names, the document variables, layer membership and copy targets, read
+ * nothing the batch changes. A new cycle has to pass through a slot whose
+ * sources changed, so the cycle search starts from those slots alone, and
+ * evaluation covers the region downstream of the writes.
+ *
+ * Any problem sends the batch down the whole-document path as well, which
+ * finds the same problem and words the refusal. A refusal names every slot
+ * involved in the order a whole-document pass meets them, and reproducing that
+ * order here would need the whole document anyway.
+ *
+ * The slots that read the evaluation context are evaluated again only when the
+ * context differs from the one the index last saw. A host that changes what
+ * its measurer answers without changing the context, as main.ts does when a
+ * font arrives, evaluates the document itself, and that list has no index.
+ */
+function commitInPlaceWrites(
+  objects: readonly GraphObject[],
+  operations: readonly Operation[],
+  journal: readonly MutationJournalEntry[],
+  context: EvalContext,
+): MutationResult | undefined {
+  const index = graphIndexOf(objects);
+  if (index === undefined) {
+    return undefined;
+  }
+  const replaced = new Map<string, GraphObject>();
+  for (const operation of operations) {
+    if (operation.kind !== "setSlot") {
+      return undefined;
+    }
+    const objectId = operation.address.objectId;
+    const position = index.positions.get(objectId);
+    if (position === undefined) {
+      return undefined;
+    }
+    const object = replaced.get(objectId) ?? objects[position]!;
+    const key = slotKey(operation.address.path);
+    if (!isInPlaceWrite(object, operation.address.path, object.slots[key], operation.slot)) {
+      return undefined;
+    }
+    replaced.set(objectId, { ...object, slots: { ...object.slots, [key]: deepClone(operation.slot) } });
+  }
+
+  const staged = objects.slice();
+  for (const [objectId, object] of replaced) {
+    staged[index.positions.get(objectId)!] = object;
+  }
+  const objectById = (id: string): GraphObject | undefined => {
+    const position = index.positions.get(id);
+    return position === undefined ? undefined : staged[position];
+  };
+
+  const rewired = new Map<string, readonly Edge[]>();
+  for (const object of replaced.values()) {
+    const edges = deriveObjectEdges(object, objectById, staged);
+    const checks = [findUndeclaredFormulaOrDerivedSlots([object]), findSchemaSlotKindMismatches([object]), findIllegalSlotValues([object])];
+    if (checks.some((problems) => problems.length > 0)) {
+      return undefined;
+    }
+    if (edges.some((edge) => objectById(edge.sourceSlot.objectId)?.slots[slotKey(edge.sourceSlot.path)] === undefined)) {
+      return undefined;
+    }
+    if (!sameEdges(edges, index.ownEdges.get(object.id) ?? [])) {
+      rewired.set(object.id, edges);
+    }
+  }
+
+  const changes = edgeChanges(index, rewired);
+  const lookup = stagedLookup(staged, index, changes);
+  for (const key of changes.sources.keys()) {
+    if (reachesItself(key, lookup)) {
+      return undefined;
+    }
+  }
+
+  const roots: Address[] = operations.map((operation) => (operation as SetSlotOperation).address);
+  if (index.context !== context) {
+    roots.push(...index.contextSlots);
+  }
+  const affected = closeAffectedRegion(roots, lookup.dependents, lookup);
+  const evaluated = evaluateAffected(staged, lookup, affected, context);
+  commitGraphIndex(index, changes, context, objects, evaluated);
+  return {
+    ok: true,
+    objects: evaluated,
+    journal: [...journal, { operations: deepClone([...operations]) }],
+    brokenSlots: [],
+  };
+}
+
+/** True when the slot with this key reads, through any chain, its own value. */
+function reachesItself(key: string, lookup: GraphLookup): boolean {
+  const seen = new Set<string>();
+  const stack = [...lookup.dependents(key)];
+  while (stack.length > 0) {
+    const next = addressKey(stack.pop()!);
+    if (next === key) {
+      return true;
+    }
+    if (!seen.has(next)) {
+      seen.add(next);
+      stack.push(...lookup.dependents(next));
+    }
+  }
+  return false;
+}
+
 export interface MutationJournalEntry {
   readonly operations: readonly Operation[];
 }
@@ -1010,6 +1191,13 @@ export function mutate(
 ): MutationResult {
   if (operations.length === 0) {
     return { ok: false, message: "a mutation batch must contain at least one operation" };
+  }
+
+  if (evaluationStrategy === INCREMENTAL_EVALUATION_STRATEGY) {
+    const inPlace = commitInPlaceWrites(objects, operations, journal, context);
+    if (inPlace !== undefined) {
+      return inPlace;
+    }
   }
 
   const survivingIds = new Set(objects.map((object) => object.id));
@@ -1172,6 +1360,7 @@ export function mutate(
   if (!result.ok) {
     return result;
   }
+  attachGraphIndex(result.objects, buildGraphIndex(result.objects, result.edges, contextSlotAddresses(result.objects), context));
 
   return {
     ok: true,

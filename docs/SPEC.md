@@ -173,8 +173,27 @@ mutation affects, rather than to the size of the document. Within that bound,
 write the simplest correct code. A constant factor does not justify complexity,
 so this rule asks for nothing about how fast any one phase runs.
 
-The engine does not meet this rule yet. Three choices in it once cost time
-proportional to the whole document on every mutation:
+**One pass over two lists lies outside the bound.** Document state is a plain
+list of plain object records, and the journal is a plain list of entries. A
+mutation builds the next of each by copying references, and it compares records
+by identity, which takes time in proportion to the length of each list. Keeping
+both lists plain keeps graph state plain data, keeps the file format and every
+reader of state as they are, and keeps a cache from ever deciding a result. A
+persistent tree would remove the pass but make state something other than plain
+data. The pass costs about 0.2 milliseconds at 16000 objects, against the 150
+milliseconds the whole-document phases below cost there, so this rule leaves it
+in place.
+
+The engine meets this rule for a batch that only writes slots that already
+exist, which is every frame of a drag and every edit of a value or a formula.
+Such a batch reads an index of the state before it, re-derives and checks the
+objects it writes, searches for a cycle from the slots whose sources changed,
+and evaluates the region downstream of the writes. Over a value chain of 16000
+objects one such edit takes about a millisecond, where the whole-document path
+takes about 150.
+
+The engine does not meet this rule for any other batch. Three choices in it once
+cost time proportional to the whole document on every mutation:
 
 - Cycle detection runs a full depth first search.
 - Evaluation recomputes the whole graph in topological order.
@@ -182,9 +201,10 @@ proportional to the whole document on every mutation:
   clone in on success.
 
 Evaluation now covers the part of the graph a batch dirties, and staging shares
-every object a batch leaves alone rather than cloning it. The cycle search still
-runs over the whole document, and so do edge derivation and the integrity check,
-which read every object to rebuild and check the edge set.
+every object a batch leaves alone rather than cloning it. A batch that creates,
+deletes, renames or resizes anything, creates or clears a slot, or ends in a
+refusal still derives, checks and searches the whole document, and it then
+builds the index the next batch reads.
 
 Each was chosen for simplicity while the plan was to restructure the engine
 after a port to Rust. `RUST_PORT.md` records the measured cost of the three and

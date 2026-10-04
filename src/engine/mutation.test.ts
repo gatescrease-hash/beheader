@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from "vitest";
 import { formatAddress, type Address } from "./address.ts";
-import type { EvalContext } from "./eval-context.ts";
+import { NULL_EVAL_CONTEXT, type EvalContext } from "./eval-context.ts";
 import type { FormulaAst } from "./formula/ast.ts";
 import { detectCycle } from "./graph/cycles.ts";
 import { addressKey, type Edge } from "./graph/edge.ts";
@@ -21,8 +21,10 @@ import {
   mutate,
   validateIntegrity,
   type MutationJournalEntry,
+  type MutationResult,
   type Operation,
 } from "./mutation.ts";
+import { graphIndexOf } from "./graph/graph-index.ts";
 import { deepFreeze } from "./differential.ts";
 import { createEmptyDocument, type Document } from "./document.ts";
 import { executeCommand } from "../command/commands.ts";
@@ -4729,5 +4731,132 @@ describe("text.measuredHeight end to end through mutate", () => {
     const r = mutate([], [{ kind: "createObject", object: textObject("obj_x", "text_1", ["measuredWidth"]) }], []);
     expect(r.ok).toBe(false);
     expect(r.ok === false && r.message).toContain("measuredWidth");
+  });
+});
+
+/** A value chain committed through mutate(), so the list it returns carries an index. */
+function committedChain(size: number): { readonly objects: readonly GraphObject[]; readonly journal: readonly MutationJournalEntry[] } {
+  const created = mutate([], referenceChain(size).map((object): Operation => ({ kind: "createObject", object })), []);
+  if (!created.ok) throw new Error(created.message);
+  return created;
+}
+
+function write(objectId: string, slot: Slot, path: readonly string[] = ["value"]): Operation {
+  return { kind: "setSlot", address: addr(objectId, ...path), slot };
+}
+
+/** Runs a batch both ways from the same committed state, and expects the same result. */
+function expectSameAsWholeDocument(
+  state: { readonly objects: readonly GraphObject[]; readonly journal: readonly MutationJournalEntry[] },
+  batch: readonly Operation[],
+  context: EvalContext = NULL_EVAL_CONTEXT,
+): MutationResult {
+  const whole = mutate(state.objects, batch, state.journal, context, FULL_EVALUATION_STRATEGY);
+  const indexed = mutate(state.objects, batch, state.journal, context);
+  expect(indexed).toEqual(whole);
+  return indexed;
+}
+
+describe("mutate — writes to existing slots commit through the index of the committed state", () => {
+  it("reads the same number of object records for one edit at any document size", () => {
+    const reads = [250, 1000, 4000].map((size) => {
+      const chain = committedChain(size);
+      let slotReads = 0;
+      // Records wrapped after the commit sit in a list with no index, so the
+      // first edit below takes the whole-document path, and its result shares
+      // the wrapped records it leaves alone together with a fresh index.
+      const wrapped = chain.objects.map((object) => new Proxy(object, {
+        get(target, property, receiver) {
+          if (property === "slots") slotReads += 1;
+          return Reflect.get(target, property, receiver);
+        },
+      }));
+      // The first edit writes the formula the last object already holds, so
+      // it re-evaluates that object alone and every other record stays shared.
+      const first = mutate(wrapped, [write(`obj_${size - 1}`, { kind: "formula", ast: { type: "reference", address: addr(`obj_${size - 2}`, "value") }, value: null })], chain.journal);
+      if (!first.ok) throw new Error(first.message);
+      expect(graphIndexOf(first.objects)).toBeDefined();
+      slotReads = 0;
+      const second = mutate(first.objects, [write(`obj_${size - 2}`, { kind: "literal", value: 2 })], first.journal);
+      if (!second.ok) throw new Error(second.message);
+      expect(second.objects[size - 1]?.slots.value?.value).toBe(2);
+      return slotReads;
+    });
+    expect(new Set(reads).size).toBe(1);
+    expect(reads[0]).toBeLessThan(20);
+  });
+
+  it("agrees with the whole-document path across rewiring, chained edits and text", () => {
+    let state: { readonly objects: readonly GraphObject[]; readonly journal: readonly MutationJournalEntry[] } = runCommands([
+      "docvar speed 12",
+      "table x=0 y=0",
+      "set table_1.A1 = speed",
+      "set table_1.B1 = SUM(table_1.A1:table_1.A3)",
+      'text x=0 y=0 "speed {= speed } total {= table_1.B1 }"',
+    ]);
+    const doc = idOf(state.objects, "doc");
+    const table = idOf(state.objects, "table_1");
+    const text = idOf(state.objects, "text_1");
+    const batches: readonly (readonly Operation[])[] = [
+      [write(doc, { kind: "literal", value: 7 }, ["speed"])],
+      [write(table, { kind: "formula", ast: { type: "binaryOp", operator: "*", left: { type: "reference", address: addr(doc, "speed") }, right: { type: "literal", value: 3 } }, value: null }, ["cells", "A1"])],
+      [write(table, { kind: "literal", value: 4 }, ["cells", "A1"])],
+      [write(text, { kind: "literal", value: "only {= table_1.B1 }" }, ["content"])],
+      [write(doc, { kind: "literal", value: 9 }, ["speed"]), write(table, { kind: "formula", ast: { type: "reference", address: addr(doc, "speed") }, value: null }, ["cells", "A1"])],
+    ];
+    for (const batch of batches) {
+      const result = expectSameAsWholeDocument(state, batch, stagingContext);
+      if (!result.ok) throw new Error(result.message);
+      state = result;
+    }
+    expect(state.objects.find((object) => object.id === text)?.slots.resolvedContent?.value).toBe("only 9");
+  });
+
+  it("refuses a cycle and a dangling reference with the same words as the whole-document path, and the index survives the refusal", () => {
+    const chain = committedChain(6);
+    const cycle = expectSameAsWholeDocument(chain, [write("obj_0", { kind: "formula", ast: { type: "reference", address: addr("obj_5", "value") }, value: null })]);
+    expect(cycle.ok === false && cycle.message).toContain("cyclic dependency");
+    const self = expectSameAsWholeDocument(chain, [write("obj_3", { kind: "formula", ast: { type: "reference", address: addr("obj_3", "value") }, value: null })]);
+    expect(self.ok === false && self.message).toContain("cyclic dependency");
+    const dangling = expectSameAsWholeDocument(chain, [write("obj_3", { kind: "formula", ast: { type: "reference", address: addr("obj_9", "value") }, value: null })]);
+    expect(dangling.ok === false && dangling.message).toContain("a slot that does not exist");
+
+    expect(graphIndexOf(chain.objects)).toBeDefined();
+    const after = expectSameAsWholeDocument(chain, [write("obj_0", { kind: "literal", value: 10 })]);
+    expect(after.ok && after.objects[5]?.slots.value?.value).toBe(10);
+  });
+
+  it("hands the index on to the list it commits, so an earlier list takes the whole-document path and still commits correctly", () => {
+    const chain = committedChain(4);
+    const first = mutate(chain.objects, [write("obj_0", { kind: "literal", value: 5 })], chain.journal);
+    if (!first.ok) throw new Error(first.message);
+    expect(graphIndexOf(chain.objects)).toBeUndefined();
+    expect(graphIndexOf(first.objects)).toBeDefined();
+    const again = expectSameAsWholeDocument(chain, [write("obj_0", { kind: "literal", value: 8 })]);
+    expect(again.ok && again.objects[3]?.slots.value?.value).toBe(8);
+  });
+
+  it("sends a table extent, a layer membership and a math source down the whole-document path, which words their refusals", () => {
+    const state = runCommands(["table x=0 y=0", 'math x=0 y=0 "y=x*2"']);
+    const table = idOf(state.objects, "table_1");
+    const math = idOf(state.objects, "math_1");
+    const grown = expectSameAsWholeDocument(state, [write(table, { kind: "literal", value: 12 }, ["rows"])], stagingContext);
+    expect(grown.ok).toBe(true);
+    const bad = expectSameAsWholeDocument(state, [write(table, { kind: "literal", value: 2.5 }, ["rows"])], stagingContext);
+    expect(bad.ok).toBe(false);
+    const source = expectSameAsWholeDocument(state, [write(math, { kind: "literal", value: "y=x" }, ["source"])], stagingContext);
+    expect(source.ok === false && source.message).toContain("writes math_1.source directly");
+  });
+
+  it("evaluates the measured slots again when the context changes, and leaves them alone while it stays the same", () => {
+    const narrow: EvalContext = { measurer: { measure: (text: string) => ({ width: text.length * 7, height: 20 }) } };
+    const wide: EvalContext = { measurer: { measure: (text: string) => ({ width: text.length * 10, height: 20 }) } };
+    const created = runCommands(['text x=0 y=0 "hello"', "circle x=0 y=0 r=5"]);
+    const circle = idOf(created.objects, "circle_1");
+    const state = mutate(created.objects, [write(circle, { kind: "literal", value: 6 }, ["radius"])], created.journal, narrow);
+    if (!state.ok) throw new Error(state.message);
+    expectSameAsWholeDocument(state, [write(circle, { kind: "literal", value: 7 }, ["radius"])], narrow);
+    const widened = expectSameAsWholeDocument(state, [write(circle, { kind: "literal", value: 7 }, ["radius"])], wide);
+    expect(widened).not.toEqual(mutate(state.objects, [write(circle, { kind: "literal", value: 7 }, ["radius"])], state.journal, narrow, FULL_EVALUATION_STRATEGY));
   });
 });
