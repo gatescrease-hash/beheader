@@ -46,6 +46,8 @@ import {
   commitScriptSource,
   scriptStatusLines,
   groupSelection,
+  hasUnsavedWork,
+  undoLast,
   ungroupSelection,
   withSelection,
   submitLine,
@@ -312,11 +314,27 @@ describe("performEffect — zoom and fit write the camera directly", () => {
 });
 
 describe("performEffect — save and load are the two this file cannot finish alone", () => {
-  it("asks the DOM half for a save and changes no state", () => {
+  it("asks the DOM half for a save and changes no state but the saved point", () => {
     const state = typed(opened(), "polygon sides=5 x=0 y=0 r=50");
+    expect(hasUnsavedWork(state)).toBe(true);
     const transition = performEffect({ kind: "save" }, state, VIEWPORT);
     expect(transition.fileRequest).toBe("save");
-    expect(transition.state).toBe(state);
+    expect(transition.state).toEqual({ ...state, savedJournal: state.document.journal });
+    expect(transition.state.document).toBe(state.document);
+    expect(hasUnsavedWork(transition.state)).toBe(false);
+  });
+
+  it("reads dirty after an edit past the saved point and clean again after undoing back to it", () => {
+    const saved = performEffect({ kind: "save" }, typed(opened(), "polygon sides=5 x=0 y=0 r=50"), VIEWPORT).state;
+    const edited = typed(saved, "circle x=100 y=0 r=20");
+    expect(hasUnsavedWork(edited)).toBe(true);
+    expect(hasUnsavedWork(undoLast(edited).state)).toBe(false);
+  });
+
+  it("opens a loaded document clean and a restored recovery copy dirty", () => {
+    const state = typed(opened(), "polygon sides=5 x=0 y=0 r=50");
+    expect(hasUnsavedWork(replaceDocument(state, state.document, "loaded test.json"))).toBe(false);
+    expect(hasUnsavedWork(replaceDocument(state, state.document, "restored", undefined, null))).toBe(true);
   });
 
   it("asks the DOM half for a load and changes no state until a file arrives", () => {

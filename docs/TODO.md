@@ -63,10 +63,6 @@ be taken back.
 - Read a comma separated file into a table, as specified in Moving data in and
   out. A reader will know it is finished when it shares the growth and refusal
   path of a paste.
-- Warn about unsaved work and keep a recovery copy, as specified in Moving data
-  in and out. A reader will know it is finished when leaving a dirty document
-  warns, the window title shows the state, and a copy written on a timer is
-  offered on the next open.
 
 The items below are the graph surface that sections 19 and 20 open. The overlay
 comes first, because rewiring and arrangement both read what it draws.

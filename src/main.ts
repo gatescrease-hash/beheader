@@ -113,6 +113,7 @@ import "mathlive/fonts.css";
 import "./workspace.css";
 import { createCanvas2dTextMeasurer, createSourceTextMeasurer } from "./render/measure.ts";
 import { createScriptRunner, createWorkerBackend, type WorkerLike } from "./python/runner.ts";
+import { clearRecovery, isDirty, readRecovery, writeRecovery } from "./recovery.ts";
 import { createMathMeasurer, MATH_MACROS, mathMarkup, mathOverlayPlacement, readMathDrawnLatex, readMathLatex } from "./render/math.ts";
 import { hitTest } from "./render/hittest.ts";
 import { worldToScreen } from "./render/camera.ts";
@@ -152,6 +153,8 @@ export interface AppState {
   readonly history: UndoHistory;
   /** The document as it stood at the press of a drag, a resize or a bend, while one is under way. */
   readonly gesture: GestureBase | undefined;
+  /** The journal at the last save or load, against which recovery.ts decides the document is dirty. */
+  readonly savedJournal: readonly MutationJournalEntry[] | null;
 }
 
 export interface GestureBase {
@@ -176,7 +179,12 @@ export interface AppTransition {
  * the replayed measurements differ from the loaded ones and undo stops at the
  * point the document opened.
  */
-export function initialAppState(document: Document, log: readonly string[] = [], context: EvalContext = NULL_EVAL_CONTEXT): AppState {
+export function initialAppState(
+  document: Document,
+  log: readonly string[] = [],
+  context: EvalContext = NULL_EVAL_CONTEXT,
+  savedJournal: readonly MutationJournalEntry[] | null = document.journal,
+): AppState {
   return {
     document: { ...document, camera: clampCamera(document.camera) },
     interaction: INITIAL_INTERACTION_STATE,
@@ -186,6 +194,7 @@ export function initialAppState(document: Document, log: readonly string[] = [],
     panels: {},
     history: startUndoHistory(document.objects, document.journal, context),
     gesture: undefined,
+    savedJournal,
   };
 }
 
@@ -359,6 +368,9 @@ function sessionMessage(session: CommandSession): string {
 
 export const FIT_VIEWPORT_FRACTION = 0.9;
 
+/** How often a dirty document writes its recovery copy. */
+export const RECOVERY_INTERVAL_MS = 5000;
+
 /** How long one script run may take before its worker is stopped. */
 export const SCRIPT_TIMEOUT_MS = 5000;
 
@@ -377,7 +389,7 @@ export function performEffect(effect: CommandEffect, state: AppState, viewport: 
     case "fit":
       return transition(fitToDocument(state, viewport));
     case "save":
-      return { state, fileRequest: "save", refused: false };
+      return { state: { ...state, savedJournal: state.document.journal }, fileRequest: "save", refused: false };
     case "load":
       return { state, fileRequest: "load", refused: false };
     default: {
@@ -580,8 +592,24 @@ export function logLine(state: AppState, line: string): AppState {
   return withLog(state, [line]);
 }
 
-export function replaceDocument(state: AppState, document: Document, line: string, context: EvalContext = NULL_EVAL_CONTEXT): AppState {
-  return withLog(initialAppState(document, state.log, context), [line]);
+/**
+ * Opens a document in place of the current one. A loaded file is clean, and
+ * a restored recovery copy, passed a saved journal of null, is dirty from the
+ * start, because nothing on disk holds it yet.
+ */
+export function replaceDocument(
+  state: AppState,
+  document: Document,
+  line: string,
+  context: EvalContext = NULL_EVAL_CONTEXT,
+  savedJournal: readonly MutationJournalEntry[] | null = document.journal,
+): AppState {
+  return withLog(initialAppState(document, state.log, context, savedJournal), [line]);
+}
+
+/** True when the document holds a change made since the last save or load. */
+export function hasUnsavedWork(state: AppState): boolean {
+  return isDirty(state.document.journal, state.savedJournal);
 }
 
 export interface PanelRow {
@@ -1989,7 +2017,77 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     state = next;
     drawLog(logElement, state.log);
     paint();
+    document.title = hasUnsavedWork(state) ? "● Beheader — unsaved" : "Beheader";
   };
+
+  /**
+   * Keeps the recovery copy in step with unsaved work: written every few
+   * seconds while the document is dirty and has changed since the last copy,
+   * and removed once nothing is unsaved, such as after an undo back to the
+   * saved point. Leaving the page with unsaved work asks first. While the
+   * banner below still offers an older copy, the timer leaves that copy in
+   * place, so new work cannot overwrite it before the operator chooses.
+   */
+  let recoveryWritten: readonly MutationJournalEntry[] | undefined;
+  let recoveryOffered = false;
+  window.setInterval(() => {
+    if (recoveryOffered) return;
+    if (!hasUnsavedWork(state)) {
+      if (recoveryWritten !== undefined) {
+        clearRecovery(window.localStorage);
+        recoveryWritten = undefined;
+      }
+      return;
+    }
+    if (recoveryWritten !== state.document.journal && writeRecovery(window.localStorage, state.document, new Date())) {
+      recoveryWritten = state.document.journal;
+    }
+  }, RECOVERY_INTERVAL_MS);
+  window.addEventListener("beforeunload", (event) => {
+    if (hasUnsavedWork(state)) {
+      event.preventDefault();
+      event.returnValue = "";
+    }
+  });
+
+  /** Offers a recovery copy left by a tab that closed with unsaved work. */
+  const offerRecovery = (): void => {
+    const copy = readRecovery(window.localStorage);
+    if (copy === undefined) return;
+    recoveryOffered = true;
+    const banner = document.createElement("div");
+    banner.className = "recovery-banner";
+    banner.setAttribute("role", "status");
+    const text = document.createElement("span");
+    text.textContent = `Unsaved work from ${new Date(copy.savedAt).toLocaleString()} was kept.`;
+    const restore = document.createElement("button");
+    restore.type = "button";
+    restore.textContent = "Restore";
+    const discard = document.createElement("button");
+    discard.type = "button";
+    discard.textContent = "Discard";
+    banner.append(text, restore, discard);
+    editorLayer.append(banner);
+    restore.addEventListener("click", () => {
+      banner.remove();
+      recoveryOffered = false;
+      const loaded = loadDocument(copy.json, evalContext);
+      apply(loaded.ok
+        ? replaceDocument(state, loaded.document, `restored the unsaved work kept at ${new Date(copy.savedAt).toLocaleString()}`, evalContext, null)
+        : logLine(state, `the kept copy did not open: ${loaded.message}`));
+      // The stored copy now matches the open document, so the timer replaces
+      // it on the next change and clears it once nothing is unsaved.
+      if (loaded.ok) recoveryWritten = state.document.journal;
+      input.focus();
+    });
+    discard.addEventListener("click", () => {
+      banner.remove();
+      recoveryOffered = false;
+      clearRecovery(window.localStorage);
+      input.focus();
+    });
+  };
+  offerRecovery();
 
   const applyTransition = (next: AppTransition): void => {
     if (next.openEditor !== undefined) {
@@ -1999,6 +2097,8 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     apply(next.state);
     if (next.fileRequest === "save") {
       downloadDocument(state.document);
+      clearRecovery(window.localStorage);
+      recoveryWritten = undefined;
     } else if (next.fileRequest === "load") {
       openDocument(
         (loaded, line) => apply(replaceDocument(state, loaded, line, evalContext)),

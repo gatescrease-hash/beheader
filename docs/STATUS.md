@@ -15,8 +15,8 @@ register, and the measurements behind leaving that migration unscheduled.
 | --- | --- |
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
-| Tests | 2848 Vitest tests and 2 tooling tests pass, with 0 skipped. |
-| Spec | Built through section 18, except the parts section 17 postpones, and section 21. Sections 19, 20 and 22 are unbuilt, and Rule 5 is partly built. |
+| Tests | 2854 Vitest tests and 2 tooling tests pass, with 0 skipped. |
+| Spec | Built through section 18, except the parts section 17 postpones, and section 21. Section 22 is built for unsaved work alone. Sections 19 and 20 are unbuilt, and Rule 5 is partly built. |
 | Scripts | Python runs in a Pyodide worker. Groups are script nodes with members. |
 | Rule 5 | Met for slot writes, cell clears, creates, renames and plain deletes. Other structural batches and refusals still cost the whole document. |
 | Workspace | Compact typography, a profile helmet, in-row style source controls, and full, compact and hidden sidebar modes with pointer and keyboard resizing. |
@@ -202,6 +202,12 @@ covers everything it calls.
 
 The only file that owns the browser. It holds `AppState`, the transitions over
 it, the panel model, and the wiring to real DOM elements.
+
+### `src/recovery.ts`
+
+Whether a document holds unsaved work, and the recovery copy kept in the
+storage of the browser while it does. `main.ts` owns the timer, the title and
+the warning on leaving.
 
 ## 4. Invariants a reader cannot guess from the code
 

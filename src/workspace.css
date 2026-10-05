@@ -241,3 +241,24 @@ kbd { font: inherit; border: 1px solid var(--line); border-radius: 3px; padding:
   border-radius: 4px;
 }
 .script-editor__actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+/* The offer of a recovery copy sits at the top centre of the canvas, in
+   screen space, until the operator restores or discards the copy. */
+.recovery-banner {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  max-width: calc(100% - 32px);
+  font-size: 13px;
+  background: var(--paper-light);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: 0 6px 24px rgba(40, 36, 28, 0.18);
+}
+.recovery-banner button { padding: 4px 10px; }
