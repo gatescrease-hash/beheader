@@ -42,9 +42,9 @@ import {
   VERTICES_PATH,
 } from "../engine/index.ts";
 import { screenToWorld, type ScreenPoint, type WorldPoint } from "./camera.ts";
-import { objectExtent } from "./extent.ts";
+import { GROUP_TAB_HEIGHT, groupBoundary, groupTabWidth, objectExtent } from "./extent.ts";
 import { tableLayout } from "./table-layout.ts";
-import { displayObjects } from "../engine/index.ts";
+import { ancestorGroups, displayObjects } from "../engine/index.ts";
 import { asPointArray, readBoolean, readNumber, readShapeStyle, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";
 
 export const STROKE_HIT_TOLERANCE_SCREEN_PIXELS = 5;
@@ -142,6 +142,9 @@ function hitTestObject(object: GraphObject, worldPoint: WorldPoint, strokeTolera
       return hitTestBoundingBox(object, worldPoint);
     case "polyline":
       return hitTestPolyline(object, worldPoint, strokeToleranceWorld);
+    // A group hits on its outline and its name tab only, which hitTest checks
+    // after every other object, so the space inside stays clickable.
+    case "group":
     case "value":
     case "add":
       return false;
@@ -192,6 +195,7 @@ export function pathSegmentUnder(
 
 /** The topmost object under a screen point, or undefined. */
 export function hitTest(screenPoint: ScreenPoint, objects: readonly GraphObject[], camera: CameraState): GraphObject | undefined {
+  const all = objects;
   objects = displayObjects(objects);
   const worldPoint = screenToWorld(camera, screenPoint);
   const strokeToleranceWorld = STROKE_HIT_TOLERANCE_SCREEN_PIXELS / camera.zoom;
@@ -204,5 +208,27 @@ export function hitTest(screenPoint: ScreenPoint, objects: readonly GraphObject[
       return object;
     }
   }
+  // A group draws beneath everything, and an inner group's outline lies
+  // inside its outer group's box, so the innermost outline under the point
+  // wins.
+  const groups = objects.filter((object) => object.type === "group");
+  const depth = (group: GraphObject): number => ancestorGroups(group, (id) => all.find((object) => object.id === id)).length;
+  for (const group of [...groups].sort((a, b) => depth(b) - depth(a))) {
+    if (hitTestGroup(group, all, worldPoint, strokeToleranceWorld)) {
+      return group;
+    }
+  }
   return undefined;
+}
+
+function hitTestGroup(group: GraphObject, objects: readonly GraphObject[], worldPoint: WorldPoint, tolerance: number): boolean {
+  const box = groupBoundary(group, objects);
+  if (box === undefined) {
+    return false;
+  }
+  const { x, y } = worldPoint;
+  const onTab = x >= box.minX && x <= box.minX + groupTabWidth(group) && y >= box.minY - GROUP_TAB_HEIGHT && y <= box.minY;
+  const withinOuter = x >= box.minX - tolerance && x <= box.maxX + tolerance && y >= box.minY - tolerance && y <= box.maxY + tolerance;
+  const insideInner = x > box.minX + tolerance && x < box.maxX - tolerance && y > box.minY + tolerance && y < box.maxY - tolerance;
+  return onTab || (withinOuter && !insideInner);
 }

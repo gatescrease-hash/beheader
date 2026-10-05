@@ -72,6 +72,7 @@ export type ObjectType =
   | "text"
   | "table"
   | "script"
+  | "group"
   | "image"
   | "math"
   | "value"

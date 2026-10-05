@@ -250,7 +250,9 @@ function textObject(id: string, name: string, content: string): GraphObject {
 
 /**
  * Creates, renames, deletes, cell writes and clears, over a text that names an
- * object before it exists, after it is renamed away, and after it is deleted.
+ * object before it exists, after it is renamed away, and after it is deleted,
+ * then a group with a member that binds to its origin, a group loop, and a
+ * delete that refuses until the member leaves.
  * Text is the one reader that names an object by the name it carries rather
  * than by its ID, so these batches reach every way a structural change can
  * reach an object that does not name it by ID.
@@ -293,6 +295,21 @@ function structuralBatches(random: SeededRandom, objectCount: number): Operation
       { kind: "deleteObject", objectId: "obj_gone" },
     ],
     [{ kind: "deleteObject", objectId: "obj_note" }],
+    [
+      { kind: "createObject", object: { id: "obj_frame", name: "frame", type: "group", slots: {
+        "origin.x": literalSlot(10), "origin.y": literalSlot(10), language: { kind: "literal", value: "python" }, source: { kind: "literal", value: "" },
+      } } },
+      { kind: "setSlot", address: { objectId: read.objectId, path: ["view", "group"] }, slot: { kind: "literal", value: "obj_frame" } },
+    ],
+    [{ kind: "setSlot", address: read, slot: formulaSlot({ type: "reference", address: { objectId: "obj_frame", path: ["origin", "x"] } }) }],
+    [{ kind: "setSlot", address: { objectId: "obj_frame", path: ["origin", "x"] }, slot: literalSlot(random.integer(50)) }],
+    [{ kind: "setSlot", address: { objectId: "obj_frame", path: ["view", "group"] }, slot: { kind: "literal", value: "obj_frame" } }],
+    [{ kind: "deleteObject", objectId: "obj_frame" }],
+    [
+      { kind: "setSlot", address: read, slot: literalSlot(4) },
+      { kind: "setSlot", address: { objectId: read.objectId, path: ["view", "group"] }, slot: { kind: "literal", value: null } },
+      { kind: "deleteObject", objectId: "obj_frame" },
+    ],
   ];
 }
 

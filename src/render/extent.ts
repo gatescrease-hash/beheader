@@ -37,7 +37,7 @@ import { mathWorldBox } from "./math.ts";
 import { asPointArray, readBoolean, readNumber, scriptBoxHeight, SCRIPT_BOX_WIDTH, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";
 import { textBoxSize } from "./textbox.ts";
 import { tableLayout } from "./table-layout.ts";
-import { displayObjects } from "../engine/index.ts";
+import { groupOf, displayObjects } from "../engine/index.ts";
 
 export interface WorldExtent {
   readonly minX: number;
@@ -91,6 +91,8 @@ export function objectExtent(object: GraphObject): WorldExtent | undefined {
       return imageExtent(object);
     case "script":
       return scriptExtent(object);
+    case "group":
+      return groupAnchorBox(object);
     case "math":
       return mathWorldBox(object);
     case "value":
@@ -209,7 +211,7 @@ function scriptExtent(object: GraphObject): WorldExtent | undefined {
 export function documentExtent(objects: readonly GraphObject[]): WorldExtent | undefined {
   let extent: WorldExtent | undefined;
   for (const object of displayObjects(objects)) {
-    const objectBox = objectExtent(object);
+    const objectBox = object.type === "group" ? groupBoundary(object, objects) : objectExtent(object);
     if (objectBox === undefined) {
       continue;
     }
@@ -224,4 +226,60 @@ export function documentExtent(objects: readonly GraphObject[]): WorldExtent | u
           };
   }
   return extent;
+}
+
+export const GROUP_EMPTY_WIDTH = 160;
+export const GROUP_EMPTY_HEIGHT = 80;
+export const GROUP_PADDING = 16;
+export const GROUP_TAB_HEIGHT = 20;
+export const GROUP_PADDING_TOP = 30;
+
+/**
+ * The box a group takes with nothing inside it: a fixed size from its origin.
+ * objectExtent gives this for a group, because it sees one object at a time
+ * and a group's real boundary depends on its members.
+ */
+function groupAnchorBox(object: GraphObject): WorldExtent | undefined {
+  const x = readNumber(object, ORIGIN_X_PATH);
+  const y = readNumber(object, ORIGIN_Y_PATH);
+  return x === undefined || y === undefined ? undefined : { minX: x, minY: y, maxX: x + GROUP_EMPTY_WIDTH, maxY: y + GROUP_EMPTY_HEIGHT };
+}
+
+/**
+ * The soft boundary a group draws: the union of its origin and the boxes of
+ * its direct members, with padding. A member that is itself a group counts
+ * with its own boundary and the tab above it, so nested boxes and their tabs
+ * never overlap. The padding above the members leaves room for the name each
+ * member draws over itself. The boundary never clips a member, so a member that
+ * moves away stretches it rather than vanishing. A group with nothing inside it
+ * takes the box from its origin.
+ */
+export function groupBoundary(group: GraphObject, objects: readonly GraphObject[], visiting: ReadonlySet<string> = new Set()): WorldExtent | undefined {
+  const anchor = groupAnchorBox(group);
+  if (anchor === undefined || visiting.has(group.id)) {
+    return anchor;
+  }
+  const inside = new Set([...visiting, group.id]);
+  const boxes = objects
+    .filter((object) => groupOf(object) === group.id)
+    .map((object) => {
+      if (object.type !== "group") return objectExtent(object);
+      const box = groupBoundary(object, objects, inside);
+      return box === undefined ? undefined : { ...box, minY: box.minY - GROUP_TAB_HEIGHT };
+    })
+    .filter((box): box is WorldExtent => box !== undefined);
+  if (boxes.length === 0) {
+    return anchor;
+  }
+  return {
+    minX: Math.min(anchor.minX, ...boxes.map((box) => box.minX - GROUP_PADDING)),
+    minY: Math.min(anchor.minY, ...boxes.map((box) => box.minY - GROUP_PADDING_TOP)),
+    maxX: Math.max(anchor.minX, ...boxes.map((box) => box.maxX + GROUP_PADDING)),
+    maxY: Math.max(anchor.minY, ...boxes.map((box) => box.maxY + GROUP_PADDING)),
+  };
+}
+
+/** The width a group's name tab takes, in world units, from the length of the name. */
+export function groupTabWidth(group: GraphObject): number {
+  return group.name.length * 7 + 28;
 }

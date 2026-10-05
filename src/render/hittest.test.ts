@@ -616,3 +616,21 @@ describe("documentExtent — the box that `fit` fits to, which main.ts performs"
     expect(documentExtent([point])).toEqual({ minX: 5, minY: 5, maxX: 5, maxY: 5 });
   });
 });
+
+describe("hitTest on a group", () => {
+  it("hits a group on its outline and its tab, and reaches a member and empty space inside it", () => {
+    const objects: GraphObject[] = [
+      { id: "g", name: "g", type: "group", slots: { "origin.x": { kind: "literal", value: 0 }, "origin.y": { kind: "literal", value: 0 } } },
+      { id: "c", name: "c", type: "circle", slots: {
+        "origin.x": { kind: "literal", value: 100 }, "origin.y": { kind: "literal", value: 100 }, radius: { kind: "literal", value: 20 },
+        "view.group": { kind: "literal", value: "g" },
+      } },
+    ];
+    const camera = { x: 0, y: 0, zoom: 1 };
+    // The boundary runs from x 0 to 136 and from y 0 to 136.
+    expect(hitTest({ x: 120, y: 100 }, objects, camera)?.id).toBe("c");
+    expect(hitTest({ x: 136, y: 60 }, objects, camera)?.id).toBe("g");
+    expect(hitTest({ x: 10, y: -10 }, objects, camera)?.id).toBe("g");
+    expect(hitTest({ x: 40, y: 40 }, objects, camera)).toBeUndefined();
+  });
+});

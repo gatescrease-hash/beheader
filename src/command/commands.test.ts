@@ -817,6 +817,8 @@ describe("every registry command reaches a handler", () => {
     "load",
     "undo",
     "redo",
+    "group polygon_1,table_x",
+    "ungroup group_1",
   ];
 
   it("never throws for any command in the registry, run against an empty document — every word, not a sample of them", () => {

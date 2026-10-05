@@ -36,6 +36,8 @@
  */
 import {
   type Address,
+  ancestorGroups,
+  groupDescendants,
   type CameraState,
   type DerivedSlot,
   type EvalContext,
@@ -146,16 +148,20 @@ export function pointerDown(
     return grabbedGrip;
   }
 
-  const object = hitTest(screenPoint, objects, camera);
-  if (object === undefined) {
+  const hit = hitTest(screenPoint, objects, camera);
+  if (hit === undefined) {
     if (!additive) {
       return INITIAL_INTERACTION_STATE;
     }
     return state.drag === undefined && state.resize === undefined && state.bend === undefined ? state : idle(state);
   }
+  // A press inside a group takes the outermost group, or whichever level of
+  // the way down is already selected, so a selected group drags as a whole and
+  // a member reached by a double click or by name stays the one selected.
+  const object = groupLevelUnder(hit, objects, state.selectedObjectIds);
   // Shift over an edge of a path grabs that segment. Held anywhere else, it adds
   // the object to the selection, as it always did.
-  const segment = additive ? pathSegmentUnder(object, screenPoint, camera) : undefined;
+  const segment = additive && object === hit ? pathSegmentUnder(object, screenPoint, camera) : undefined;
   const grabsSegment = segment !== undefined;
   // A segment grab selects the path outright. Nothing can drag an object that
   // the same press has just taken out of the selection.
@@ -173,6 +179,39 @@ export function pointerDown(
     // A press on the body of a path is about the whole path, so it drops the part.
     focus: undefined,
   };
+}
+
+/**
+ * The groups around an object from the outermost inward, then the object
+ * itself: the levels a press can select.
+ */
+export function groupPath(object: GraphObject, objects: readonly GraphObject[]): readonly GraphObject[] {
+  const byId = (id: string) => objects.find((candidate) => candidate.id === id);
+  return [...ancestorGroups(object, byId)].reverse().concat(object);
+}
+
+/** The level of the path under a press that it selects: the deepest one already selected, or the outermost. */
+export function groupLevelUnder(object: GraphObject, objects: readonly GraphObject[], selectedObjectIds: readonly string[]): GraphObject {
+  const path = groupPath(object, objects);
+  for (let index = path.length - 1; index >= 0; index -= 1) {
+    if (selectedObjectIds.includes(path[index]!.id)) {
+      return path[index]!;
+    }
+  }
+  return path[0]!;
+}
+
+/**
+ * The level a double click on an object goes to: one below the deepest level
+ * already selected, or undefined when the object itself is selected.
+ */
+export function groupLevelInside(object: GraphObject, objects: readonly GraphObject[], selectedObjectIds: readonly string[]): GraphObject | undefined {
+  const path = groupPath(object, objects);
+  let selected = -1;
+  path.forEach((level, index) => {
+    if (selectedObjectIds.includes(level.id)) selected = index;
+  });
+  return selected === path.length - 1 ? undefined : path[selected + 1];
 }
 
 /** The state with every gesture ended, and the selection and focus kept. */
@@ -358,7 +397,9 @@ export function pointerMove(
     return { state, objects, journal, notices: [], rejection: undefined };
   }
 
-  const plan = planDrag(object, objects, deltaX, deltaY, drag.vertices);
+  const plan = object.type === "group"
+    ? joinPlans([object, ...groupDescendants(object.id, objects)].map((moved) => planDrag(moved, objects, deltaX, deltaY, everyVertexOfPath(moved))))
+    : planDrag(object, objects, deltaX, deltaY, drag.vertices);
   const { fresh: freshNotices, widened: widenedEmittedNotices } = widenEmittedNotices(drag, plan.notices);
   const advanced: InteractionState = {
     ...idle(state),
@@ -593,6 +634,11 @@ interface ComponentPlan {
 interface DragPlan {
   readonly operations: readonly Operation[];
   readonly notices: readonly string[];
+}
+
+/** One plan holding the writes and notices of several, which is how a group moves with everything in it. */
+function joinPlans(plans: readonly DragPlan[]): DragPlan {
+  return { operations: plans.flatMap((plan) => plan.operations), notices: plans.flatMap((plan) => plan.notices) };
 }
 
 /**

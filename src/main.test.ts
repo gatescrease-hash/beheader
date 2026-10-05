@@ -45,6 +45,9 @@ import {
   respondToPrompt,
   commitScriptSource,
   scriptStatusLines,
+  groupSelection,
+  ungroupSelection,
+  withSelection,
   submitLine,
   unlinkPanelSlot,
   wheelZoomAt,
@@ -2291,5 +2294,68 @@ describe("the Python editor's transitions", () => {
     expect(scriptStatusLines(objectNamed(typed(opened(), "script x=0 y=0"), "script_1"))).toEqual(["no outputs yet"]);
     const failed: GraphObject = { id: "s", name: "s", type: "script", ports: { in: [], out: ["a"] }, slots: { "out.a": { kind: "derived", value: { error: "#SCRIPT", message: "line 2: NameError" } } } };
     expect(scriptStatusLines(failed)).toEqual(["a: #SCRIPT line 2: NameError"]);
+  });
+});
+
+describe("groups — grouping, selecting, dragging and dissolving", () => {
+  function twoCircles(): AppState {
+    let state = typed(typed(opened(), "circle x=100 y=100 r=10"), "circle x=200 y=100 r=10");
+    state = withSelection(state, [objectNamed(state, "circle_1").id, objectNamed(state, "circle_2").id]);
+    return groupSelection(state, VIEWPORT).state;
+  }
+
+  it("groups the selection through the group command, and selects the new group", () => {
+    const state = twoCircles();
+    const group = objectNamed(state, "group_1");
+    expect(state.interaction.selectedObjectIds).toEqual([group.id]);
+    expect(getSlot(objectNamed(state, "circle_1"), ["view", "group"])?.value).toBe(group.id);
+    expect(numberAt(group, ["origin", "x"])).toBe(100);
+    expect(state.log).toContain("grouped circle_1, circle_2 into group_1");
+  });
+
+  it("selects the group from a press on a member, and moves every member with it as one undo step", () => {
+    let state = withSelection(twoCircles(), []);
+    const group = objectNamed(state, "group_1");
+    const onRing = worldToScreen(state.document.camera, { x: 110, y: 100 });
+    state = pointerDownAt(state, onRing, VIEWPORT).state;
+    expect(state.interaction.selectedObjectIds).toEqual([group.id]);
+    for (let step = 1; step <= 4; step += 1) {
+      state = pointerMoveTo(state, { x: onRing.x + step * 10, y: onRing.y });
+    }
+    const before = state.document.journal.length;
+    state = pointerUpNow(state);
+    expect(state.document.journal.length).toBeLessThan(before);
+    const moved = 40 / state.document.camera.zoom;
+    expect(numberAt(objectNamed(state, "circle_1"), ["origin", "x"])).toBeCloseTo(100 + moved, 9);
+    expect(numberAt(objectNamed(state, "circle_2"), ["origin", "x"])).toBeCloseTo(200 + moved, 9);
+    expect(numberAt(objectNamed(state, "group_1"), ["origin", "x"])).toBeCloseTo(100 + moved, 9);
+    state = typed(state, "undo");
+    expect(numberAt(objectNamed(state, "circle_2"), ["origin", "x"])).toBe(200);
+  });
+
+  it("keeps a member selected once it is the one selected, so it drags on its own", () => {
+    let state = twoCircles();
+    state = withSelection(state, [objectNamed(state, "circle_2").id]);
+    const onRing = worldToScreen(state.document.camera, { x: 210, y: 100 });
+    state = pointerDownAt(state, onRing, VIEWPORT).state;
+    expect(state.interaction.selectedObjectIds).toEqual([objectNamed(state, "circle_2").id]);
+  });
+
+  it("dissolves a group on delete and on ungroup, leaving every member where it stood", () => {
+    const deleted = typed(twoCircles(), "delete group_1");
+    expect(deleted.document.objects.map((object) => object.name)).toEqual(["circle_1", "circle_2"]);
+    expect(getSlot(objectNamed(deleted, "circle_1"), ["view", "group"])?.value).toBeNull();
+    expect(deleted.log.at(-1)).toBe("ungrouped group_1 — its 2 members stay where they were");
+    const ungrouped = ungroupSelection(twoCircles(), VIEWPORT).state;
+    expect(ungrouped.document.objects.some((object) => object.type === "group")).toBe(false);
+  });
+
+  it("refuses to ungroup while a formula reads the group, naming the reader", () => {
+    let state = twoCircles();
+    state = typed(state, "set circle_2.radius = group_1.origin.x");
+    const refused = submitLine(state, "ungroup group_1", VIEWPORT);
+    expect(refused.refused).toBe(true);
+    expect(refused.state.log.at(-1)).toContain("circle_2.radius");
+    expect(refused.state.log.at(-1)).toContain("ungroup group_1 force");
   });
 });

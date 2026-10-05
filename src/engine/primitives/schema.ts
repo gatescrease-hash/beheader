@@ -28,6 +28,7 @@
  */
 import type { Address } from "../address.ts";
 import { STYLE_PATHS, VIEW_PATHS } from "../layers.ts";
+import { GROUP_MEMBERSHIP_PATH } from "../groups.ts";
 import { DOCREF_DERIVED_SLOTS } from "./doc.ts";
 import type { EvalContext } from "../eval-context.ts";
 import type { ReadRange } from "../formula/eval.ts";
@@ -460,6 +461,12 @@ const SCRIPT_SCHEMA: ObjectSchema = {
   slotOptions: [{ path: SCRIPT_LANGUAGE_PATH, values: ["python"] }],
 };
 
+/**
+ * A group carries a script node's slots and ports beside its members, which
+ * live on the members themselves. groups.ts gives the reason.
+ */
+const GROUP_SCHEMA: ObjectSchema = { ...SCRIPT_SCHEMA, type: "group" };
+
 const MATH_SCHEMA: ObjectSchema = {
   type: "math",
   nonDerivedSlotPaths: [
@@ -512,6 +519,7 @@ const SCHEMAS: Partial<Record<ObjectType, ObjectSchema>> = {
   text: TEXT_SCHEMA,
   image: IMAGE_SCHEMA,
   script: SCRIPT_SCHEMA,
+  group: GROUP_SCHEMA,
   math: MATH_SCHEMA,
 };
 
@@ -521,7 +529,7 @@ export function getObjectSchema(type: ObjectType): ObjectSchema | undefined {
   if (!schema || type === "doc" || type === "value" || type === "add") return schema;
   const extra = type === "text" ? [["style", "bold"], ["style", "italic"]] : type === "table" ? STYLE_PATHS : [];
   return { ...schema, nonDerivedSlotPaths: [...schema.nonDerivedSlotPaths,
-    { kind: "dynamic", enumerate: (object) => [...VIEW_PATHS, ...extra].filter(path => object.slots[slotKey(path)] !== undefined) },
+    { kind: "dynamic", enumerate: (object) => [...VIEW_PATHS, GROUP_MEMBERSHIP_PATH, ...extra].filter(path => object.slots[slotKey(path)] !== undefined) },
     ...(type === "table" ? [{ kind: "dynamic" as const, enumerate: tablePresentationPaths }] : []),
   ] };
 }

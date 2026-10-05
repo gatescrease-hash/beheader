@@ -44,6 +44,10 @@ import {
   formatAddress,
   formatFormula,
   generateDefaultName,
+  createGroupObject,
+  GROUP_TYPE,
+  groupingOperations,
+  ungroupingOperations,
   GEOMETRY_STYLE_DEFAULTS,
   getObjectSchema,
   getSlot,
@@ -128,6 +132,7 @@ import type {
   CreateTableCommand,
   CreateTextCommand,
   DeleteCommand,
+  GroupCommand,
   DeleteVertexCommand,
   EdgeTypeCommand,
   EdgeTypeName,
@@ -278,6 +283,10 @@ export function executeCommand(command: Command, document: Document, context: Ev
       return save(document);
     case "load":
       return load(document);
+    case "group":
+      return groupObjects(command, document, context);
+    case "ungroup":
+      return ungroupObject(command.target, command.force, document, context);
     case "undo":
       return { ok: true, document, lines: [], effect: { kind: "undo" } };
     case "redo":
@@ -325,6 +334,8 @@ export const COMMANDS_WITH_HANDLERS: readonly string[] = [
   "load",
   "undo",
   "redo",
+  "group",
+  "ungroup",
 ];
 
 interface LiteralSlotDeclaration {
@@ -746,8 +757,8 @@ function resolvePortTarget(target: string, document: Document): PortTargetResult
   if (object === undefined) {
     return { ok: false, message: `no object named in "${target}"` };
   }
-  if (object.type !== SCRIPT_TYPE) {
-    return { ok: false, message: `${object.name} is a "${object.type}" object — only a script node has ports` };
+  if (object.type !== SCRIPT_TYPE && object.type !== GROUP_TYPE) {
+    return { ok: false, message: `${object.name} is a "${object.type}" object — only a script node or a group has ports` };
   }
   if (address.path.length !== 2) {
     return { ok: false, message: `"${target}" does not name a port — use <object>.in.<port> or <object>.out.<port>` };
@@ -838,10 +849,75 @@ function renameObject(command: RenameCommand, document: Document, context: EvalC
   };
 }
 
+/**
+ * Gathers the named objects into a new group. The group's origin starts at the
+ * top left corner of the members' origins, so a member that binds to it with
+ * an offset starts where it already stands.
+ */
+function groupObjects(command: GroupCommand, document: Document, context: EvalContext): CommandOutcome {
+  if (command.members.length === 0) {
+    return { ok: false, message: "name the objects to group, separated by commas, e.g. group circle_1,rect_1" };
+  }
+  const members: GraphObject[] = [];
+  for (const name of command.members) {
+    const member = findGraphObjectByName(name, document.objects);
+    if (member === undefined) {
+      return { ok: false, message: `no object named "${name}"${nameSuggestion(name, document.objects.map((object) => object.name))}` };
+    }
+    if (member.type === "doc" || member.type === "layer") {
+      return { ok: false, message: `${member.name} organises the document rather than sitting on the canvas, so it cannot join a group` };
+    }
+    if (!members.includes(member)) members.push(member);
+  }
+  const minted = mintObjectId(document);
+  if ("ok" in minted) return minted;
+  const xs = members.map((member) => getSlot(member, ORIGIN_X_PATH)?.value).filter((value): value is number => typeof value === "number");
+  const ys = members.map((member) => getSlot(member, ORIGIN_Y_PATH)?.value).filter((value): value is number => typeof value === "number");
+  const group = createGroupObject(minted.id, generateDefaultName(GROUP_TYPE, document.objects), xs.length === 0 ? 0 : Math.min(...xs), ys.length === 0 ? 0 : Math.min(...ys));
+  const result = mutate(document.objects, groupingOperations(group, members), document.journal, context);
+  if (!result.ok) {
+    return { ok: false, message: result.message };
+  }
+  return {
+    ok: true,
+    document: { ...document, nextObjectId: minted.nextObjectId, objects: result.objects, journal: result.journal },
+    lines: [`grouped ${members.map((member) => member.name).join(", ")} into ${group.name}`],
+    createdObjectId: group.id,
+  };
+}
+
+/**
+ * Dissolves a group. Its members move to the group it sat in, or to none, and
+ * stay where they are. A formula that reads the group's ports or origin is
+ * refused by name unless force rewrites it to #REF.
+ */
+function ungroupObject(target: string, force: boolean, document: Document, context: EvalContext): CommandOutcome {
+  const group = findGraphObjectByName(target, document.objects);
+  if (group === undefined || group.type !== GROUP_TYPE) {
+    return { ok: false, message: group === undefined ? `no object named "${target}"` : `${group.name} is a ${group.type}, not a group` };
+  }
+  const operations = ungroupingOperations(group, document.objects, force);
+  const result = mutate(document.objects, operations, document.journal, context);
+  if (!result.ok) {
+    return { ok: false, message: force ? result.message : `${result.message} — unlink each, or "ungroup ${group.name} force" to rewrite them to #REF instead` };
+  }
+  const released = operations.length - 1;
+  return {
+    ok: true,
+    document: { ...document, objects: result.objects, journal: result.journal },
+    lines: [`ungrouped ${group.name} — ${released === 1 ? "its member stays" : `its ${released} members stay`} where ${released === 1 ? "it was" : "they were"}`],
+  };
+}
+
 function deleteObject(command: DeleteCommand, document: Document, context: EvalContext): CommandOutcome {
   const object = findGraphObjectByName(command.target, document.objects);
   if (object === undefined) {
     return { ok: false, message: `no object named "${command.target}"${nameSuggestion(command.target, document.objects.map((object) => object.name))}` };
+  }
+  // Removing a group's box never removes what was in it, so a delete of a
+  // group is an ungroup.
+  if (object.type === GROUP_TYPE) {
+    return ungroupObject(object.name, command.force, document, context);
   }
 
   const result = mutate(document.objects, [{ kind: "deleteObject", objectId: object.id, force: command.force }], document.journal, context);

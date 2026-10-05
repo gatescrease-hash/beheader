@@ -50,6 +50,7 @@ import {
   type CameraState,
   CLOSED_PATH,
   formatCellReference,
+  ancestorGroups,
   getSlot,
   getTableDimensions,
   type GraphObject,
@@ -93,7 +94,7 @@ import { asPointArray, readBoolean, readNumber, readShapeStyle, readText, SCRIPT
 import { tableLayout, cellStyle, formattedCell } from "./table-layout.ts";
 import { displayObjects } from "../engine/index.ts";
 import { textBoxSize } from "./textbox.ts";
-import { objectExtent } from "./extent.ts";
+import { GROUP_TAB_HEIGHT, groupBoundary, groupTabWidth, objectExtent } from "./extent.ts";
 
 const DEFAULT_SHAPE_STROKE_STYLE = "#1a1a1a";
 const TRANSPARENT = "transparent";
@@ -265,6 +266,59 @@ function drawScript(ctx: CanvasRenderingContext2D, object: GraphObject): void {
   }
 }
 
+const GROUP_STROKE_STYLE = "#8a9474";
+const GROUP_SELECTED_STROKE_STYLE = "#bc7759";
+const GROUP_FILL_STYLE = "rgba(102, 118, 83, 0.04)";
+const GROUP_TAB_FILL_STYLE = "#e7e2d2";
+const GROUP_DASH = [6, 4];
+const GROUP_CORNER = 10;
+
+/**
+ * A group's soft boundary: a dashed rounded box around everything inside it,
+ * with a faint wash and a tab carrying its name and, for a group with code,
+ * the state of its last run. It clips nothing, and a member past the edge
+ * stretches the box instead.
+ */
+function drawGroup(ctx: CanvasRenderingContext2D, group: GraphObject, objects: readonly GraphObject[], selected: boolean): void {
+  const box = groupBoundary(group, objects);
+  if (box === undefined) {
+    return;
+  }
+  const width = box.maxX - box.minX;
+  const height = box.maxY - box.minY;
+  ctx.save();
+  ctx.beginPath();
+  ctx.roundRect(box.minX, box.minY, width, height, GROUP_CORNER);
+  ctx.fillStyle = GROUP_FILL_STYLE;
+  ctx.fill();
+  ctx.setLineDash(GROUP_DASH);
+  ctx.strokeStyle = selected ? GROUP_SELECTED_STROKE_STYLE : GROUP_STROKE_STYLE;
+  ctx.lineWidth = selected ? SELECTION_HIGHLIGHT_WIDTH : DEFAULT_SHAPE_STROKE_WIDTH;
+  ctx.stroke();
+  ctx.setLineDash([]);
+  const tabWidth = groupTabWidth(group);
+  ctx.beginPath();
+  ctx.roundRect(box.minX, box.minY - GROUP_TAB_HEIGHT, tabWidth, GROUP_TAB_HEIGHT, [6, 6, 0, 0]);
+  ctx.fillStyle = GROUP_TAB_FILL_STYLE;
+  ctx.fill();
+  ctx.strokeStyle = selected ? GROUP_SELECTED_STROKE_STYLE : GROUP_STROKE_STYLE;
+  ctx.lineWidth = DEFAULT_SHAPE_STROKE_WIDTH;
+  ctx.stroke();
+  ctx.font = SCRIPT_FONT;
+  ctx.fillStyle = SCRIPT_TEXT_STYLE;
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "left";
+  ctx.fillText(group.name, box.minX + SCRIPT_TEXT_PADDING, box.minY - GROUP_TAB_HEIGHT / 2);
+  const state = scriptRunState(group);
+  if (state !== "idle") {
+    ctx.fillStyle = SCRIPT_STATE_STYLES[state];
+    ctx.beginPath();
+    ctx.arc(box.minX + tabWidth - SCRIPT_TEXT_PADDING - SCRIPT_STATE_DOT_RADIUS, box.minY - GROUP_TAB_HEIGHT / 2, SCRIPT_STATE_DOT_RADIUS, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
 export function fitBitmapIntoBox(
   boxWidth: number,
   boxHeight: number,
@@ -394,14 +448,21 @@ export function renderDocument(
   const screenOrigin = worldToScreen(camera, { x: 0, y: 0 });
   ctx.setTransform(camera.zoom, 0, 0, camera.zoom, screenOrigin.x, screenOrigin.y);
 
+  const selectedIds = new Set(selectedObjectIds);
+
+  // An outer group draws before the groups inside it, so an inner boundary
+  // and its tab sit on top of the outer one's wash.
+  const depth = (group: GraphObject): number => ancestorGroups(group, (id) => objects.find((object) => object.id === id)).length;
+  for (const group of objects.filter((object) => object.type === "group").sort((a, b) => depth(a) - depth(b))) {
+    drawGroup(ctx, group, objects, selectedIds.has(group.id));
+  }
+
   for (const object of objects) {
     if (object.id === editingTextId) {
       continue;
     }
     drawObject(ctx, object, editingCellOn(object.id), images, measureMath, mathRuns);
   }
-
-  const selectedIds = new Set(selectedObjectIds);
 
   for (const object of objects) {
     if (selectedIds.has(object.id) && object.id !== editingTextId) {
@@ -581,6 +642,10 @@ function drawObject(
       return;
     case "script":
       drawScript(ctx, object);
+      return;
+    // renderDocument draws every group before any other object, so its
+    // boundary sits beneath its members.
+    case "group":
       return;
     case "math":
       drawMath(ctx, object);
@@ -952,6 +1017,7 @@ function drawSelectionHighlight(ctx: CanvasRenderingContext2D, object: GraphObje
       return;
     }
     case "math":
+    case "group":
     case "value":
     case "add":
       return;
@@ -982,6 +1048,10 @@ function objectHasError(object: GraphObject): boolean {
 }
 
 function drawObjectChrome(ctx: CanvasRenderingContext2D, camera: CameraState, object: GraphObject, suppressName: boolean): void {
+  // A group draws its name on its own tab.
+  if (object.type === "group") {
+    return;
+  }
   // A copy draws the variable name as the left half of its own label, and it
   // draws the error code in place of the value, so the name tag and the error
   // badge would both repeat what the operator is already reading.

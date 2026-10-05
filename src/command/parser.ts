@@ -229,6 +229,17 @@ export interface LoadCommand {
   readonly kind: "load";
 }
 
+export interface GroupCommand {
+  readonly kind: "group";
+  readonly members: readonly string[];
+}
+
+export interface UngroupCommand {
+  readonly kind: "ungroup";
+  readonly target: string;
+  readonly force: boolean;
+}
+
 export interface UndoCommand {
   readonly kind: "undo";
 }
@@ -274,7 +285,9 @@ export type Command =
   | SaveCommand
   | LoadCommand
   | UndoCommand
-  | RedoCommand;
+  | RedoCommand
+  | GroupCommand
+  | UngroupCommand;
 
 export interface CommandParseSuccess {
   readonly ok: true;
@@ -804,6 +817,22 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
     named: [],
     flags: [],
     build: () => ({ kind: "load" }),
+  },
+  {
+    name: "group",
+    usage: "group <name>,<name>,...",
+    positional: [{ name: "members", kind: "text" }],
+    named: [],
+    flags: [],
+    build: (args) => ({ kind: "group", members: textArgument(args, "members").split(",").map((name) => name.trim()).filter((name) => name !== "") }),
+  },
+  {
+    name: "ungroup",
+    usage: "ungroup <object> [force]",
+    positional: [objectName("target")],
+    named: [],
+    flags: ["force"],
+    build: (args) => ({ kind: "ungroup", target: textArgument(args, "target"), force: hasFlag(args, "force") }),
   },
   {
     name: "undo",

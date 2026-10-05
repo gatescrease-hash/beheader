@@ -87,6 +87,7 @@ import type { FormulaAst } from "./formula/ast.ts";
 import { extractDependencies, repairAddressesInAst, rewriteAddressesInAst, type Dependency } from "./formula/deps.ts";
 import { derivedSlotDependencyAddresses, getObjectSchema, resolveDerivedSlots, resolveNonDerivedSlotPaths } from "./primitives/schema.ts";
 import { layerProblem } from "./layers.ts";
+import { GROUP_MEMBERSHIP_PATH, groupOf, groupProblem, membershipProblem } from "./groups.ts";
 import {
   addVertexToObject,
   deleteVertexFromObject,
@@ -214,7 +215,7 @@ export type IntegrityCheckResult = { readonly ok: true } | { readonly ok: false;
  */
 export function validateIntegrity(objects: readonly GraphObject[], edges: readonly Edge[]): IntegrityCheckResult {
   const objectsById = new Map(objects.map((object) => [object.id, object]));
-  const problem = layerProblem(objects);
+  const problem = layerProblem(objects) ?? groupProblem(objects);
   if (problem) return { ok: false, message: problem };
   // The doc object is a singleton under a fixed name, because a bare name
   // resolves against it and a second one would make that resolution a choice.
@@ -1019,9 +1020,11 @@ function resolveSlotPathForKey(object: GraphObject, key: string): readonly strin
 }
 
 /**
- * A table's extent and an object's layer membership are read by other objects:
- * by the edges of every formula that names a cell, and by the integrity check
- * of every layer member. A write to either takes the whole-document path. So
+ * A table's extent and an object's layer or group membership are read by
+ * other objects: by the edges of every formula that names a cell, by the
+ * integrity check of every layer member, and by the check that no group sits
+ * inside itself, which walks up through other groups. A write to any of them
+ * takes the whole-document path. So
  * does a direct write to a math source, which that path refuses with a reason,
  * and a write that creates a document variable, whose name the name checks of
  * every object read. A write that creates any other slot stays on the indexed
@@ -1036,7 +1039,7 @@ function isIndexedWrite(object: GraphObject, path: readonly string[], existing: 
     return false;
   }
   const key = slotKey(path);
-  if (key === "view.layer") {
+  if (key === "view.layer" || key === slotKey(GROUP_MEMBERSHIP_PATH)) {
     return false;
   }
   if (object.type === TABLE_TYPE && (key === slotKey(TABLE_ROWS_PATH) || key === slotKey(TABLE_COLS_PATH))) {
@@ -1077,7 +1080,7 @@ function resolverObjects(object: GraphObject, scope: NameScope): readonly GraphO
  * What one object contributes to the committed-state index: the IDs it names,
  * the words of its text content, and its slots that read the evaluation
  * context. The IDs come from every formula reference and range, a copy's
- * target, a layer membership, the sources of its edges, and the addresses its
+ * target, a layer membership, a group membership, the sources of its edges, and the addresses its
  * text content resolves to, including an empty cell inside a table's extent,
  * which has no edge until the cell holds something.
  */
@@ -1108,6 +1111,10 @@ function objectFacts(object: GraphObject, ownEdges: readonly Edge[], scope: Name
   if (membership?.kind === "literal" && typeof membership.value === "string") {
     references.add(membership.value);
   }
+  const group = groupOf(object);
+  if (group !== undefined) {
+    references.add(group);
+  }
   const words = textContentWords(object);
   const content = object.slots[slotKey(TEXT_CONTENT_PATH)];
   if (object.type === TEXT_TYPE && content?.kind === "literal" && typeof content.value === "string") {
@@ -1118,9 +1125,10 @@ function objectFacts(object: GraphObject, ownEdges: readonly Edge[], scope: Name
 }
 
 /**
- * The integrity checks that read other objects, for one object: its layer
- * membership, its copy target, and the name reserved for the document
- * variable object. validateIntegrity runs the same rules over every object,
+ * The integrity checks that read other objects, for one object: its layer and
+ * group memberships, its copy target, and the name reserved for the document
+ * variable object. A group loop goes unchecked here, because only a write to a
+ * membership can close one, and those take the whole-document path. validateIntegrity runs the same rules over every object,
  * with the messages an operator reads, and the indexed path only needs to
  * know whether any of them fails.
  */
@@ -1135,6 +1143,9 @@ function crossObjectProblem(object: GraphObject, objectById: (id: string) => Gra
     }
   }
   if (object.type !== "doc" && object.name.toLowerCase() === "doc") {
+    return true;
+  }
+  if (membershipProblem(object, objectById) !== undefined) {
     return true;
   }
   if (object.type === "docref") {
@@ -1233,7 +1244,7 @@ function commitIndexedBatch(
     if (operation.kind === "createObject") {
       const object = operation.object;
       const malformed = Object.values(object.slots).some((slot) => slot === undefined || !isLegalSlotPayload(slot));
-      if (current(object.id) !== undefined || index.byId.has(object.id) || object.type === "doc" || object.type === "docref" || malformed) {
+      if (current(object.id) !== undefined || index.byId.has(object.id) || object.type === "doc" || object.type === "docref" || groupOf(object) !== undefined || malformed) {
         return undefined;
       }
       if (!checkNameAvailableBy(object.name, isTaken(undefined)).ok) {

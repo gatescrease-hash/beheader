@@ -76,6 +76,8 @@ const DOCUMENTED_EXAMPLES: readonly { readonly line: string; readonly command: C
   { line: "load", command: { kind: "load" } },
   { line: "undo", command: { kind: "undo" } },
   { line: "redo", command: { kind: "redo" } },
+  { line: "group circle_1,rect_1", command: { kind: "group", members: ["circle_1", "rect_1"] } },
+  { line: "ungroup group_1 force", command: { kind: "ungroup", target: "group_1", force: true } },
 ];
 
 describe("the command registry (table driven, one entry per command)", () => {

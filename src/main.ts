@@ -90,6 +90,7 @@ import {
   pointerUp,
   focusPathPart,
   pathGripUnder,
+  groupLevelInside,
   resizeHandleUnder,
   INITIAL_INTERACTION_STATE,
   type InteractionState,
@@ -913,6 +914,43 @@ export function commitTextContent(
  * A source that does not read leaves the object as it was and says so, which
  * is the same answer the command line gives for the same text.
  */
+/** The state with exactly these objects selected and every gesture ended. */
+export function withSelection(state: AppState, objectIds: readonly string[]): AppState {
+  return withInteraction(state, { ...INITIAL_INTERACTION_STATE, selectedObjectIds: objectIds });
+}
+
+/**
+ * Groups the selected objects, by running the group command line it stands
+ * for, so the log shows a line the operator could type and every refusal reads
+ * the same way. The new group ends up selected.
+ */
+export function groupSelection(state: AppState, viewport: Viewport, context: EvalContext = NULL_EVAL_CONTEXT): AppTransition {
+  const names = state.interaction.selectedObjectIds
+    .map((id) => state.document.objects.find((object) => object.id === id)?.name)
+    .filter((name): name is string => name !== undefined);
+  if (names.length === 0) {
+    return transition(withLog(state, ["select the objects to group first"]), true);
+  }
+  const done = submitLine(state, `group ${names.join(",")}`, viewport, context);
+  const created = done.state.document.objects.find((object) => object.type === "group" && !state.document.objects.some((before) => before.id === object.id));
+  return created === undefined ? done : { ...done, state: withSelection(done.state, [created.id]) };
+}
+
+/** Dissolves each selected group through the ungroup command line. */
+export function ungroupSelection(state: AppState, viewport: Viewport, context: EvalContext = NULL_EVAL_CONTEXT): AppTransition {
+  const groups = state.interaction.selectedObjectIds
+    .map((id) => state.document.objects.find((object) => object.id === id))
+    .filter((object): object is GraphObject => object?.type === "group");
+  if (groups.length === 0) {
+    return transition(withLog(state, ["select a group to ungroup first"]), true);
+  }
+  let current: AppTransition = transition(state);
+  for (const group of groups) {
+    current = submitLine(current.state, `ungroup ${group.name}`, viewport, context);
+  }
+  return current;
+}
+
 /**
  * One line for each output of a script node or a group, holding the value it
  * shows now: a number or a string, or the code and message of an error, which
@@ -2445,6 +2483,11 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       applyTransition(redo ? redoLast(state, evalContext) : undoLast(state, evalContext));
       return;
     }
+    if ((!editing || (target === input && input.value === "")) && (event.ctrlKey || event.metaKey) && key === "g" && state.pending === undefined) {
+      event.preventDefault();
+      applyTransition(event.shiftKey ? ungroupSelection(state, viewport(), evalContext) : groupSelection(state, viewport(), evalContext));
+      return;
+    }
     if ((!editing || (target === input && input.value === "")) && (event.ctrlKey || event.metaKey) && ["b", "i"].includes(event.key.toLowerCase())) {
       event.preventDefault(); formatEmphasis(event.key.toLowerCase() === "b" ? "bold" : "italic"); return;
     }
@@ -2515,6 +2558,19 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     // because the field is a MathLive element and the text editor is a
     // textarea holding a string.
     const underPointer = hitTest(point, state.document.objects, state.document.camera);
+    // A group's tab and outline open its Python. Inside a group, a double
+    // click goes one level in, and only the object itself opens its editor.
+    if (underPointer?.type === "group") {
+      openScriptEditor(underPointer.id);
+      return;
+    }
+    if (underPointer !== undefined) {
+      const inside = groupLevelInside(underPointer, state.document.objects, state.interaction.selectedObjectIds);
+      if (inside !== undefined) {
+        apply(withSelection(state, [inside.id]));
+        if (inside.id !== underPointer.id) return;
+      }
+    }
     if (underPointer?.type === "math") {
       openMathEditor(underPointer.id);
       return;
