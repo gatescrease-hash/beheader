@@ -15,7 +15,7 @@ register, and the measurements behind leaving that migration unscheduled.
 | --- | --- |
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
-| Tests | 2854 Vitest tests and 2 tooling tests pass, with 0 skipped. |
+| Tests | 2869 Vitest tests and 2 tooling tests pass, with 0 skipped. |
 | Spec | Built through section 18 and section 21, except the parts section 17 postpones. Sections 19, 20 and 22 are partly built or unbuilt. |
 | Scripts | Python runs in a Pyodide worker. Groups are script nodes with members. |
 | Rule 5 | Met for slot writes, cell clears, creates, renames and plain deletes. Other structural batches and refusals still cost the whole document. |
@@ -197,6 +197,7 @@ covers everything it calls.
 | `prompt.ts` | The prompt sequence a bare command word starts. |
 | `commands.ts` | The handlers, and every refusal message an operator reads. |
 | `props.ts` | The slot rows that the panel and the `props` command both read. |
+| `queries.ts` | What `upstream`, `downstream`, `orphans`, `broken` and `find` select. |
 
 ### `src/main.ts`
 

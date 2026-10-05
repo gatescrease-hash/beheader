@@ -71,10 +71,6 @@ comes first, because rewiring and arrangement both read what it draws.
   overlay. A reader will know it is finished when one curve stands for each
   ordered pair of objects and carries the count of slot edges behind it,
   hovering an object dims the rest, and a refused cycle draws its ring.
-- Answer `upstream`, `downstream`, `orphans`, `broken` and `find` with a
-  selection. A reader will know it is finished when each one leaves a selection
-  that the ordinary commands then act on, and when `downstream` names the same
-  slots a delete refusal names.
 - Rewire a slot by dragging the reading end of a curve. A reader will know it is
   finished when the drag rewrites every occurrence of the old address in that
   formula, a drag closing a cycle refuses and names the slot, and a curve

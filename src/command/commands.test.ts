@@ -819,6 +819,11 @@ describe("every registry command reaches a handler", () => {
     "redo",
     "group polygon_1,table_x",
     "ungroup group_1",
+    "upstream polygon_1",
+    "downstream polygon_1 1",
+    "orphans",
+    "broken",
+    "find polygon",
   ];
 
   it("never throws for any command in the registry, run against an empty document — every word, not a sample of them", () => {
@@ -850,13 +855,13 @@ describe("the effect commands — select, zoom, fit, save, load, undo, redo", ()
     it("resolves the name HERE and returns the ID, because a name is mutable and main.ts must not resolve one", () => {
       const document = sandbox();
       const outcome = succeeded("select polygon_1", document);
-      expect(outcome.effect).toEqual({ kind: "select", objectId: onlyNamed(document, "polygon_1").id });
+      expect(outcome.effect).toEqual({ kind: "select", objectIds: [onlyNamed(document, "polygon_1").id] });
       expect(outcome.lines).toEqual(["selected polygon_1"]);
     });
 
     it("resolves case-insensitively, the same lookup that delete and rename use", () => {
       const document = sandbox();
-      expect(succeeded("select POLYGON_1", document).effect).toEqual({ kind: "select", objectId: onlyNamed(document, "polygon_1").id });
+      expect(succeeded("select POLYGON_1", document).effect).toEqual({ kind: "select", objectIds: [onlyNamed(document, "polygon_1").id] });
     });
 
     it("refuses an unknown name here rather than handing main.ts an effect it cannot check", () => {

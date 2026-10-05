@@ -1703,6 +1703,14 @@ find <text>                  // objects whose formulas or text hold the text
 A delete refusal already names the slots it would break. `downstream` is that
 same answer before an operator commits to asking for it.
 
+A depth counts steps from one object to another. An edge between two slots of
+one object, such as a radius that drives the vertices, costs no step, so depth
+1 finds the objects that read or are read directly. A walk from an address
+follows that one slot, and a walk from an object follows all of its slots. The
+start stays out of its own answer, and an answer with no objects clears the
+selection. A formula or a text box that reads an empty cell of a table reads
+that table, although the engine holds no edge for an empty cell.
+
 ---
 
 ## 20. Arrangement

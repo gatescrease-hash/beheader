@@ -205,7 +205,7 @@ describe("performEffect — select", () => {
   it("selects the ID the effect carried, resolving no name of its own", () => {
     const state = typed(opened(), "polygon sides=5 x=0 y=0 r=50");
     const id = objectNamed(state, "polygon_1").id;
-    const performed = performEffect({ kind: "select", objectId: id }, state, VIEWPORT).state;
+    const performed = performEffect({ kind: "select", objectIds: [id] }, state, VIEWPORT).state;
     expect(performed.interaction.selectedObjectIds).toEqual([id]);
   });
 
@@ -2240,7 +2240,7 @@ describe("undo and redo — the journal position as host state", () => {
 
   it("drops an object from the selection when the undo removes it", () => {
     let state = typed(opened(), "circle x=0 y=0 r=10");
-    state = performEffect({ kind: "select", objectId: objectNamed(state, "circle_1").id }, state, VIEWPORT).state;
+    state = performEffect({ kind: "select", objectIds: [objectNamed(state, "circle_1").id] }, state, VIEWPORT).state;
     state = typed(state, "undo");
     expect(state.interaction.selectedObjectIds).toEqual([]);
   });

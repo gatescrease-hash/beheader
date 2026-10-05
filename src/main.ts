@@ -383,7 +383,7 @@ export function performEffect(effect: CommandEffect, state: AppState, viewport: 
     case "redo":
       return redoLast(state, context);
     case "select":
-      return transition(withInteraction(state, { ...INITIAL_INTERACTION_STATE, selectedObjectIds: [effect.objectId] }));
+      return transition(withInteraction(state, { ...INITIAL_INTERACTION_STATE, selectedObjectIds: effect.objectIds }));
     case "zoom":
       return transition(zoomBy(state, effect.factor, viewport));
     case "fit":

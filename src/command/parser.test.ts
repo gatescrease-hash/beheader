@@ -78,6 +78,11 @@ const DOCUMENTED_EXAMPLES: readonly { readonly line: string; readonly command: C
   { line: "redo", command: { kind: "redo" } },
   { line: "group circle_1,rect_1", command: { kind: "group", members: ["circle_1", "rect_1"] } },
   { line: "ungroup group_1 force", command: { kind: "ungroup", target: "group_1", force: true } },
+  { line: "upstream circle_1 2", command: { kind: "upstream", target: "circle_1", depth: 2 } },
+  { line: "downstream doc.speed", command: { kind: "downstream", target: "doc.speed" } },
+  { line: "orphans", command: { kind: "orphans" } },
+  { line: "broken", command: { kind: "broken" } },
+  { line: "find \"table_1.A1\"", command: { kind: "find", text: "table_1.A1" } },
 ];
 
 describe("the command registry (table driven, one entry per command)", () => {

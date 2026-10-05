@@ -101,6 +101,7 @@ import {
   TABLE_TYPE,
   TEXT_AUTORESIZE_PATH,
   TEXT_CONTENT_PATH,
+  TEXT_RESOLVED_CONTENT_PATH,
   TEXT_HEIGHT_PATH,
   TEXT_STYLE_ALIGN_PATH,
   TEXT_STYLE_COLOR_PATH,
@@ -117,6 +118,7 @@ import {
   vertexYPath,
 } from "../engine/index.ts";
 import { buildSlotDescriptors, describeSlotValue, type SlotDescriptor } from "./props.ts";
+import { findBroken, findOrphans, findText, readEdges, walkGraph } from "./queries.ts";
 import type {
   AddPortCommand,
   AddVertexCommand,
@@ -137,6 +139,8 @@ import type {
   EdgeTypeCommand,
   EdgeTypeName,
   ExplodeCommand,
+  FindCommand,
+  GraphWalkCommand,
   SplitEdgeCommand,
   LinkCommand,
   PropsCommand,
@@ -162,7 +166,7 @@ export type CommandOutcome =
   | { readonly ok: false; readonly message: string };
 
 export type CommandEffect =
-  | { readonly kind: "select"; readonly objectId: string }
+  | { readonly kind: "select"; readonly objectIds: readonly string[] }
   | { readonly kind: "zoom"; readonly factor: number }
   | { readonly kind: "fit" }
   | { readonly kind: "save" }
@@ -287,6 +291,15 @@ export function executeCommand(command: Command, document: Document, context: Ev
       return groupObjects(command, document, context);
     case "ungroup":
       return ungroupObject(command.target, command.force, document, context);
+    case "upstream":
+    case "downstream":
+      return graphWalkCommand(command, document);
+    case "orphans":
+      return answerWithSelection(findOrphans(readEdges(document.objects), document.objects), document, "orphan", "with no edge to or from another object");
+    case "broken":
+      return brokenCommand(document);
+    case "find":
+      return findCommand(command, document);
     case "undo":
       return { ok: true, document, lines: [], effect: { kind: "undo" } };
     case "redo":
@@ -336,6 +349,7 @@ export const COMMANDS_WITH_HANDLERS: readonly string[] = [
   "redo",
   "group",
   "ungroup",
+  "upstream", "downstream", "orphans", "broken", "find",
 ];
 
 interface LiteralSlotDeclaration {
@@ -1314,7 +1328,75 @@ function select(command: SelectCommand, document: Document): CommandOutcome {
   if (object === undefined) {
     return { ok: false, message: `no object named "${command.target}"${nameSuggestion(command.target, document.objects.map((object) => object.name))}` };
   }
-  return { ok: true, document, lines: [`selected ${object.name}`], effect: { kind: "select", objectId: object.id } };
+  return { ok: true, document, lines: [`selected ${object.name}`], effect: { kind: "select", objectIds: [object.id] } };
+}
+
+/**
+ * Walks the graph from an object or a slot. A walk downstream also names the
+ * slots on other objects that read the start directly, which for a whole
+ * object is the list a delete without force refuses with.
+ */
+function graphWalkCommand(command: GraphWalkCommand, document: Document): CommandOutcome {
+  if (command.depth !== undefined && (!Number.isInteger(command.depth) || command.depth < 1)) {
+    return { ok: false, message: `depth must be a whole number of 1 or more, got ${command.depth}` };
+  }
+  const resolved = resolveRefsTarget(command.target, document);
+  if (!resolved.ok) {
+    return { ok: false, message: resolved.message };
+  }
+  const target = resolved.target;
+  const displayName = target.kind === "object" ? target.object.name : target.displayName;
+  const walked = walkGraph(
+    readEdges(document.objects),
+    document.objects,
+    target.kind === "object" ? { objectId: target.object.id } : { objectId: target.object.id, address: target.address },
+    command.kind,
+    command.depth,
+  );
+  const within = command.depth === undefined ? "" : ` within ${countedNoun(command.depth, "step")}`;
+  const lines: string[] = [];
+  if (command.kind === "downstream" && walked.directReaders.length > 0) {
+    // A text box reads in its content, and the engine hangs the edge on the
+    // slot that resolves the content, so the operator reads the slot they wrote.
+    const shown = walked.directReaders.map((address) => (slotKey(address.path) === slotKey(TEXT_RESOLVED_CONTENT_PATH) && document.objects.find((object) => object.id === address.objectId)?.type === TEXT_TYPE
+      ? { ...address, path: TEXT_CONTENT_PATH } : address));
+    lines.push(`read directly by ${shown.map((address) => formatSlotAddress(address, document.objects)).join(", ")}`);
+  }
+  return answerWithSelection(walked.objectIds, document, "object", `${command.kind} of ${displayName}${within}`, lines);
+}
+
+function brokenCommand(document: Document): CommandOutcome {
+  const broken = findBroken(document.objects);
+  const lines = broken.map((entry) => {
+    const named = entry.slots.map((slot) => `${slot.name} ${slot.error}`).join(", ");
+    return entry.derivedCount === 0 ? named : `${named}, and ${countedNoun(entry.derivedCount, "derived slot")} after it`;
+  });
+  return answerWithSelection(broken.map((entry) => entry.objectId), document, "object", "holding an error value", lines);
+}
+
+function findCommand(command: FindCommand, document: Document): CommandOutcome {
+  if (command.text.trim() === "") {
+    return { ok: false, message: "find needs some text to look for — usage: find <text>" };
+  }
+  return answerWithSelection(findText(document.objects, command.text), document, "object", `whose formulas or text hold "${command.text}"`);
+}
+
+/**
+ * Selects the answer to a query and reports it. An empty answer clears the
+ * selection, so the selection always holds what the last query found.
+ */
+function answerWithSelection(
+  objectIds: readonly string[],
+  document: Document,
+  noun: string,
+  description: string,
+  details: readonly string[] = [],
+): CommandOutcome {
+  const names = objectIds.map((id) => document.objects.find((object) => object.id === id)?.name ?? id);
+  const summary = objectIds.length === 0
+    ? `no ${noun}s ${description}, so nothing is selected`
+    : `selected ${countedNoun(objectIds.length, noun)} ${description}: ${names.join(", ")}`;
+  return { ok: true, document, lines: [...details, summary], effect: { kind: "select", objectIds } };
 }
 
 function zoom(command: ZoomCommand, document: Document): CommandOutcome {

@@ -240,6 +240,27 @@ export interface UngroupCommand {
   readonly force: boolean;
 }
 
+/** `upstream` and `downstream`, which answer with a selection. */
+export interface GraphWalkCommand {
+  readonly kind: "upstream" | "downstream";
+  readonly target: string;
+  /** How many steps from one object to another the walk takes, with no limit when absent. */
+  readonly depth?: number;
+}
+
+export interface OrphansCommand {
+  readonly kind: "orphans";
+}
+
+export interface BrokenCommand {
+  readonly kind: "broken";
+}
+
+export interface FindCommand {
+  readonly kind: "find";
+  readonly text: string;
+}
+
 export interface UndoCommand {
   readonly kind: "undo";
 }
@@ -287,7 +308,11 @@ export type Command =
   | UndoCommand
   | RedoCommand
   | GroupCommand
-  | UngroupCommand;
+  | UngroupCommand
+  | GraphWalkCommand
+  | OrphansCommand
+  | BrokenCommand
+  | FindCommand;
 
 export interface CommandParseSuccess {
   readonly ok: true;
@@ -763,6 +788,46 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
     build: (args) => ({ kind: "refs", target: textArgument(args, "target") }),
   },
   {
+    name: "upstream",
+    usage: "upstream <object|address> [depth]",
+    positional: [address("target"), { name: "depth", kind: "number", optional: true }],
+    named: [],
+    flags: [],
+    build: (args) => graphWalk("upstream", args),
+  },
+  {
+    name: "downstream",
+    usage: "downstream <object|address> [depth]",
+    positional: [address("target"), { name: "depth", kind: "number", optional: true }],
+    named: [],
+    flags: [],
+    build: (args) => graphWalk("downstream", args),
+  },
+  {
+    name: "orphans",
+    usage: "orphans",
+    positional: [],
+    named: [],
+    flags: [],
+    build: () => ({ kind: "orphans" }),
+  },
+  {
+    name: "broken",
+    usage: "broken",
+    positional: [],
+    named: [],
+    flags: [],
+    build: () => ({ kind: "broken" }),
+  },
+  {
+    name: "find",
+    usage: "find <text>",
+    positional: [text("text")],
+    named: [],
+    flags: [],
+    build: (args) => ({ kind: "find", text: textArgument(args, "text") }),
+  },
+  {
     name: "props",
     usage: "props <object>",
     positional: [objectName("target")],
@@ -1186,6 +1251,11 @@ function readPositionalValue(
       return failure(`<${parameter.name}> declares an argument kind this parser does not read`, token.start);
     }
   }
+}
+
+function graphWalk(kind: GraphWalkCommand["kind"], args: MatchedArguments): GraphWalkCommand {
+  const depth = findArgument(args, "depth");
+  return typeof depth?.value === "number" ? { kind, target: textArgument(args, "target"), depth: depth.value } : { kind, target: textArgument(args, "target") };
 }
 
 function findArgument(args: MatchedArguments, name: string): MatchedArgument | undefined {
