@@ -36,6 +36,8 @@ import {
   editorSeed,
   escape,
   pickWireAt,
+  pasteFromClipboard,
+  importCsv,
   pickWireRow,
   beginRewire,
   finishRewire,
@@ -2436,9 +2438,10 @@ describe("the dependency overlay", () => {
 
 describe("rewiring a slot by its curve", () => {
   function linked(): AppState {
-    let state = typed(opened(), "circle x=0 y=0 r=10");
+    let state = typed(opened(), "circle x=0 y=0 r=40");
     state = typed(state, "circle x=0 y=200 r=20");
-    state = typed(state, "circle x=300 y=0 r=5");
+    // Off the axis of circle_1, so the start of the curve lands on empty canvas at the corner of the box.
+    state = typed(state, "circle x=300 y=300 r=5");
     state = typed(state, "set circle_3.radius = circle_1.radius * 2");
     return typed(state, "wires on");
   }
@@ -2459,7 +2462,7 @@ describe("rewiring a slot by its curve", () => {
     expect(done.refused).toBe(false);
     expect(done.state.log.slice(-3)).toEqual(["> set circle_3.radius = circle_2.radius * 2", "circle_3.radius = circle_2.radius * 2", "replaced formula: = circle_1.radius * 2"]);
     expect(numberAt(objectNamed(done.state, "circle_3"), ["radius"])).toBe(40);
-    expect(numberAt(objectNamed(typed(done.state, "undo"), "circle_3"), ["radius"])).toBe(20);
+    expect(numberAt(objectNamed(typed(done.state, "undo"), "circle_3"), ["radius"])).toBe(80);
   });
 
   it("leaves everything alone when the end lands on empty canvas, or nowhere near a curve end", () => {
@@ -2474,8 +2477,19 @@ describe("rewiring a slot by its curve", () => {
     expect(missed.state.document).toBe(state.document);
   });
 
+  it("lets a press on the edge of an object select it, unless the curve starting there is the picked one", () => {
+    let state = typed(opened(), "circle x=0 y=0 r=10");
+    state = typed(state, "circle x=300 y=0 r=5");
+    state = typed(typed(state, "set circle_2.radius = circle_1.radius"), "wires on");
+    const [placed] = placedWires(state.document.objects);
+    const end = screenOf(state, placed!.from);
+    expect(beginRewire(state, end)).toBeUndefined();
+    const picked = pickWireAt(state, screenOf(state, wirePoint(placed!, 0.5)));
+    expect(picked && beginRewire(picked, end)?.kind).toBe("grab");
+  });
+
   it("refuses to grab a curve of many edges until a row of it is picked, then moves that row alone", () => {
-    const state = typed(linked(), "set circle_3.origin.y = circle_1.radius");
+    const state = typed(linked(), "set circle_3.origin.x = circle_1.radius + 260");
     const [placed] = placedWires(state.document.objects);
     const end = screenOf(state, placed!.from);
     const refused = beginRewire(state, end);
@@ -2488,5 +2502,72 @@ describe("rewiring a slot by its curve", () => {
     const radiusRow = rows.findIndex((edge) => edge.dependentSlot.path.join(".") === "radius");
     const grab = beginRewire(pickWireRow(picked, radiusRow), end);
     expect(grab?.kind === "grab" && grab.edge.dependentSlot.path).toEqual(["radius"]);
+  });
+});
+
+describe("the clipboard", () => {
+  function pair(): AppState {
+    let state = typed(opened(), "circle x=0 y=0 r=10");
+    state = typed(state, "circle x=100 y=0 r=5");
+    return typed(state, "set circle_2.radius = circle_1.radius * 2");
+  }
+
+  it("copies the selection and pastes it a step off, selected, with its wiring on the copies, as one undo step", () => {
+    const state = withSelection(pair(), [objectNamed(pair(), "circle_1").id, objectNamed(pair(), "circle_2").id]);
+    const copied = submitLine(state, "copy", VIEWPORT);
+    expect(copied.clipboardText).toBe("circle_1\ncircle_2");
+    const pasted = typed(copied.state, "paste");
+    expect(pasted.log.at(-1)).toBe("pasted 2 objects: circle_3, circle_4");
+    expect(pasted.interaction.selectedObjectIds).toEqual([objectNamed(pasted, "circle_3").id, objectNamed(pasted, "circle_4").id]);
+    expect(numberAt(objectNamed(pasted, "circle_3"), ["origin", "x"])).toBe(20);
+    expect(numberAt(objectNamed(pasted, "circle_4"), ["radius"])).toBe(20);
+    const again = typed(pasted, "paste");
+    expect(numberAt(objectNamed(again, "circle_5"), ["origin", "x"])).toBe(40);
+    expect(typed(pasted, "undo").document.objects.map((object) => object.name)).not.toContain("circle_3");
+  });
+
+  it("cuts objects, refusing the way a delete does when something outside reads them", () => {
+    const state = withSelection(pair(), [objectNamed(pair(), "circle_1").id]);
+    const refused = submitLine(state, "cut", VIEWPORT);
+    expect(refused.refused).toBe(true);
+    const both = withSelection(pair(), [objectNamed(pair(), "circle_1").id, objectNamed(pair(), "circle_2").id]);
+    const cut = typed(both, "cut");
+    expect(cut.document.objects.filter((object) => object.type === "circle")).toEqual([]);
+    expect(typed(cut, "paste").document.objects.filter((object) => object.type === "circle")).toHaveLength(2);
+  });
+
+  it("copies a range of cells and pastes it at a corner, moving references by the distance", () => {
+    let state = typed(opened(), "table x=0 y=0 rows=2 cols=2");
+    state = typed(state, "set table_1.A1 3");
+    state = typed(state, "set table_1.B1 = table_1.A1 * 2");
+    const copied = submitLine(state, "copy table_1.A1:B1", VIEWPORT);
+    expect(copied.clipboardText).toBe("3\t6");
+    const pasted = typed(copied.state, "paste table_1.A3");
+    expect(pasted.log.at(-1)).toBe("pasted 1×2 cells at table_1.A3");
+    expect(objectNamed(pasted, "table_1").slots["cells.B3"]?.value).toBe(6);
+    expect(objectNamed(pasted, "table_1").slots.rows?.value).toBe(3);
+    expect(submitLine(copied.state, "paste", VIEWPORT).refused).toBe(true);
+  });
+
+  it("pastes text from elsewhere into a cell, and refuses text with no cell to land in", () => {
+    const state = typed(opened(), "table x=0 y=0 rows=2 cols=2");
+    const corner = { tableId: objectNamed(state, "table_1").id, row: 1, column: 1 };
+    const pasted = pasteFromClipboard(state, { text: "a\tb\n1\t2" }, corner, VIEWPORT);
+    expect(objectNamed(pasted.state, "table_1").slots["cells.B2"]?.value).toBe(2);
+    expect(pasteFromClipboard(state, { text: "a\tb" }, undefined, VIEWPORT).refused).toBe(true);
+  });
+
+  it("reads a comma separated file into a new table in one batch, or into a corner of a table", () => {
+    const state = opened();
+    const read = importCsv(state, "name,value\nalpha,1\nbeta,2\n", undefined, VIEWPORT);
+    const table = objectNamed(read.state, "table_1");
+    expect(table.slots.rows?.value).toBe(3);
+    expect(table.slots.cols?.value).toBe(2);
+    expect(table.slots["cells.B3"]?.value).toBe(2);
+    expect(read.state.document.journal.length).toBe(state.document.journal.length + 1);
+    const corner = { tableId: table.id, row: 4, column: 1 };
+    const more = importCsv(read.state, "gamma,3", corner, VIEWPORT);
+    expect(objectNamed(more.state, "table_1").slots["cells.A4"]?.value).toBe("gamma");
+    expect(submitLine(state, "import csv", VIEWPORT).fileRequest).toBe("csv");
   });
 });

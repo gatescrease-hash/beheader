@@ -45,24 +45,14 @@ objects costs 150 to 250 milliseconds.
   in the way `mutation.test.ts` measures a create, and the differential
   generator produces each of them.
 
-The items below are the rest of the baseline that section 22 of `SPEC.md`
-opens. Undo from section 21 is in place, so a paste that lands wrong can already
-be taken back.
+The item below is the rest of the baseline that section 22 of `SPEC.md` opens.
+Unsaved work, the clipboard and `import csv` are built.
 
 - Export a picture of the document or the selection, as specified in Moving data
   in and out. A reader will know it is finished when an exported raster of a
   document holding notation carries that notation, which a test asserts against
   the same document without it, and when the vector form and the canvas form
   share their geometry, text layout and measurement.
-- Move objects and cells through the clipboard, as specified in Moving data in
-  and out. A reader will know it is finished when a copied pair of wired objects
-  pastes with its wiring pointing at the copies, a copied half keeps reading the
-  original, a copied range reads into a spreadsheet in another window, and text
-  pasted into a cell grows the table within the limits of section 7 and names
-  the size it needed when it cannot.
-- Read a comma separated file into a table, as specified in Moving data in and
-  out. A reader will know it is finished when it shares the growth and refusal
-  path of a paste.
 
 ---
 

@@ -1700,7 +1700,9 @@ cannot say which of them it moves. Select the curve, pick a row, and rewire that
 one.
 
 The end that moves is the end at the object being read, because only that end
-can go to another source. A drop on a table reads the cell under the pointer, a
+can go to another source. That end sits on the edge of its object, so a press there
+selects the object unless the curve is the one the operator picked, and a curve
+whose start lies over its object is picked first and then dragged. A drop on a table reads the cell under the pointer, a
 drop on a copy of a variable reads the variable, and a drop on any other object
 reads its slot at the same path the edge read before. A drop that names no slot
 changes nothing and says why. A range inside the formula stays as it is, so an
@@ -1880,6 +1882,17 @@ section 7. Text that would pass a limit refuses and names the size it needed.
 A paste over a formula slot replaces the formula, because a paste is an ordinary
 set.
 
+**How the keys reach it.** Ctrl+C, Ctrl+X and Ctrl+V act on the canvas: the
+active cell of a selected table when there is one, and the selected objects
+otherwise. The command line keeps the copy and paste of the browser while it
+holds text, so a command can still be copied and pasted. A copy carries the
+clipboard of the program beside its plain text, so a paste in another tab of the
+program keeps the formulas. Pasted objects land a step down and right of their
+originals, a further step for each paste, and become the selection. A cut of an
+object that something outside the cut reads refuses the way a delete does. The
+commands `copy`, `cut` and `paste` do the same from the command line, and take a
+range or a corner cell such as `copy table_1.A1:B3` and `paste table_1.D1`.
+
 ### Reading a file in
 
 ```
@@ -1888,6 +1901,9 @@ import csv               // into a new table
 ```
 
 Growth and refusal follow the paste rules above, so one reader serves both.
+
+A file read into a new table fills a table at the middle of the view, created in
+the same batch as its cells, so one undo removes both.
 
 ### Work an operator has not saved
 

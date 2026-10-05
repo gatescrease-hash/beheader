@@ -85,6 +85,10 @@ const DOCUMENTED_EXAMPLES: readonly { readonly line: string; readonly command: C
   { line: "arrange flow", command: { kind: "arrange", how: "flow" } },
   { line: "align left", command: { kind: "align", how: "left" } },
   { line: "distribute x", command: { kind: "distribute", how: "x" } },
+  { line: "copy table_1.A1:B2", command: { kind: "copy", target: "table_1.A1:B2" } },
+  { line: "cut", command: { kind: "cut" } },
+  { line: "paste table_1.C1", command: { kind: "paste", target: "table_1.C1" } },
+  { line: "import csv table_1.A1", command: { kind: "import", format: "csv", corner: "table_1.A1" } },
   { line: "broken", command: { kind: "broken" } },
   { line: "find \"table_1.A1\"", command: { kind: "find", text: "table_1.A1" } },
 ];
@@ -473,8 +477,10 @@ describe("an argument that names something declares which kind it is", () => {
       const rest = usage.slice(name.length).trim();
       const declared = positionalKinds(name)[0];
 
-      const wantsAddress = rest.startsWith("<address>") || rest.startsWith("<object|address>") || rest.startsWith("<object>.<");
-      const wantsObject = !wantsAddress && rest.startsWith("<object>");
+      // An optional argument is written in brackets, and declares its kind the same way.
+      const unbracketed = rest.startsWith("[") ? rest.slice(1) : rest;
+      const wantsAddress = unbracketed.startsWith("<address>") || unbracketed.startsWith("<object|address>") || unbracketed.startsWith("<object>.<");
+      const wantsObject = !wantsAddress && unbracketed.startsWith("<object>");
 
       if (wantsAddress && declared !== "address") {
         disagreements.push(`${name}: usage says an address, the registry says "${declared}"`);

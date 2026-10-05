@@ -273,6 +273,19 @@ export interface ArrangeCommand {
   readonly how: string;
 }
 
+/** `copy`, `cut` and `paste`, with a range of cells or a corner cell when they act on a table. */
+export interface ClipboardCommand {
+  readonly kind: "copy" | "cut" | "paste";
+  readonly target?: string;
+}
+
+/** `import csv`, into a new table or at a corner cell of a table. */
+export interface ImportCommand {
+  readonly kind: "import";
+  readonly format: string;
+  readonly corner?: string;
+}
+
 export interface UndoCommand {
   readonly kind: "undo";
 }
@@ -326,7 +339,9 @@ export type Command =
   | BrokenCommand
   | FindCommand
   | WiresCommand
-  | ArrangeCommand;
+  | ArrangeCommand
+  | ClipboardCommand
+  | ImportCommand;
 
 export interface CommandParseSuccess {
   readonly ok: true;
@@ -874,6 +889,41 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
     build: (args) => ({ kind: "distribute", how: textArgument(args, "how") }),
   },
   {
+    name: "copy",
+    usage: "copy [<address>]",
+    positional: [{ name: "target", kind: "address", optional: true }],
+    named: [],
+    flags: [],
+    build: (args) => clipboardCommand("copy", args),
+  },
+  {
+    name: "cut",
+    usage: "cut [<address>]",
+    positional: [{ name: "target", kind: "address", optional: true }],
+    named: [],
+    flags: [],
+    build: (args) => clipboardCommand("cut", args),
+  },
+  {
+    name: "paste",
+    usage: "paste [<address>]",
+    positional: [{ name: "target", kind: "address", optional: true }],
+    named: [],
+    flags: [],
+    build: (args) => clipboardCommand("paste", args),
+  },
+  {
+    name: "import",
+    usage: "import csv [corner]",
+    positional: [text("format"), { name: "corner", kind: "text", optional: true }],
+    named: [],
+    flags: [],
+    build: (args) => {
+      const corner = textArgument(args, "corner");
+      return corner === "" ? { kind: "import", format: textArgument(args, "format") } : { kind: "import", format: textArgument(args, "format"), corner };
+    },
+  },
+  {
     name: "props",
     usage: "props <object>",
     positional: [objectName("target")],
@@ -1297,6 +1347,11 @@ function readPositionalValue(
       return failure(`<${parameter.name}> declares an argument kind this parser does not read`, token.start);
     }
   }
+}
+
+function clipboardCommand(kind: ClipboardCommand["kind"], args: MatchedArguments): ClipboardCommand {
+  const target = textArgument(args, "target");
+  return target === "" ? { kind } : { kind, target };
 }
 
 function graphWalk(kind: GraphWalkCommand["kind"], args: MatchedArguments): GraphWalkCommand {

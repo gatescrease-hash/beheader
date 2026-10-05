@@ -15,8 +15,8 @@ register, and the measurements behind leaving that migration unscheduled.
 | --- | --- |
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
-| Tests | 2902 Vitest tests and 2 tooling tests pass, with 0 skipped. |
-| Spec | Built through section 21, except the parts section 17 postpones. Section 22 is built for unsaved work alone. |
+| Tests | 2922 Vitest tests and 2 tooling tests pass, with 0 skipped. |
+| Spec | Built through section 21, except the parts section 17 postpones. Section 22 lacks only the picture export. |
 | Scripts | Python runs in a Pyodide worker. Groups are script nodes with members. |
 | Rule 5 | Met for slot writes, cell clears, creates, renames and plain deletes. Other structural batches and refusals still cost the whole document. |
 | Workspace | Compact typography, a profile helmet, in-row style source controls, and full, compact and hidden sidebar modes with pointer and keyboard resizing. |
@@ -202,6 +202,7 @@ covers everything it calls.
 | `props.ts` | The slot rows that the panel and the `props` command both read. |
 | `queries.ts` | What `upstream`, `downstream`, `orphans`, `broken` and `find` select. |
 | `rewire.ts` | The `set` line that moves one slot edge of the overlay to a new address. |
+| `clipboard.ts` | What a copy holds, what a paste writes, and the reader of delimited text that `import csv` shares. |
 
 ### `src/main.ts`
 

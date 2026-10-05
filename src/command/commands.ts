@@ -101,6 +101,7 @@ import {
   TABLE_COLS_PATH,
   TABLE_ROWS_PATH,
   TABLE_TYPE,
+  parseCellReference,
   TEXT_AUTORESIZE_PATH,
   TEXT_CONTENT_PATH,
   TEXT_RESOLVED_CONTENT_PATH,
@@ -141,6 +142,7 @@ import type {
   EdgeTypeCommand,
   EdgeTypeName,
   ArrangeCommand,
+  ClipboardCommand,
   ExplodeCommand,
   FindCommand,
   GraphWalkCommand,
@@ -190,8 +192,24 @@ export type CommandEffect =
   | { readonly kind: "arrange"; readonly mode: "flow" | "grid" | "tidy" }
   | { readonly kind: "align"; readonly edge: "left" | "right" | "top" | "bottom" | "centerx" | "centery" }
   | { readonly kind: "distribute"; readonly axis: "x" | "y" }
+  | { readonly kind: "copy" | "cut"; readonly cells?: CellBlock }
+  | { readonly kind: "paste" | "import"; readonly cell?: CellCorner }
   | { readonly kind: "undo" }
   | { readonly kind: "redo" };
+
+/** One cell of a table, counted from 1. */
+export interface CellCorner {
+  readonly tableId: string;
+  readonly row: number;
+  readonly column: number;
+}
+
+/** A rectangle of cells of one table. */
+export interface CellBlock {
+  readonly tableId: string;
+  readonly corner: { readonly row: number; readonly column: number };
+  readonly size: { readonly rows: number; readonly columns: number };
+}
 
 export function isCommandFailure(outcome: CommandOutcome): outcome is CommandRefusal {
   return outcome.ok === false;
@@ -323,6 +341,19 @@ export function executeCommand(command: Command, document: Document, context: Ev
     case "align":
     case "distribute":
       return arrangeCommand(command, document);
+    case "copy":
+    case "cut":
+    case "paste":
+      return clipboardCommand(command, document);
+    case "import": {
+      if (command.format.toLowerCase() !== "csv") {
+        return { ok: false, message: `import reads csv, got "${command.format}" — usage: import csv [corner]` };
+      }
+      if (command.corner === undefined) return { ok: true, document, lines: [], effect: { kind: "import" } };
+      const block = resolveCellBlock(command.corner, document);
+      if (!block.ok) return block;
+      return { ok: true, document, lines: [], effect: { kind: "import", cell: { tableId: block.block.tableId, ...block.block.corner } } };
+    }
     case "wires": {
       const state = command.state.toLowerCase();
       if (state !== "on" && state !== "off") {
@@ -379,7 +410,7 @@ export const COMMANDS_WITH_HANDLERS: readonly string[] = [
   "redo",
   "group",
   "ungroup",
-  "upstream", "downstream", "orphans", "broken", "find", "wires", "arrange", "align", "distribute",
+  "upstream", "downstream", "orphans", "broken", "find", "wires", "arrange", "align", "distribute", "copy", "cut", "paste", "import",
 ];
 
 interface LiteralSlotDeclaration {
@@ -1409,6 +1440,46 @@ function findCommand(command: FindCommand, document: Document): CommandOutcome {
     return { ok: false, message: "find needs some text to look for — usage: find <text>" };
   }
   return answerWithSelection(findText(document.objects, command.text), document, "object", `whose formulas or text hold "${command.text}"`);
+}
+
+/**
+ * Resolves the range or corner a clipboard command names. The selection and
+ * the clipboard live in the host, so the host runs the copy or the paste and
+ * this hands it the cells.
+ */
+function clipboardCommand(command: ClipboardCommand, document: Document): CommandOutcome {
+  if (command.target === undefined) {
+    return { ok: true, document, lines: [], effect: { kind: command.kind } };
+  }
+  const block = resolveCellBlock(command.target, document);
+  if (!block.ok) return block;
+  if (command.kind === "paste") {
+    return { ok: true, document, lines: [], effect: { kind: "paste", cell: { tableId: block.block.tableId, ...block.block.corner } } };
+  }
+  return { ok: true, document, lines: [], effect: { kind: command.kind, cells: block.block } };
+}
+
+/** A cell such as table_1.A1, or a range such as table_1.A1:B3, as a block of one table. */
+function resolveCellBlock(typed: string, document: Document): { readonly ok: true; readonly block: CellBlock } | { readonly ok: false; readonly message: string } {
+  const [first = "", second] = typed.split(":");
+  const dot = first.lastIndexOf(".");
+  const tableName = first.slice(0, dot);
+  const table = dot <= 0 ? undefined : findGraphObjectByName(tableName, document.objects);
+  if (table === undefined || table.type !== TABLE_TYPE) {
+    return { ok: false, message: `"${typed}" names no cell of a table — write it as table_1.A1 or table_1.A1:B3` };
+  }
+  const start = parseCellReference(first.slice(dot + 1));
+  const endText = second === undefined ? first.slice(dot + 1) : second.includes(".") ? second.slice(second.lastIndexOf(".") + 1) : second;
+  const end = parseCellReference(endText);
+  if (start === undefined || end === undefined) {
+    return { ok: false, message: `"${typed}" names no cell of ${table.name} — write it as ${table.name}.A1 or ${table.name}.A1:B3` };
+  }
+  const top = Math.min(start.row, end.row);
+  const left = Math.min(start.column, end.column);
+  return {
+    ok: true,
+    block: { tableId: table.id, corner: { row: top, column: left }, size: { rows: Math.abs(end.row - start.row) + 1, columns: Math.abs(end.column - start.column) + 1 } },
+  };
 }
 
 const ARRANGE_MODES = ["flow", "grid", "tidy"] as const;

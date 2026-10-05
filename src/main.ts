@@ -44,6 +44,7 @@ import {
   startUndoHistory,
   undoJournal,
   type Address,
+  MAX_TABLE_LINES,
   type Edge,
   formatAddress,
   TEXT_TYPE,
@@ -74,7 +75,7 @@ import {
   TEXT_CONTENT_PATH,
   type Value,
 } from "./engine/index.ts";
-import { DEFAULT_IMAGE_EXTENT, MAX_POLYGON_SIDES, executeCommand, type CommandEffect } from "./command/commands.ts";
+import { DEFAULT_IMAGE_EXTENT, MAX_POLYGON_SIDES, executeCommand, type CellBlock, type CellCorner, type CommandEffect } from "./command/commands.ts";
 import { findCommandSpec, isPromptPoint, parseCommandBoolean, parseCommandNumber, type ClearCommand, type DeleteCommand, type SetFormulaCommand, type SetLiteralCommand, type UnlinkCommand } from "./command/parser.ts";
 import { beginCommand, cancelCommand, respond, type CommandSession, type PendingCommand, type PromptResponse } from "./command/prompt.ts";
 import { buildSlotDescriptors, describeSlotValue, type SlotDescriptor } from "./command/props.ts";
@@ -120,6 +121,7 @@ import { createCanvas2dTextMeasurer, createSourceTextMeasurer } from "./render/m
 import { createScriptRunner, createWorkerBackend, type WorkerLike } from "./python/runner.ts";
 import { clearRecovery, isDirty, readRecovery, writeRecovery } from "./recovery.ts";
 import { planAlign, planArrange, planDistribute } from "./arrange.ts";
+import { copyCells, copyObjects, parseDelimited, pasteCells, pasteObjects, pasteText, type ClipboardPayload } from "./command/clipboard.ts";
 import { createMathMeasurer, MATH_MACROS, mathMarkup, mathOverlayPlacement, readMathDrawnLatex, readMathLatex } from "./render/math.ts";
 import { hitTest } from "./render/hittest.ts";
 import { placedWires } from "./render/overlay.ts";
@@ -168,6 +170,10 @@ export interface AppState {
   readonly wires: WiresState;
   /** The ring of slots the last refusal for a cycle named, until the next change, refusal or Escape. */
   readonly refusedCycle: readonly Address[] | undefined;
+  /** What the last copy or cut took, which a paste inside the program reads. */
+  readonly clipboard: ClipboardPayload | undefined;
+  /** How many times the clipboard has pasted objects since the copy, so each paste lands a step further off. */
+  readonly pasteCount: number;
 }
 
 export interface WiresState {
@@ -185,7 +191,7 @@ export interface GestureBase {
   readonly journal: readonly MutationJournalEntry[];
 }
 
-export type FileRequest = "save" | "load";
+export type FileRequest = "save" | "load" | "csv";
 
 export interface AppTransition {
   readonly state: AppState;
@@ -194,6 +200,10 @@ export interface AppTransition {
   readonly openEditor?: EditorTarget;
 
   readonly pickImageFor?: string;
+  /** Text for the clipboard of the system, which only the DOM half can write. */
+  readonly clipboardText?: string;
+  /** The corner a picked comma separated file goes to, or a new table when absent. */
+  readonly importCell?: CellCorner;
 }
 
 /**
@@ -220,6 +230,8 @@ export function initialAppState(
     savedJournal,
     wires: INITIAL_WIRES_STATE,
     refusedCycle: undefined,
+    clipboard: undefined,
+    pasteCount: 0,
   };
 }
 
@@ -420,6 +432,13 @@ export function performEffect(effect: CommandEffect, state: AppState, viewport: 
     case "align":
     case "distribute":
       return applyArrangement(state, effect, context);
+    case "copy":
+    case "cut":
+      return copyToClipboard(state, effect.cells, effect.kind === "cut", context);
+    case "paste":
+      return pasteFromClipboard(state, state.clipboard === undefined ? {} : { payload: state.clipboard }, effect.cell, viewport, context);
+    case "import":
+      return { state, fileRequest: "csv", refused: false, ...(effect.cell === undefined ? {} : { importCell: effect.cell }) };
     case "wires":
       return transition({ ...state, wires: { visible: effect.visible, selected: effect.visible ? state.wires.selected : undefined } });
     case "save":
@@ -541,6 +560,128 @@ function describeEntry(entry: MutationJournalEntry, ...states: readonly (readonl
   return `${count} to ${shown}`;
 }
 
+/** How far each paste of objects lands from the one before it, in world units. */
+const PASTE_STEP = 20;
+
+/** Commits one batch, or logs the refusal with the cycle it names. */
+function commitBatch(state: AppState, operations: readonly Operation[], lines: readonly string[], context: EvalContext, extra: Partial<AppState> = {}): AppTransition {
+  const result = mutate(state.document.objects, operations, state.document.journal, context);
+  if (!result.ok) {
+    return transition(withLog({ ...state, refusedCycle: result.cycle }, [result.message]), true);
+  }
+  return transition(withLog({ ...state, ...extra, document: { ...state.document, ...(extra.document ?? {}), objects: result.objects, journal: result.journal }, refusedCycle: undefined }, lines));
+}
+
+/**
+ * Copies a block of cells, or the selected objects, into the clipboard of the
+ * program, and hands the DOM half the text for the clipboard of the system. A
+ * cut also clears the cells or deletes the objects, in one batch. A cut of an
+ * object another object reads refuses the way a delete does.
+ */
+export function copyToClipboard(state: AppState, cells: CellBlock | undefined, cut: boolean, context: EvalContext = NULL_EVAL_CONTEXT): AppTransition {
+  const verb = cut ? "cut" : "copied";
+  if (cells !== undefined) {
+    const table = state.document.objects.find((object) => object.id === cells.tableId);
+    if (table === undefined) return transition(logLine(state, "that table is gone"), true);
+    const { payload, text } = copyCells(table, cells.corner, cells.size);
+    const first = formatCellReference(cells.corner);
+    const last = formatCellReference({ row: cells.corner.row + cells.size.rows - 1, column: cells.corner.column + cells.size.columns - 1 });
+    const line = `${verb} ${table.name}.${first}${first === last ? "" : `:${last}`} — ${cells.size.rows * cells.size.columns === 1 ? "1 cell" : `${cells.size.rows * cells.size.columns} cells`}`;
+    const copied = { ...state, clipboard: payload, pasteCount: 0 };
+    if (!cut) return { ...transition(withLog(copied, [line])), clipboardText: text };
+    const clears: Operation[] = payload.rows.flatMap((row, rowIndex) => row.flatMap((cell, columnIndex) => cell === null ? [] : [{
+      kind: "clearSlot" as const,
+      address: { objectId: table.id, path: ["cells", formatCellReference({ row: cells.corner.row + rowIndex, column: cells.corner.column + columnIndex })] },
+    }]));
+    return { ...(clears.length === 0 ? transition(withLog(copied, [line])) : commitBatch(copied, clears, [line], context)), clipboardText: text };
+  }
+  const ids = state.interaction.selectedObjectIds;
+  if (ids.length === 0) {
+    return transition(logLine(state, `select objects, or name cells such as ${cut ? "cut" : "copy"} table_1.A1:B3`), true);
+  }
+  const payload = copyObjects(state.document.objects, ids);
+  if (payload.objects.length === 0) return transition(logLine(state, "nothing in the selection can be copied"), true);
+  const names = payload.objects.map((object) => object.name);
+  const line = `${verb} ${payload.objects.length === 1 ? "1 object" : `${payload.objects.length} objects`}: ${names.join(", ")}`;
+  const copied = { ...state, clipboard: payload, pasteCount: 0 };
+  if (!cut) return { ...transition(withLog(copied, [line])), clipboardText: names.join("\n") };
+  const deletes: Operation[] = payload.objects.map((object) => ({ kind: "deleteObject", objectId: object.id, force: false }));
+  return { ...commitBatch(withInteraction(copied, deselect()), deletes, [line], context), clipboardText: names.join("\n") };
+}
+
+/**
+ * Pastes into a cell when one is named, and onto the canvas otherwise. Copied
+ * cells keep their formulas, and text from elsewhere reads as rows of literals.
+ * Objects land a step off their originals, a further step for each paste, and
+ * the copies become the selection. Each paste is one batch.
+ */
+export function pasteFromClipboard(
+  state: AppState,
+  input: { readonly payload?: ClipboardPayload; readonly text?: string },
+  cell: CellCorner | undefined,
+  _viewport: Viewport,
+  context: EvalContext = NULL_EVAL_CONTEXT,
+): AppTransition {
+  const { payload, text } = input;
+  if (cell !== undefined) {
+    const table = state.document.objects.find((object) => object.id === cell.tableId);
+    if (table === undefined) return transition(logLine(state, "that table is gone"), true);
+    if (payload?.kind === "objects") return transition(logLine(state, "objects paste onto the canvas, not into a cell"), true);
+    const corner = { row: cell.row, column: cell.column };
+    const plan = payload?.kind === "cells" ? pasteCells(table, corner, payload) : text !== undefined && text !== "" ? pasteText(table, corner, text) : undefined;
+    if (plan === undefined) return transition(logLine(state, "the clipboard holds nothing to paste"), true);
+    if (!plan.ok) return transition(logLine(state, plan.message), true);
+    const where = `${table.name}.${formatCellReference(corner)}`;
+    return commitBatch(state, plan.operations, [`pasted ${plan.rows === 1 && plan.columns === 1 ? "1 cell" : `${plan.rows}×${plan.columns} cells`} at ${where}`], context);
+  }
+  if (payload?.kind === "cells") return transition(logLine(state, "name a cell to paste cells into, such as paste table_1.A1"), true);
+  if (payload?.kind !== "objects") {
+    return transition(logLine(state, text !== undefined && text !== "" ? "select a cell of a table to paste text into" : "the clipboard holds nothing to paste"), true);
+  }
+  const step = PASTE_STEP * (state.pasteCount + 1);
+  const plan = pasteObjects(state.document, payload, { x: step, y: step });
+  if ("ok" in plan) return transition(logLine(state, plan.message), true);
+  const done = commitBatch(state, plan.operations, [`pasted ${plan.names.length === 1 ? "1 object" : `${plan.names.length} objects`}: ${plan.names.join(", ")}`], context, {
+    pasteCount: state.pasteCount + 1,
+    document: { ...state.document, nextObjectId: plan.nextObjectId },
+  });
+  return done.refused ? done : { ...done, state: withInteraction(done.state, { ...INITIAL_INTERACTION_STATE, selectedObjectIds: plan.createdIds }) };
+}
+
+/**
+ * Reads a comma separated file into a table, through the reader a paste of
+ * text uses, so growth and refusal match. With no corner the file fills a new
+ * table at the middle of the view, created in the same batch as its cells.
+ */
+export function importCsv(state: AppState, text: string, cell: CellCorner | undefined, viewport: Viewport, context: EvalContext = NULL_EVAL_CONTEXT): AppTransition {
+  if (cell !== undefined) {
+    const table = state.document.objects.find((object) => object.id === cell.tableId);
+    if (table === undefined) return transition(logLine(state, "that table is gone"), true);
+    const plan = pasteText(table, { row: cell.row, column: cell.column }, text, ",");
+    if (!plan.ok) return transition(logLine(state, plan.message), true);
+    return commitBatch(state, plan.operations, [`read ${plan.rows}×${plan.columns} cells into ${table.name}.${formatCellReference(cell)}`], context);
+  }
+  const rows = parseDelimited(text, ",");
+  const height = rows.length;
+  const width = Math.max(0, ...rows.map((row) => row.length));
+  if (height === 0 || width === 0) return transition(logLine(state, "the file holds no rows"), true);
+  if (height > MAX_TABLE_LINES || width > MAX_TABLE_LINES) {
+    return transition(logLine(state, `the file needs a table of ${height} rows by ${width} columns, past the limit of ${MAX_TABLE_LINES} on each`), true);
+  }
+  const camera = state.document.camera;
+  const centre = screenToWorld(camera, { x: viewport.width / 2, y: viewport.height / 2 });
+  const created = executeCommand({ kind: "table", x: Math.round(centre.x), y: Math.round(centre.y), rows: height, cols: width }, state.document, context);
+  if (!created.ok || created.createdObjectId === undefined) return transition(logLine(state, created.ok ? "the table did not open" : created.message), true);
+  const table = created.document.objects.find((object) => object.id === created.createdObjectId)!;
+  const plan = pasteText(table, { row: 1, column: 1 }, text, ",");
+  if (!plan.ok) return transition(logLine(state, plan.message), true);
+  const createOperation: Operation = { kind: "createObject", object: { ...table, slots: Object.fromEntries(Object.entries(table.slots).filter(([key]) => !key.startsWith("cells."))) } };
+  const done = commitBatch(state, [createOperation, ...plan.operations], [`read ${height}×${width} cells into ${table.name}`], context, {
+    document: { ...state.document, nextObjectId: created.document.nextObjectId },
+  });
+  return done.refused ? done : { ...done, state: withInteraction(done.state, { ...INITIAL_INTERACTION_STATE, selectedObjectIds: [table.id] }) };
+}
+
 /**
  * Runs an arrangement as one mutation batch, so one undo takes it back. The
  * report names how many units moved and which a formula held, and a
@@ -632,7 +773,9 @@ export type RewireGrab =
  * curve standing for one slot edge moves that edge. A curve standing for more
  * than one moves the row the operator picked in its panel, and refuses the
  * grab until a row is picked, because the gesture cannot say which edge it
- * means. The answer is undefined when no curve end is under the press.
+ * means. A curve end over an object grabs only when that curve is the picked
+ * one, so a press on the edge of an object still selects it. The answer is
+ * undefined when no curve end is under the press.
  */
 export function beginRewire(state: AppState, point: ScreenPoint): RewireGrab | undefined {
   if (!state.wires.visible) return undefined;
@@ -642,6 +785,11 @@ export function beginRewire(state: AppState, point: ScreenPoint): RewireGrab | u
   const placed = placedWires(state.document.objects).find((candidate) => Math.hypot(candidate.from.x - world.x, candidate.from.y - world.y) <= tolerance);
   if (placed === undefined) return undefined;
   const wire = placed.wire;
+  // The start of a curve sits on the edge of its object, so a press there
+  // selects the object, unless the operator picked that curve first.
+  const picked = state.wires.selected;
+  const isPicked = picked !== undefined && picked.sourceId === wire.sourceId && picked.readerId === wire.readerId;
+  if (!isPicked && hitTest(point, state.document.objects, camera) !== undefined) return undefined;
   if (wire.edges.length === 1) {
     return { kind: "grab", edge: wire.edges[0]!, placed };
   }
@@ -807,7 +955,7 @@ export function replaceDocument(
   savedJournal: readonly MutationJournalEntry[] | null = document.journal,
 ): AppState {
   const opened = initialAppState(document, state.log, context, savedJournal);
-  return withLog({ ...opened, wires: { visible: state.wires.visible, selected: undefined } }, [line]);
+  return withLog({ ...opened, wires: { visible: state.wires.visible, selected: undefined }, clipboard: state.clipboard }, [line]);
 }
 
 /** True when the document holds a change made since the last save or load. */
@@ -2349,6 +2497,64 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   };
   offerRecovery();
 
+  /** True while a copy or cut event writes the clipboard itself, so the transition leaves the browser call out. */
+  let writingClipboardEvent = false;
+
+  /** The one cell a copy or a paste acts on: the active cell of a selected table. */
+  const clipboardCell = (): CellCorner | undefined => {
+    if (activeCell === undefined || !state.interaction.selectedObjectIds.includes(activeCell.objectId)) return undefined;
+    const coordinates = parseCellReference(activeCell.cell);
+    return coordinates === undefined ? undefined : { tableId: activeCell.objectId, ...coordinates };
+  };
+
+  /**
+   * Whether a clipboard key belongs to the canvas. A field the operator types
+   * in keeps the browser's own copy and paste, and so does the command line
+   * while it holds text, so a command can still be copied and pasted.
+   */
+  const clipboardIsOurs = (event: ClipboardEvent): boolean => {
+    const target = event.target as HTMLElement | null;
+    if (target !== null && target !== input && (target.isContentEditable || target.closest("input, textarea, [contenteditable]") !== null)) return false;
+    if (document.activeElement === input && input.value !== "") return false;
+    return true;
+  };
+
+  const onCopy = (event: ClipboardEvent, cut: boolean): void => {
+    if (!clipboardIsOurs(event)) return;
+    const cell = clipboardCell();
+    const block = cell === undefined ? undefined : { tableId: cell.tableId, corner: { row: cell.row, column: cell.column }, size: { rows: 1, columns: 1 } };
+    if (block === undefined && state.interaction.selectedObjectIds.length === 0) return;
+    event.preventDefault();
+    const next = copyToClipboard(state, block, cut, evalContext);
+    if (next.clipboardText !== undefined && next.state.clipboard !== undefined) {
+      event.clipboardData?.setData("text/plain", next.clipboardText);
+      event.clipboardData?.setData(CLIPBOARD_MIME, JSON.stringify(next.state.clipboard));
+    }
+    writingClipboardEvent = true;
+    try {
+      applyTransition(next);
+    } finally {
+      writingClipboardEvent = false;
+    }
+  };
+  document.addEventListener("copy", (event) => onCopy(event, false));
+  document.addEventListener("cut", (event) => onCopy(event, true));
+  document.addEventListener("paste", (event) => {
+    if (!clipboardIsOurs(event)) return;
+    const cell = clipboardCell();
+    const data = event.clipboardData?.getData(CLIPBOARD_MIME) ?? "";
+    const text = event.clipboardData?.getData("text/plain") ?? "";
+    let payload: ClipboardPayload | undefined;
+    try {
+      payload = data === "" ? undefined : JSON.parse(data) as ClipboardPayload;
+    } catch {
+      payload = undefined;
+    }
+    if (payload === undefined && cell === undefined) return;
+    event.preventDefault();
+    applyTransition(pasteFromClipboard(state, { ...(payload === undefined ? {} : { payload }), text }, cell, viewport(), evalContext));
+  });
+
   const applyTransition = (next: AppTransition): void => {
     if (next.openEditor !== undefined) {
       inPlaceEditor = next.openEditor;
@@ -2365,6 +2571,14 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
         (message) => apply(logLine(state, message)),
         evalContext,
       );
+    } else if (next.fileRequest === "csv") {
+      const cell = next.importCell;
+      pickTextFile(".csv,text/csv,text/plain", (text) => applyTransition(importCsv(state, text, cell, viewport(), evalContext)), (message) => apply(logLine(state, message)));
+    }
+    if (next.clipboardText !== undefined && !writingClipboardEvent) {
+      // A typed copy has no clipboard event to write into, so it asks the
+      // browser, which may refuse. The clipboard of the program holds the copy either way.
+      void navigator.clipboard?.writeText(next.clipboardText).catch(() => undefined);
     }
     if (next.pickImageFor !== undefined) {
       const objectId = next.pickImageFor;
@@ -3528,6 +3742,22 @@ function downloadDocument(state: Document): void {
   anchor.click();
   anchor.remove();
   window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+/** The type under which a copy carries the clipboard of the program, beside its plain text. */
+const CLIPBOARD_MIME = "application/x-beheader+json";
+
+/** Asks for one text file and hands its contents on. */
+function pickTextFile(accept: string, onRead: (text: string) => void, onRefused: (message: string) => void): void {
+  const picker = document.createElement("input");
+  picker.type = "file";
+  picker.accept = accept;
+  picker.addEventListener("change", () => {
+    const file = picker.files?.[0];
+    if (file === undefined) return;
+    void file.text().then(onRead).catch((error: unknown) => onRefused(`could not read ${file.name}: ${error instanceof Error ? error.message : String(error)}`));
+  });
+  picker.click();
 }
 
 function openDocument(

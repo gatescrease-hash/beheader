@@ -828,6 +828,10 @@ describe("every registry command reaches a handler", () => {
     "arrange grid",
     "align left",
     "distribute x",
+    "copy",
+    "cut",
+    "paste",
+    "import csv",
   ];
 
   it("never throws for any command in the registry, run against an empty document — every word, not a sample of them", () => {
