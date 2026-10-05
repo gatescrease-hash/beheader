@@ -15,8 +15,8 @@ register, and the measurements behind leaving that migration unscheduled.
 | --- | --- |
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
-| Tests | 2891 Vitest tests and 2 tooling tests pass, with 0 skipped. |
-| Spec | Built through section 18 and section 21, except the parts section 17 postpones. Sections 19, 20 and 22 are partly built or unbuilt. |
+| Tests | 2902 Vitest tests and 2 tooling tests pass, with 0 skipped. |
+| Spec | Built through section 21, except the parts section 17 postpones. Section 22 is built for unsaved work alone. |
 | Scripts | Python runs in a Pyodide worker. Groups are script nodes with members. |
 | Rule 5 | Met for slot writes, cell clears, creates, renames and plain deletes. Other structural batches and refusals still cost the whole document. |
 | Workspace | Compact typography, a profile helmet, in-row style source controls, and full, compact and hidden sidebar modes with pointer and keyboard resizing. |
@@ -207,6 +207,11 @@ covers everything it calls.
 
 The only file that owns the browser. It holds `AppState`, the transitions over
 it, the panel model, and the wiring to real DOM elements.
+
+### `src/arrange.ts`
+
+The plans behind `arrange`, `align` and `distribute`, which move objects through
+the planner a drag uses. `main.ts` commits each plan as one batch.
 
 ### `src/recovery.ts`
 

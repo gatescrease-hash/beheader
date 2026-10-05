@@ -64,14 +64,6 @@ be taken back.
   out. A reader will know it is finished when it shares the growth and refusal
   path of a paste.
 
-The item below is what remains of the graph surface that sections 19 and 20
-open. The overlay, the graph queries and rewiring are built.
-
-- Arrange, align and distribute, as specified in Arrangement. A reader will know
-  it is finished when only literal positions move, the command reports how many
-  it left alone, `arrange flow` ranks by the dependency depth the evaluation
-  pass already computes, and the command refuses while undo is absent.
-
 ---
 
 ## Where the next items come from

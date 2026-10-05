@@ -140,6 +140,7 @@ import type {
   DeleteVertexCommand,
   EdgeTypeCommand,
   EdgeTypeName,
+  ArrangeCommand,
   ExplodeCommand,
   FindCommand,
   GraphWalkCommand,
@@ -186,6 +187,9 @@ export type CommandEffect =
   | { readonly kind: "save" }
   | { readonly kind: "load" }
   | { readonly kind: "wires"; readonly visible: boolean }
+  | { readonly kind: "arrange"; readonly mode: "flow" | "grid" | "tidy" }
+  | { readonly kind: "align"; readonly edge: "left" | "right" | "top" | "bottom" | "centerx" | "centery" }
+  | { readonly kind: "distribute"; readonly axis: "x" | "y" }
   | { readonly kind: "undo" }
   | { readonly kind: "redo" };
 
@@ -315,6 +319,10 @@ export function executeCommand(command: Command, document: Document, context: Ev
       return brokenCommand(document);
     case "find":
       return findCommand(command, document);
+    case "arrange":
+    case "align":
+    case "distribute":
+      return arrangeCommand(command, document);
     case "wires": {
       const state = command.state.toLowerCase();
       if (state !== "on" && state !== "off") {
@@ -371,7 +379,7 @@ export const COMMANDS_WITH_HANDLERS: readonly string[] = [
   "redo",
   "group",
   "ungroup",
-  "upstream", "downstream", "orphans", "broken", "find", "wires",
+  "upstream", "downstream", "orphans", "broken", "find", "wires", "arrange", "align", "distribute",
 ];
 
 interface LiteralSlotDeclaration {
@@ -1401,6 +1409,31 @@ function findCommand(command: FindCommand, document: Document): CommandOutcome {
     return { ok: false, message: "find needs some text to look for — usage: find <text>" };
   }
   return answerWithSelection(findText(document.objects, command.text), document, "object", `whose formulas or text hold "${command.text}"`);
+}
+
+const ARRANGE_MODES = ["flow", "grid", "tidy"] as const;
+const ALIGN_EDGES = ["left", "right", "top", "bottom", "centerx", "centery"] as const;
+const DISTRIBUTE_AXES = ["x", "y"] as const;
+
+/**
+ * Checks the word after `arrange`, `align` or `distribute`. The positions an
+ * arrangement writes depend on the boxes the render layer measures and on the
+ * selection, so the host plans and commits the batch, and this hands it the
+ * effect to run.
+ */
+function arrangeCommand(command: ArrangeCommand, document: Document): CommandOutcome {
+  const how = command.how.toLowerCase();
+  const usage = `usage: ${command.kind} ${(command.kind === "arrange" ? ARRANGE_MODES : command.kind === "align" ? ALIGN_EDGES : DISTRIBUTE_AXES).join("|")}`;
+  if (command.kind === "arrange") {
+    const mode = ARRANGE_MODES.find((candidate) => candidate === how);
+    return mode === undefined ? { ok: false, message: `arrange takes flow, grid or tidy, got "${command.how}" — ${usage}` } : { ok: true, document, lines: [], effect: { kind: "arrange", mode } };
+  }
+  if (command.kind === "align") {
+    const edge = ALIGN_EDGES.find((candidate) => candidate === how);
+    return edge === undefined ? { ok: false, message: `align takes an edge or a centre line, got "${command.how}" — ${usage}` } : { ok: true, document, lines: [], effect: { kind: "align", edge } };
+  }
+  const axis = DISTRIBUTE_AXES.find((candidate) => candidate === how);
+  return axis === undefined ? { ok: false, message: `distribute takes x or y, got "${command.how}" — ${usage}` } : { ok: true, document, lines: [], effect: { kind: "distribute", axis } };
 }
 
 /**

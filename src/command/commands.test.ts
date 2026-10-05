@@ -825,6 +825,9 @@ describe("every registry command reaches a handler", () => {
     "broken",
     "find polygon",
     "wires on",
+    "arrange grid",
+    "align left",
+    "distribute x",
   ];
 
   it("never throws for any command in the registry, run against an empty document — every word, not a sample of them", () => {

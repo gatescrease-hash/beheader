@@ -267,6 +267,12 @@ export interface WiresCommand {
   readonly state: string;
 }
 
+/** `arrange`, `align` and `distribute`, which move many positions in one batch. */
+export interface ArrangeCommand {
+  readonly kind: "arrange" | "align" | "distribute";
+  readonly how: string;
+}
+
 export interface UndoCommand {
   readonly kind: "undo";
 }
@@ -319,7 +325,8 @@ export type Command =
   | OrphansCommand
   | BrokenCommand
   | FindCommand
-  | WiresCommand;
+  | WiresCommand
+  | ArrangeCommand;
 
 export interface CommandParseSuccess {
   readonly ok: true;
@@ -841,6 +848,30 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
     named: [],
     flags: [],
     build: (args) => ({ kind: "wires", state: textArgument(args, "state") }),
+  },
+  {
+    name: "arrange",
+    usage: "arrange flow|grid|tidy",
+    positional: [text("how")],
+    named: [],
+    flags: [],
+    build: (args) => ({ kind: "arrange", how: textArgument(args, "how") }),
+  },
+  {
+    name: "align",
+    usage: "align left|right|top|bottom|centerx|centery",
+    positional: [text("how")],
+    named: [],
+    flags: [],
+    build: (args) => ({ kind: "align", how: textArgument(args, "how") }),
+  },
+  {
+    name: "distribute",
+    usage: "distribute x|y",
+    positional: [text("how")],
+    named: [],
+    flags: [],
+    build: (args) => ({ kind: "distribute", how: textArgument(args, "how") }),
   },
   {
     name: "props",

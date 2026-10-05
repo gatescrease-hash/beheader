@@ -398,7 +398,7 @@ export function pointerMove(
   }
 
   const plan = object.type === "group"
-    ? joinPlans([object, ...groupDescendants(object.id, objects)].map((moved) => planDrag(moved, objects, deltaX, deltaY, everyVertexOfPath(moved))))
+    ? planMove(object, objects, deltaX, deltaY)
     : planDrag(object, objects, deltaX, deltaY, drag.vertices);
   const { fresh: freshNotices, widened: widenedEmittedNotices } = widenEmittedNotices(drag, plan.notices);
   const advanced: InteractionState = {
@@ -631,9 +631,20 @@ interface ComponentPlan {
   readonly notice: string | undefined;
 }
 
-interface DragPlan {
+export interface DragPlan {
   readonly operations: readonly Operation[];
   readonly notices: readonly string[];
+}
+
+/**
+ * The writes that move a whole object by a delta, as a drag of it does: its
+ * origin, or every vertex of a path with no origin, and a group with
+ * everything in it. A slot a formula drives holds still and gives a notice.
+ * Arrangement moves objects through this, so it follows the rule of a drag.
+ */
+export function planMove(object: GraphObject, objects: readonly GraphObject[], deltaX: number, deltaY: number): DragPlan {
+  const moved = object.type === "group" ? [object, ...groupDescendants(object.id, objects)] : [object];
+  return joinPlans(moved.map((each) => planDrag(each, objects, deltaX, deltaY, everyVertexOfPath(each))));
 }
 
 /** One plan holding the writes and notices of several, which is how a group moves with everything in it. */

@@ -1771,6 +1771,17 @@ distribute x | y
 **An arrangement replaces positions an operator chose**, so it needs the undo of
 section 21 and refuses to run without it.
 
+An arrangement moves the selection when it holds two or more objects, and every
+object on the canvas otherwise. An object inside a group moves with its
+outermost group, as a drag of the group moves it. `arrange flow` ranks by the
+curves of section 19: an object that reads nothing takes the first column, and
+each other object takes the column after the deepest object it reads. `arrange
+tidy` snaps the top left corner of each box to the grid the canvas shows at the
+current zoom. `align` needs a selection of two, and `distribute` a selection of
+three, which keeps its outer two objects where they are and makes the gaps
+between neighbours equal. One arrangement is one mutation batch, so one undo
+takes all of it back.
+
 ---
 
 ## 21. Undo and redo

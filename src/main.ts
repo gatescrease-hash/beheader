@@ -119,6 +119,7 @@ import "./workspace.css";
 import { createCanvas2dTextMeasurer, createSourceTextMeasurer } from "./render/measure.ts";
 import { createScriptRunner, createWorkerBackend, type WorkerLike } from "./python/runner.ts";
 import { clearRecovery, isDirty, readRecovery, writeRecovery } from "./recovery.ts";
+import { planAlign, planArrange, planDistribute } from "./arrange.ts";
 import { createMathMeasurer, MATH_MACROS, mathMarkup, mathOverlayPlacement, readMathDrawnLatex, readMathLatex } from "./render/math.ts";
 import { hitTest } from "./render/hittest.ts";
 import { placedWires } from "./render/overlay.ts";
@@ -415,6 +416,10 @@ export function performEffect(effect: CommandEffect, state: AppState, viewport: 
       return transition(zoomBy(state, effect.factor, viewport));
     case "fit":
       return transition(fitToDocument(state, viewport));
+    case "arrange":
+    case "align":
+    case "distribute":
+      return applyArrangement(state, effect, context);
     case "wires":
       return transition({ ...state, wires: { visible: effect.visible, selected: effect.visible ? state.wires.selected : undefined } });
     case "save":
@@ -534,6 +539,39 @@ function describeEntry(entry: MutationJournalEntry, ...states: readonly (readonl
   const shown = names.length > 3 ? `${names.slice(0, 3).join(", ")} and ${names.length - 3} more` : names.join(", ");
   const count = entry.operations.length === 1 ? "one change" : `${entry.operations.length} changes`;
   return `${count} to ${shown}`;
+}
+
+/**
+ * Runs an arrangement as one mutation batch, so one undo takes it back. The
+ * report names how many units moved and which a formula held, and a
+ * selection too small for `align` or `distribute` refuses with the count it
+ * needs.
+ */
+function applyArrangement(
+  state: AppState,
+  effect: Extract<CommandEffect, { kind: "arrange" | "align" | "distribute" }>,
+  context: EvalContext,
+): AppTransition {
+  const { objects } = state.document;
+  const selected = state.interaction.selectedObjectIds;
+  const label = effect.kind === "arrange" ? `arrange ${effect.mode}` : effect.kind === "align" ? `align ${effect.edge}` : `distribute ${effect.axis}`;
+  const needed = effect.kind === "align" ? 2 : effect.kind === "distribute" ? 3 : 0;
+  if (needed > 0 && selected.length < needed) {
+    return transition(logLine(state, `${label} works on a selection of ${needed} or more objects — ${selected.length} selected`), true);
+  }
+  const plan = effect.kind === "arrange"
+    ? planArrange(objects, selected, effect.mode, state.document.camera)
+    : effect.kind === "align" ? planAlign(objects, selected, effect.edge) : planDistribute(objects, selected, effect.axis);
+  const heldLine = plan.held.length === 0 ? [] : [`left ${plan.held.length === 1 ? "1 where a formula holds it" : `${plan.held.length} where formulas hold them`}: ${plan.held.join(", ")}`];
+  if (plan.operations.length === 0) {
+    return transition(withLog(state, [`${label} moved nothing`, ...heldLine]));
+  }
+  const result = mutate(objects, plan.operations, state.document.journal, context);
+  if (!result.ok) {
+    return transition(withLog({ ...state, refusedCycle: result.cycle }, [result.message]), true);
+  }
+  const moved = { ...state, document: { ...state.document, objects: result.objects, journal: result.journal }, refusedCycle: undefined };
+  return transition(withLog(moved, [`${label} moved ${plan.moved.length === 1 ? "1 object" : `${plan.moved.length} objects`}`, ...heldLine]));
 }
 
 /** How near a curve a press lands to pick it, in screen pixels. */
