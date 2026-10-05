@@ -86,8 +86,8 @@ Keep the core simple and safe. Push complexity to the edges.
 | Runtime | Browser, one process |
 | Build tool | Vite |
 | Drawing | Canvas2D, immediate mode |
-| Runtime dependencies | One, MathLive, for mathematical notation. See section 12. |
-| Python scripts | Not built. A stub node stands in. See section 11. |
+| Runtime dependencies | Two. MathLive for mathematical notation, see section 12, and Pyodide for Python, see section 11. |
+| Python scripts | Pyodide, which is CPython built for WebAssembly, in a Web Worker. The program serves it from its own files. See section 11. |
 | Storage | Versioned JSON. Save by download. Load by file input. |
 
 **Why Canvas2D and not SVG.** Immediate mode redraw maps onto the loop
@@ -95,12 +95,13 @@ Keep the core simple and safe. Push complexity to the edges.
 nodes tempt a writer to put drawing state back into the data model. That is the
 exact coupling this design avoids.
 
-**The desktop direction.** A Tauri shell and a local Python interpreter as a
-subprocess. A browser cannot spawn a process, so the script nodes of section 11
-stay stubs until the program has a native host. A Tauri shell runs the existing
-TypeScript and Canvas2D front end inside a webview, so packaging the program for
-the desktop does not depend on the language the engine is written in. Do not
-implement it yet.
+**The desktop direction.** A Tauri shell. It runs the existing TypeScript and
+Canvas2D front end inside a webview, so packaging the program for the desktop
+does not depend on the language the engine is written in. Python no longer
+waits on it: the script nodes of section 11 run in the browser, through
+Pyodide in a worker, and the same worker runs inside a webview unchanged. A
+native Python process remains an option for a script that needs a package
+Pyodide cannot load. Do not implement the shell yet.
 
 **A Rust engine is a deferred option rather than a plan.** Rust was selected
 while the product aimed at CAD scale, where a document holds hundreds of
@@ -285,7 +286,8 @@ compute function. Dependencies come in two forms:
 - **Dynamic.** A function of the current state of the object. Two cases need
   this form. `text_1.resolvedContent` depends on whatever slots its block tree
   names, and that set changes with every edit. `script_1.out.*` depends on the
-  `in.*` ports that exist now, and the operator adds and removes those.
+  `in.*` ports that exist now, which the operator adds and removes, and on the
+  source.
 
 A dynamic dependency function runs at edge derivation time, never during
 evaluation. That is what keeps Rule 6 true.
@@ -678,54 +680,119 @@ ratio by default. Slots: `origin.x`, `origin.y`, `width`, `height`, `opacity`.
 
 ## 11. The script node
 
-The node is a real graph citizen. Its execution is fake.
-
-The eventual design is a local Python interpreter that stays warm but holds no
-state. The process stays alive for speed. Each run gets a fresh namespace,
-because reused globals destroy the purity that the safety model needs.
+A script node is a box of Python with input ports and output ports. It is a
+real graph citizen: its ports are ordinary slots, its outputs are derived slots,
+and formulas anywhere read them by address.
 
 **Ports are ordinary slots.** Do not invent a second address mechanism.
 
 - `in.<port>` is a normal formula slot, a binding to some upstream address. Its
   address is `script_1.in.speed`. An explicit mutation creates and removes it.
 - `out.<port>` is a normal derived slot. Its address is `script_1.out.result`.
-  Its schema declares all of the `in.*` slots of the node as inputs. Its compute
-  function is the stub.
-- `source` is a literal slot that holds the code of the operator. The program
-  stores it and never runs it. It is not an input to any derived slot, so an
-  edit to it must not trigger a recompute.
+  Its schema declares every `in.*` slot of the node, the source and the port's
+  placeholder as inputs.
+- `placeholder.<port>` is a literal slot. An output shows it while the node has
+  no code, and wherever no Python runtime exists, such as a headless test.
+- `source` is a literal slot holding the operator's code. An edit to it runs the
+  script again, because the outputs read it.
 
-```
-ScriptNode {
-  language: "python"
-  source: string
-  in:  Record<string, Slot>
-  out: Record<string, Slot>
-  placeholders: Record<string, Value>
-}
-```
+**The contract.** The source is the body of a function. Each input port is a
+variable of its name, and the script ends with `return {"port": value, ...}`.
+Each output port takes the entry of its name from that dict. A number, a string,
+a bool and None carry over. A dict holding exactly `x` and `y` becomes a point,
+and a list of those becomes a list of points. Anything else, a missing entry, an
+exception and a syntax error each become `#SCRIPT`, with the line of the script
+an exception came from. The operator declares the ports with `addport`.
+Discovering inputs at run time from the reads a script makes is left for later.
 
-The operator declares ports by hand for now. In the real system, instrumented
-proxies find the inputs at runtime and the outputs come from a `return` dict. Do
-not try either now.
+**Purity.** Each run starts from a fresh namespace holding the inputs and
+nothing else, in an interpreter that stays loaded because loading it takes
+seconds. A script that could read what an earlier run left behind would give an
+answer that depends on history, and the host caches answers by source and inputs
+alone.
 
-The execution function is a one function seam:
+**Runs are asynchronous, and evaluation never waits.** The evaluation context
+carries a script runner, which answers at once from the host's cache of finished
+runs. A request it has not finished shows as `#PENDING` in each output while the
+host runs it in a Web Worker. When the answer arrives, the host evaluates the
+slots that read the evaluation context again, without a journal entry, because
+no state changed. A script output declares that it reads the context for that
+reason. A run past five seconds stops its worker, because Python gives a running
+script no safe way to be stopped from outside, and gives `#SCRIPT`. A drag that
+moves an input through many values queues the latest of them for each source.
+
+The execution function is the one seam, and the evaluator knows nothing about
+scripts:
 
 ```typescript
 export function evaluateScriptOutput(
   node: ScriptNode,
   portName: string,
   inputs: Record<string, Value>,
-): Value {
-  return node.placeholders[portName] ?? null;
-}
+  runner?: ScriptRunner,
+): Value
 ```
 
-When Python arrives, only this body changes. **Script logic must never leak
-into `graph/eval.ts`.** To the evaluator this is one more derived slot.
+**Script logic must never leak into `graph/eval.ts`.** To the evaluator this is
+one more derived slot.
 
-Draw the node as a labelled box. Put input ports on the left and output ports on
-the right.
+Pyodide loads the standard library alone. A package outside it, such as numpy,
+would need a network fetch or a bundled copy, and neither is built.
+
+**Drawing and editing.** The node draws as a labelled box, with input ports on
+the left and output ports on the right, each output showing the value it holds
+now, and a mark in its header for the state of its last run. A double click opens
+a Python editor over the canvas, which lists the outputs as they arrive. Ctrl
+and Enter run the source.
+
+### Groups
+
+A group is a script node with members. It carries the node's `in.*`, `out.*`,
+`placeholder.*` and `source` slots, and an `origin`. Its ports are the interface
+the rest of the document reads and writes it through, and an empty source makes
+it a plain group.
+
+**Membership sits on the member,** as a literal `view.group` slot holding the
+group's ID, the same way a layer membership does. Each object belongs to one
+group at most, a group can sit inside another, and the integrity check refuses a
+group that sits inside itself through any chain. Layer membership is separate
+and unaffected.
+
+**The script never writes a member.** Evaluation never writes state. A member
+follows its group through ordinary formulas that read the group's outputs or its
+origin, such as `circle_2.radius = group_2.out.r` or
+`rect_1.origin.x = group_1.origin.x + 20`, so every relation inside a group is an
+edge of the one graph, under the same cycle check as any other. A formula over
+the origin is how a member gets a frame.
+
+**Coordinates stay absolute.** Dragging a group writes its origin and the
+literal coordinates of everything inside it, at any depth, as one batch, under
+the per component rule of section 14, and a gesture leaves one journal entry.
+A frame relative to the group would make `circle_1.origin.x` stop meaning a
+position on the canvas for every formula outside the group, and every reader of
+geometry would have to compose transforms up the chain of groups.
+
+**The boundary is soft.** A group draws a dashed rounded box around its origin
+and everything inside it, with padding and a tab carrying its name and the state
+of its script. It clips nothing, and a member that moves away stretches it. It
+hits on its outline and its tab alone, so an object inside stays clickable
+through it. The boundary is drawn rather than addressable, because a derived
+bounds slot would depend on members found by a scan rather than on the group's
+own state.
+
+**Selecting.** A press on a member selects its outermost group, or whichever
+level of the way down is already selected, so a selected group drags as a whole
+and a member selected by name stays selected. A double click goes one level in,
+and on the object itself opens its editor. A double click on a group's outline or
+tab opens its Python.
+
+**Dissolving.** `ungroup`, and `delete` on a group, both remove the group and
+move its members to the group it sat in, where they stay. A formula that reads
+the group refuses it by name unless `force` rewrites the formula to `#REF`.
+`group a,b,c` and Ctrl and G group objects, nesting inside the group they share.
+
+Copying a group with its members, with references inside it pointing at the
+copies, belongs to the clipboard of section 22.
 
 ---
 
@@ -1416,6 +1483,8 @@ text x=0 y=0 "Hello {= table_x.A1 }"
 table x=0 y=0 rows=8 cols=8
 script x=0 y=0
 image x=0 y=0
+group circle_1,rect_1
+ungroup group_1 [force]
 
 link polygon_1.origin.x table_x.A1
 unlink polygon_1.origin.x
@@ -1428,8 +1497,8 @@ addvertex polyline_1 100,100
 delvertex polyline_1 2
 split polyline_1 0 50,50
 edgetype polyline_1 0 arc
-addport script_1 in factor
-removeport script_1 in factor
+addport script_1.in.factor
+removeport script_1.in.factor
 
 refs intersection_a
 props intersection_a
@@ -1515,9 +1584,6 @@ still saves and loads, and creation returns a refusal without changing it.
 
 The team considered each item below and postponed it on purpose.
 
-- **Python execution of any kind.** Script nodes are stubs.
-- **Compound objects, containers or groups.** The design depends on real
-  scripts, so it waits for them. Do not invent a substitute.
 - **Drag through to source.** A drag on a bound object must not write to the
   upstream literal. The behaviour has no definition when the upstream is itself a
   formula. The per component rule of section 14 is the answer for now.
@@ -1546,10 +1612,10 @@ The team considered each item below and postponed it on purpose.
 - **WebGPU.** The Canvas2D renderer draws the current document at the sizes
   section 1 describes. A GPU renderer replaces the drawing layer when a measured
   drawing cost calls for it, and it depends on no decision about the engine.
-- **A Tauri shell, and Python as a subprocess.** These two arrive together,
-  because a native host is what allows a script node to run. Neither waits on a
-  Rust engine, because a Tauri shell runs the TypeScript front end that already
-  exists.
+- **A Tauri shell.** Section 2 gives the reason it waits. Scripts no longer
+  depend on it.
+- **Python packages outside the standard library, and port discovery from the
+  reads a script makes.** Section 11 says why each waits.
 - **Extra command words.** Add a command when a task needs it.
 
 ---
@@ -1574,8 +1640,8 @@ shows membership and each property's source, supports multiple selected objects,
 and restores inheritance without moving an object to another layer. A layer
 slot accepts ordinary formulas, including references to table cells. Hidden
 objects still evaluate and remain listed. Drawing and picking use the same
-visibility and ordering rules. Layers are released from the group deferral
-above, with compound geometry and script containers still deferred.
+visibility and ordering rules. Layers organise and style, and the groups of
+section 11 hold and move, so the two memberships stay separate.
 
 ---
 

@@ -94,8 +94,8 @@ comes first, because rewiring and arrangement both read what it draws.
 
 Section 17 of `SPEC.md` lists what the team postponed on purpose. That list is
 the boundary of the work, and an item moves here only when the spec releases
-it. Python execution behind `evaluateScriptOutput` is the largest of them, and
-section 11 of the spec holds the seam it arrives through.
+it. Python packages beyond the standard library, and port discovery from the
+reads a script makes, are the next of them that section 11 points at.
 
 An item that the spec does not cover needs the spec first. Write the
 requirement there, then open the item here.

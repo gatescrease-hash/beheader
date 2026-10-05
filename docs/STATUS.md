@@ -15,8 +15,9 @@ register, and the measurements behind leaving that migration unscheduled.
 | --- | --- |
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
-| Tests | 2810 Vitest tests and 2 tooling tests pass, with 0 skipped. |
+| Tests | 2848 Vitest tests and 2 tooling tests pass, with 0 skipped. |
 | Spec | Built through section 18, except the parts section 17 postpones, and section 21. Sections 19, 20 and 22 are unbuilt, and Rule 5 is partly built. |
+| Scripts | Python runs in a Pyodide worker. Groups are script nodes with members. |
 | Rule 5 | Met for slot writes, cell clears, creates, renames and plain deletes. Other structural batches and refusals still cost the whole document. |
 | Workspace | Compact typography, a profile helmet, in-row style source controls, and full, compact and hidden sidebar modes with pointer and keyboard resizing. |
 
@@ -35,14 +36,15 @@ npm run prose        # the prose checker, must give exit code 0
 
 ## 2. The layers, and why they exist
 
-The repository has four layers. The import direction is one way.
+The repository has five layers. The import direction is one way.
 
 ```
    command/  ---.
                  \
-   render/   -----+---> engine/          main.ts wires all three together
+   render/   -----+---> engine/          main.ts wires all four together
                  /
-   (main.ts) ---'
+   python/   ---'
+   (main.ts)
 ```
 
 **`src/engine/`** is pure logic. It holds the data model, the graph, the
@@ -73,6 +75,14 @@ argument it needs, and runs the handlers.
 Why. The command line is the main way to author a document. A table driven
 parser means one registry entry adds a command.
 
+**`src/python/`** runs scripts. It gives the engine a script runner, runs each
+request in a Web Worker that loads Pyodide, and reports back when an answer
+arrives. It imports from `engine/` alone.
+
+Why. Running Python takes seconds to start and has no bound on how long a run
+takes, so it happens off the main thread, and the engine sees only a runner
+that answers at once. A worker also runs inside a desktop webview unchanged.
+
 **`src/main.ts`** owns the browser. It holds the application state, finds the
 DOM elements, and connects the other three layers.
 
@@ -89,9 +99,11 @@ next to the code, where an edit cannot miss it. Section 4 holds the invariants
 that span more than one file, because no single header owns those.
 
 Every source file has a test file beside it with the same name plus
-`.test.ts`. The map below names the source file only. Two files have no test of
-their own: `primitives/image.ts` and `render/slots.ts`. Both are constant
-tables, and other suites drive them anyway.
+`.test.ts`. The map below names the source file only. Three files have no test
+of their own. `primitives/image.ts` and `render/slots.ts` are constant tables,
+and other suites drive them anyway. `python/worker.ts` runs only inside a
+browser worker, and the look on screen covers it, while `execute.test.ts`
+covers everything it calls.
 
 ### Root
 
@@ -103,7 +115,7 @@ tables, and other suites drive them anyway.
 | `package.json` | Scripts, dev dependencies, and the one runtime dependency, MathLive. |
 | `tsconfig.json` | Strict mode over the whole of `src`. |
 | `tsconfig.engine.json` | The narrower config over `src/engine/` alone, which fails when the engine reaches the DOM. |
-| `vite.config.ts` | Dev server, production build, and the Vitest settings. |
+| `vite.config.ts` | Dev server, production build, the Pyodide assets, and the Vitest settings. |
 | `tools/prose-check.mjs` | The prose checker that enforces `docs/STYLE.md`. |
 
 ### `src/engine/` - the pure core
@@ -140,7 +152,8 @@ tables, and other suites drive them anyway.
 | `math/parser.ts` | Tokens to a program, with implicit multiplication, the binding forms and the implicit line. |
 | `math/names.ts` | Which names are bound, which are defined, which are solved for, and which become input ports. |
 | `math/eval.ts` | A program and its inputs to a value for each export, the search for a root included. |
-| `script/script.ts` | The script node and its ports. |
+| `script/script.ts` | The script node, its ports, and the one seam a run goes through. |
+| `groups.ts` | Group membership, its integrity rule, and the operations that group and ungroup. |
 | `mutation.ts` | The state-change channel, its operations and evaluation strategies. |
 | `journal.ts` | Replay of the journal, and the undo that rests on it. |
 | `document.ts` | Save and load, and the versioned JSON format. |
@@ -166,6 +179,14 @@ tables, and other suites drive them anyway.
 | `editor.ts` | Where the in place editor goes, and how it looks. |
 | `interaction.ts` | Pointer state to mutation calls: select, drag, resize and bend. |
 | `panel.ts` | Where a properties panel sits beside its object. |
+
+### `src/python/` - the Python host
+
+| File | Purpose |
+| --- | --- |
+| `runner.ts` | The script runner the engine reads: the answer cache, the queue, and the worker with its timeout. |
+| `execute.ts` | One run in a loaded interpreter: the wrapped source, the fresh namespace, and the error line. |
+| `worker.ts` | The Web Worker that loads Pyodide from the program's own files and runs requests. |
 
 ### `src/command/`
 
@@ -355,6 +376,25 @@ the code it constrains.
    `objectFacts` does not record leaves a stale edge or a missed refusal on
    the indexed path while the whole-document path stays right. The
    differential test finds it only for an operation its generator produces.
+
+25. **A script answer reaches the document without a journal entry.** The
+   engine asks the runner in `python/runner.ts` through the evaluation
+   context, and a request the runner has not finished shows `#PENDING`. When
+   the answer arrives, `main.ts` evaluates the slots that read the context
+   again through `refreshHostInputs`, and every script output declares that it
+   reads the context, in `script/script.ts`, for that reason. A replay, an undo
+   and the differential test all reach the same answers because the runner
+   caches them by source and inputs. The cache is sound only because
+   `python/execute.ts` gives every run a fresh namespace, so an answer depends
+   on nothing else.
+26. **Group membership and layer membership follow one pattern in four
+   places.** Each is a literal slot on the member, checked in
+   `validateIntegrity` and in `crossObjectProblem` in `mutation.ts`, recorded
+   by `objectFacts`, and sent down the whole-document path when written,
+   because the group loop check in `groups.ts` walks up through other groups.
+   The render layer draws groups before everything else and hit-tests them
+   last, in `renderer.ts` and `hittest.ts`, so a member stays clickable through
+   its group's box.
 
 ---
 
