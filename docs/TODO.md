@@ -64,13 +64,9 @@ be taken back.
   out. A reader will know it is finished when it shares the growth and refusal
   path of a paste.
 
-The items below are the graph surface that sections 19 and 20 open. The overlay
-comes first, because rewiring and arrangement both read what it draws.
+The item below is what remains of the graph surface that sections 19 and 20
+open. The overlay, the graph queries and rewiring are built.
 
-- Rewire a slot by dragging the reading end of a curve. A reader will know it is
-  finished when the drag rewrites every occurrence of the old address in that
-  formula, a drag closing a cycle refuses and names the slot, and a curve
-  standing for more than one slot edge refuses the drag.
 - Arrange, align and distribute, as specified in Arrangement. A reader will know
   it is finished when only literal positions move, the command reports how many
   it left alone, `arrange flow` ranks by the dependency depth the evaluation

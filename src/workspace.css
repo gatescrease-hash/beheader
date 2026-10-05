@@ -287,3 +287,7 @@ kbd { font: inherit; border: 1px solid var(--line); border-radius: 3px; padding:
   list-style: none;
   font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
+.wire-panel__row { cursor: pointer; padding: 0 4px; border-radius: 3px; }
+.wire-panel__row:hover { background: var(--paper-deep); }
+.wire-panel__row--picked { background: #dce0c9; }
+.wire-panel__hint { margin-top: 6px; color: var(--muted); font-size: 11px; }

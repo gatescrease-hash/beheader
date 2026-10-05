@@ -122,7 +122,8 @@ import { clearRecovery, isDirty, readRecovery, writeRecovery } from "./recovery.
 import { createMathMeasurer, MATH_MACROS, mathMarkup, mathOverlayPlacement, readMathDrawnLatex, readMathLatex } from "./render/math.ts";
 import { hitTest } from "./render/hittest.ts";
 import { placedWires } from "./render/overlay.ts";
-import { objectWires, wireAt, type Wire } from "./render/wires.ts";
+import { objectWires, wireAt, type PlacedWire, type Wire } from "./render/wires.ts";
+import { planRewire } from "./command/rewire.ts";
 import { worldToScreen } from "./render/camera.ts";
 import type { TextMathRun } from "./render/renderer.ts";
 import {
@@ -172,6 +173,8 @@ export interface WiresState {
   readonly visible: boolean;
   /** The curve the operator picked, by the object that is read and the object that reads it. */
   readonly selected: { readonly sourceId: string; readonly readerId: string } | undefined;
+  /** The row the operator picked among the edges of the selected curve, which a rewire then moves. */
+  readonly row?: number;
 }
 
 export const INITIAL_WIRES_STATE: WiresState = { visible: false, selected: undefined };
@@ -560,7 +563,7 @@ export function pickWireAt(state: AppState, point: ScreenPoint): AppState | unde
     return undefined;
   }
   const { sourceId, readerId } = picked.wire;
-  const selected = withInteraction({ ...state, wires: { ...state.wires, selected: { sourceId, readerId } } }, deselect());
+  const selected = withInteraction({ ...state, wires: { visible: state.wires.visible, selected: { sourceId, readerId } } }, deselect());
   return withLog(selected, wireEdgeLines(state.document.objects, picked.wire.edges));
 }
 
@@ -577,6 +580,88 @@ export function wireEdgeLines(objects: readonly GraphObject[], edges: readonly E
     return typeof formatted === "string" ? formatted : formatted.message;
   };
   return edges.map((edge) => `${name(edge.sourceSlot)} → ${name(edge.dependentSlot)}`);
+}
+
+/** How near the source end of a curve a press lands to grab it for a rewire, in screen pixels. */
+const WIRE_GRAB_TOLERANCE_SCREEN = 8;
+
+export type RewireGrab =
+  | { readonly kind: "grab"; readonly edge: Edge; readonly placed: PlacedWire }
+  | { readonly kind: "refused"; readonly state: AppState };
+
+/**
+ * Grabs the source end of a curve for a rewire, while the overlay is on. A
+ * curve standing for one slot edge moves that edge. A curve standing for more
+ * than one moves the row the operator picked in its panel, and refuses the
+ * grab until a row is picked, because the gesture cannot say which edge it
+ * means. The answer is undefined when no curve end is under the press.
+ */
+export function beginRewire(state: AppState, point: ScreenPoint): RewireGrab | undefined {
+  if (!state.wires.visible) return undefined;
+  const camera = state.document.camera;
+  const world = screenToWorld(camera, point);
+  const tolerance = WIRE_GRAB_TOLERANCE_SCREEN / camera.zoom;
+  const placed = placedWires(state.document.objects).find((candidate) => Math.hypot(candidate.from.x - world.x, candidate.from.y - world.y) <= tolerance);
+  if (placed === undefined) return undefined;
+  const wire = placed.wire;
+  if (wire.edges.length === 1) {
+    return { kind: "grab", edge: wire.edges[0]!, placed };
+  }
+  const selected = state.wires.selected;
+  const row = selected !== undefined && selected.sourceId === wire.sourceId && selected.readerId === wire.readerId ? state.wires.row : undefined;
+  const edge = row === undefined ? undefined : wire.edges[row];
+  if (edge !== undefined) {
+    return { kind: "grab", edge, placed };
+  }
+  const name = (id: string): string => state.document.objects.find((object) => object.id === id)?.name ?? id;
+  return {
+    kind: "refused",
+    state: withLog(state, [`the curve from ${name(wire.sourceId)} to ${name(wire.readerId)} stands for ${wire.edges.length} slot edges — click it and pick a row first`]),
+  };
+}
+
+/**
+ * The address a dropped curve end reads from now on. A table gives the cell
+ * under the drop, a copy of a variable gives the variable, and any other
+ * object gives its slot at the path the edge read before, when it has one.
+ */
+export function rewireDropAddress(state: AppState, edge: Edge, point: ScreenPoint): { readonly ok: true; readonly address: Address } | { readonly ok: false; readonly message: string } {
+  const { objects, camera } = state.document;
+  const target = hitTest(point, objects, camera);
+  if (target === undefined) {
+    return { ok: false, message: "the curve end landed on empty canvas, so nothing changed" };
+  }
+  if (target.type === "table") {
+    const cell = editorTargetAt(point, objects, camera);
+    return cell?.kind === "cell" && cell.objectId === target.id
+      ? { ok: true, address: { objectId: target.id, path: ["cells", cell.cell] } }
+      : { ok: false, message: `drop on a cell of ${target.name} to read it` };
+  }
+  if (target.type === "docref" && target.target !== undefined) {
+    return { ok: true, address: target.target };
+  }
+  if (target.slots[slotKey(edge.sourceSlot.path)] !== undefined) {
+    return { ok: true, address: { objectId: target.id, path: edge.sourceSlot.path } };
+  }
+  return { ok: false, message: `${target.name} has no slot ${slotKey(edge.sourceSlot.path)} to read — type the formula to read another slot` };
+}
+
+/** Finishes a rewire at the drop point, through the `set` line that writes the new formula. */
+export function finishRewire(state: AppState, edge: Edge, point: ScreenPoint, viewport: Viewport, context: EvalContext = NULL_EVAL_CONTEXT): AppTransition {
+  const dropped = rewireDropAddress(state, edge, point);
+  if (!dropped.ok) {
+    return transition(withLog(state, [dropped.message]), true);
+  }
+  const plan = planRewire(state.document.objects, edge, dropped.address);
+  if (!plan.ok) {
+    return transition(withLog(state, [plan.message]), true);
+  }
+  return submitLine(state, plan.line, viewport, context);
+}
+
+/** Picks one row of the selected curve's panel, which the next rewire of that curve moves. */
+export function pickWireRow(state: AppState, row: number): AppState {
+  return state.wires.selected === undefined ? state : { ...state, wires: { ...state.wires, row } };
 }
 
 /** The curve the operator picked, while both of its objects and an edge between them remain. */
@@ -1429,6 +1514,8 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   let gridVisible = true;
   /** The object under the pointer while the overlay is on, whose curves draw at full strength. */
   let hoveredObjectId: string | undefined;
+  /** A rewire under way: the edge it moves, its curve, and where the grabbed end is now. */
+  let rewireDrag: { readonly edge: Edge; readonly placed: PlacedWire; pointer?: WorldPoint } | undefined;
   const wiresToggle = document.querySelector<HTMLElement>("#wires-toggle");
   const wirePanel = document.createElement("div");
   wirePanel.className = "wire-panel";
@@ -1451,12 +1538,24 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     title.textContent = `${name(wire.sourceId)} → ${name(wire.readerId)} · ${wire.edges.length === 1 ? "1 edge" : `${wire.edges.length} edges`}`;
     const rows = document.createElement("ul");
     rows.className = "wire-panel__rows";
-    for (const line of wireEdgeLines(state.document.objects, wire.edges)) {
+    wireEdgeLines(state.document.objects, wire.edges).forEach((line, index) => {
       const row = document.createElement("li");
       row.textContent = line;
+      if (wire.edges.length > 1) {
+        // A curve with more than one edge rewires the row picked here.
+        row.className = state.wires.row === index ? "wire-panel__row wire-panel__row--picked" : "wire-panel__row";
+        row.tabIndex = 0;
+        row.addEventListener("pointerdown", (event) => event.preventDefault());
+        row.addEventListener("click", () => apply(pickWireRow(state, index)));
+      }
       rows.append(row);
-    }
-    wirePanel.replaceChildren(title, rows);
+    });
+    const hint = document.createElement("div");
+    hint.className = "wire-panel__hint";
+    hint.textContent = wire.edges.length === 1 || state.wires.row !== undefined
+      ? "Drag the start of the curve onto another object to read from it."
+      : "Pick a row, then drag the start of the curve to rewire that slot.";
+    wirePanel.replaceChildren(title, rows, hint);
     wirePanel.hidden = false;
   };
   let inPlaceMirror: HTMLElement | undefined;
@@ -1517,6 +1616,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
         ...(hoveredObjectId === undefined ? {} : { hoveredObjectId }),
         ...(selectedWire(state) === undefined || state.wires.selected === undefined ? {} : { selectedWire: state.wires.selected }),
         ...(state.refusedCycle === undefined ? {} : { cycle: state.refusedCycle }),
+        ...(rewireDrag?.pointer === undefined ? {} : { rewire: { pointer: rewireDrag.pointer, to: rewireDrag.placed.to } }),
       },
     );
     updateWirePanel();
@@ -2773,6 +2873,16 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     if (tableResize) return;
     const cell = editorTargetAt(point, state.document.objects, state.document.camera);
     activeCell = cell?.kind === "cell" ? { objectId: cell.objectId, cell: cell.cell } : undefined;
+    const grab = beginRewire(state, point);
+    if (grab?.kind === "refused") {
+      apply(grab.state);
+      return;
+    }
+    if (grab?.kind === "grab") {
+      rewireDrag = { edge: grab.edge, placed: grab.placed, pointer: screenToWorld(state.document.camera, point) };
+      paint();
+      return;
+    }
     const picked = pickWireAt(state, point);
     if (picked !== undefined) {
       apply(picked);
@@ -2867,6 +2977,12 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       tableResize.value = Math.max(tableResize.axis === "column" ? 24 : 20, Math.round(tableResize.size + (tableResize.axis === "column" ? world.x : world.y) - tableResize.start));
       paint(); return;
     }
+    if (rewireDrag !== undefined) {
+      rewireDrag.pointer = screenToWorld(state.document.camera, point);
+      canvas.style.cursor = "grabbing";
+      paint();
+      return;
+    }
     if (pan !== undefined) {
       apply(panByScreen(state, point.x - pan.lastScreenX, point.y - pan.lastScreenY));
       pan = { lastScreenX: point.x, lastScreenY: point.y };
@@ -2879,6 +2995,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     // Hover dims the curves that leave the object alone, and only while no
     // button is held, so a drag keeps the overlay as it was at the press.
     hoveredObjectId = state.wires.visible && event.buttons === 0 ? hitTest(point, state.document.objects, state.document.camera)?.id : undefined;
+    if (event.buttons === 0 && beginRewire(state, point) !== undefined) canvas.style.cursor = "grab";
     apply(pointerMoveTo(state, point, evalContext));
   });
 
@@ -2892,6 +3009,17 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
 
   const endGesture = (event: PointerEvent): void => {
     if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+    if (rewireDrag !== undefined) {
+      const drag = rewireDrag;
+      rewireDrag = undefined;
+      canvas.style.cursor = "";
+      if (event.type === "pointercancel") {
+        paint();
+      } else {
+        applyTransition(finishRewire(state, drag.edge, screenPointOf(event), viewport(), evalContext));
+      }
+      return;
+    }
     if (tableResize) {
       const resize = tableResize; tableResize = undefined;
       if (event.type !== "pointercancel" && resize.value !== resize.size) applyOperations([setLiteral(resize.objectId, [resize.axis === "column" ? "columns" : "rowsizes", String(resize.index), resize.axis === "column" ? "width" : "height"], resize.value)]);

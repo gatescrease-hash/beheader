@@ -1699,6 +1699,15 @@ A curve standing for more than one slot edge refuses a drag, because the gesture
 cannot say which of them it moves. Select the curve, pick a row, and rewire that
 one.
 
+The end that moves is the end at the object being read, because only that end
+can go to another source. A drop on a table reads the cell under the pointer, a
+drop on a copy of a variable reads the variable, and a drop on any other object
+reads its slot at the same path the edge read before. A drop that names no slot
+changes nothing and says why. A range inside the formula stays as it is, so an
+edge the formula reads only through a range refuses the rewire. A text box reads
+through its content, which holds text as well as formulas, so its curve refuses
+the rewire and names the content to edit.
+
 ### The graph as a selection
 
 These commands answer with a selection rather than with a list, so every other

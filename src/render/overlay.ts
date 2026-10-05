@@ -31,6 +31,8 @@ export interface WireOverlay {
   readonly selectedWire?: Pick<Wire, "sourceId" | "readerId">;
   /** The ring of slots a refused cycle named, which draws until the next change. */
   readonly cycle?: readonly Address[];
+  /** A rewire under way: the grabbed curve end follows the pointer, and the reading end holds still. */
+  readonly rewire?: { readonly pointer: Point; readonly to: Point };
 }
 
 const WIRE_STYLE = "rgba(91, 100, 114, 0.55)";
@@ -88,6 +90,11 @@ export function drawWiresOver(ctx: CanvasRenderingContext2D, camera: CameraState
     }
   }
   if (overlay.cycle !== undefined) drawCycle(ctx, camera, objects, all, overlay.cycle);
+  if (overlay.rewire !== undefined) {
+    const { pointer, to } = overlay.rewire;
+    const straight = { wire: { sourceId: "", readerId: "", edges: [] }, from: pointer, control1: pointer, control2: to, to };
+    drawCurve(ctx, camera, straight, WIRE_SELECTED_STYLE, WIRE_EMPHASIS_WIDTH_SCREEN, true);
+  }
 }
 
 function touches(wire: Wire, objectId: string | undefined): boolean {

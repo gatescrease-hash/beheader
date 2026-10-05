@@ -36,6 +36,9 @@ import {
   editorSeed,
   escape,
   pickWireAt,
+  pickWireRow,
+  beginRewire,
+  finishRewire,
   selectedWire,
   initialAppState,
   movePanel,
@@ -2428,5 +2431,62 @@ describe("the dependency overlay", () => {
     expect(escape(refused).refusedCycle).toBeUndefined();
     const fromPanel = commitPanelEdit(chained(), objectNamed(chained(), "circle_1").id, "radius", "= circle_2.radius");
     expect(fromPanel.refusedCycle).toBeDefined();
+  });
+});
+
+describe("rewiring a slot by its curve", () => {
+  function linked(): AppState {
+    let state = typed(opened(), "circle x=0 y=0 r=10");
+    state = typed(state, "circle x=0 y=200 r=20");
+    state = typed(state, "circle x=300 y=0 r=5");
+    state = typed(state, "set circle_3.radius = circle_1.radius * 2");
+    return typed(state, "wires on");
+  }
+
+  const screenOf = (state: AppState, point: { x: number; y: number }) => worldToScreen(state.document.camera, point);
+  const centreOf = (state: AppState, name: string) => {
+    const object = objectNamed(state, name);
+    return screenOf(state, { x: numberAt(object, ["origin", "x"]), y: numberAt(object, ["origin", "y"]) + numberAt(object, ["radius"]) });
+  };
+
+  it("grabs the source end of a one-edge curve and rewrites the formula onto the object it lands on", () => {
+    const state = linked();
+    const [placed] = placedWires(state.document.objects);
+    const grab = beginRewire(state, screenOf(state, placed!.from));
+    expect(grab?.kind).toBe("grab");
+    if (grab?.kind !== "grab") return;
+    const done = finishRewire(state, grab.edge, centreOf(state, "circle_2"), VIEWPORT);
+    expect(done.refused).toBe(false);
+    expect(done.state.log.slice(-3)).toEqual(["> set circle_3.radius = circle_2.radius * 2", "circle_3.radius = circle_2.radius * 2", "replaced formula: = circle_1.radius * 2"]);
+    expect(numberAt(objectNamed(done.state, "circle_3"), ["radius"])).toBe(40);
+    expect(numberAt(objectNamed(typed(done.state, "undo"), "circle_3"), ["radius"])).toBe(20);
+  });
+
+  it("leaves everything alone when the end lands on empty canvas, or nowhere near a curve end", () => {
+    const state = linked();
+    const [placed] = placedWires(state.document.objects);
+    expect(beginRewire(state, { x: -500, y: -500 })).toBeUndefined();
+    expect(beginRewire({ ...state, wires: { visible: false, selected: undefined } }, screenOf(state, placed!.from))).toBeUndefined();
+    const grab = beginRewire(state, screenOf(state, placed!.from));
+    if (grab?.kind !== "grab") throw new Error("expected a grab");
+    const missed = finishRewire(state, grab.edge, { x: -500, y: -500 }, VIEWPORT);
+    expect(missed.refused).toBe(true);
+    expect(missed.state.document).toBe(state.document);
+  });
+
+  it("refuses to grab a curve of many edges until a row of it is picked, then moves that row alone", () => {
+    const state = typed(linked(), "set circle_3.origin.y = circle_1.radius");
+    const [placed] = placedWires(state.document.objects);
+    const end = screenOf(state, placed!.from);
+    const refused = beginRewire(state, end);
+    expect(refused?.kind).toBe("refused");
+    expect(refused?.kind === "refused" && refused.state.log.at(-1)).toContain("pick a row first");
+
+    const picked = pickWireAt(state, screenOf(state, wirePoint(placed!, 0.5)));
+    if (picked === undefined) throw new Error("expected the curve to be picked");
+    const rows = selectedWire(picked)!.edges;
+    const radiusRow = rows.findIndex((edge) => edge.dependentSlot.path.join(".") === "radius");
+    const grab = beginRewire(pickWireRow(picked, radiusRow), end);
+    expect(grab?.kind === "grab" && grab.edge.dependentSlot.path).toEqual(["radius"]);
   });
 });
