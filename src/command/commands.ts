@@ -17,6 +17,8 @@
  */
 import {
   type Address,
+  type MutationRefusal,
+  readEdges,
   addressKey,
   bezierOfEdge,
   bulgeForMidpoint,
@@ -118,7 +120,7 @@ import {
   vertexYPath,
 } from "../engine/index.ts";
 import { buildSlotDescriptors, describeSlotValue, type SlotDescriptor } from "./props.ts";
-import { findBroken, findOrphans, findText, readEdges, walkGraph } from "./queries.ts";
+import { findBroken, findOrphans, findText, walkGraph } from "./queries.ts";
 import type {
   AddPortCommand,
   AddVertexCommand,
@@ -163,7 +165,19 @@ export type CommandOutcome =
       readonly effect?: CommandEffect;
       readonly createdObjectId?: string;
     }
-  | { readonly ok: false; readonly message: string };
+  | CommandRefusal;
+
+/** A refused command. A refusal for a cycle carries the ring of slots it found. */
+export interface CommandRefusal {
+  readonly ok: false;
+  readonly message: string;
+  readonly cycle?: readonly Address[];
+}
+
+/** Hands a refused mutation on, with the cycle it found when there is one. */
+function refusal(result: MutationRefusal): CommandRefusal {
+  return result.cycle === undefined ? { ok: false, message: result.message } : { ok: false, message: result.message, cycle: result.cycle };
+}
 
 export type CommandEffect =
   | { readonly kind: "select"; readonly objectIds: readonly string[] }
@@ -171,10 +185,11 @@ export type CommandEffect =
   | { readonly kind: "fit" }
   | { readonly kind: "save" }
   | { readonly kind: "load" }
+  | { readonly kind: "wires"; readonly visible: boolean }
   | { readonly kind: "undo" }
   | { readonly kind: "redo" };
 
-export function isCommandFailure(outcome: CommandOutcome): outcome is { readonly ok: false; readonly message: string } {
+export function isCommandFailure(outcome: CommandOutcome): outcome is CommandRefusal {
   return outcome.ok === false;
 }
 
@@ -300,6 +315,13 @@ export function executeCommand(command: Command, document: Document, context: Ev
       return brokenCommand(document);
     case "find":
       return findCommand(command, document);
+    case "wires": {
+      const state = command.state.toLowerCase();
+      if (state !== "on" && state !== "off") {
+        return { ok: false, message: `wires takes on or off, got "${command.state}" — usage: wires on|off` };
+      }
+      return { ok: true, document, lines: [state === "on" ? "the dependency overlay is on" : "the dependency overlay is off"], effect: { kind: "wires", visible: state === "on" } };
+    }
     case "undo":
       return { ok: true, document, lines: [], effect: { kind: "undo" } };
     case "redo":
@@ -349,7 +371,7 @@ export const COMMANDS_WITH_HANDLERS: readonly string[] = [
   "redo",
   "group",
   "ungroup",
-  "upstream", "downstream", "orphans", "broken", "find",
+  "upstream", "downstream", "orphans", "broken", "find", "wires",
 ];
 
 interface LiteralSlotDeclaration {
@@ -386,7 +408,7 @@ function createObjectFromCommand(
   const operation: Operation = { kind: "createObject", object };
   const result = mutate(document.objects, [operation], document.journal, context);
   if (!result.ok) {
-    return { ok: false, message: result.message };
+    return refusal(result);
   }
   return {
     ok: true,
@@ -526,7 +548,7 @@ function createMath(command: CreateMathCommand, document: Document, context: Eva
 
   const result = mutate(document.objects, operations, document.journal, context);
   if (!result.ok) {
-    return { ok: false, message: result.message };
+    return refusal(result);
   }
   return {
     ok: true,
@@ -596,7 +618,7 @@ function writeSlot(write: SlotWrite, targetText: string, document: Document, con
 
   const result = mutate(document.objects, [{ kind: "setSlot", address, slot: built.slot }], document.journal, context);
   if (!result.ok) {
-    return { ok: false, message: result.message };
+    return refusal(result);
   }
 
   const lines = [...built.lines];
@@ -749,7 +771,7 @@ function clearSlotCommand(command: ClearCommand, document: Document, context: Ev
     : describeSlotValue(existing.value);
   const result = mutate(document.objects, [{ kind: "clearSlot", address }], document.journal, context);
   if (!result.ok) {
-    return { ok: false, message: result.message };
+    return refusal(result);
   }
   return { ok: true, document: { ...document, objects: result.objects, journal: result.journal }, lines: [`cleared ${displayName} — was ${was}`] };
 }
@@ -810,7 +832,7 @@ function addPortCommand(command: AddPortCommand, document: Document, context: Ev
 
   const result = mutate(document.objects, operations, document.journal, context);
   if (!result.ok) {
-    return { ok: false, message: result.message };
+    return refusal(result);
   }
   const address = `${object.name}.${family}.${name}`;
   return {
@@ -837,7 +859,7 @@ function removePortCommand(command: RemovePortCommand, document: Document, conte
 
   const result = mutate(document.objects, operations, document.journal, context);
   if (!result.ok) {
-    return { ok: false, message: result.message };
+    return refusal(result);
   }
   return {
     ok: true,
@@ -854,7 +876,7 @@ function renameObject(command: RenameCommand, document: Document, context: EvalC
 
   const result = mutate(document.objects, [{ kind: "renameObject", objectId: object.id, name: command.newName }], document.journal, context);
   if (!result.ok) {
-    return { ok: false, message: result.message };
+    return refusal(result);
   }
   return {
     ok: true,
@@ -890,7 +912,7 @@ function groupObjects(command: GroupCommand, document: Document, context: EvalCo
   const group = createGroupObject(minted.id, generateDefaultName(GROUP_TYPE, document.objects), xs.length === 0 ? 0 : Math.min(...xs), ys.length === 0 ? 0 : Math.min(...ys));
   const result = mutate(document.objects, groupingOperations(group, members), document.journal, context);
   if (!result.ok) {
-    return { ok: false, message: result.message };
+    return refusal(result);
   }
   return {
     ok: true,
@@ -969,7 +991,7 @@ function addVertex(command: AddVertexCommand, document: Document, context: EvalC
   const newIndex = object.vertexCount ?? 0;
   const result = mutate(document.objects, [{ kind: "addVertex", objectId: object.id, point }], document.journal, context);
   if (!result.ok) {
-    return { ok: false, message: result.message };
+    return refusal(result);
   }
   return {
     ok: true,
@@ -1038,7 +1060,7 @@ function setEdgeType(command: EdgeTypeCommand, document: Document, context: Eval
     context,
   );
   if (!result.ok) {
-    return { ok: false, message: result.message };
+    return refusal(result);
   }
   return {
     ok: true,
@@ -1114,7 +1136,7 @@ function splitEdge(command: SplitEdgeCommand, document: Document, context: EvalC
     context,
   );
   if (!result.ok) {
-    return { ok: false, message: result.message };
+    return refusal(result);
   }
   return {
     ok: true,

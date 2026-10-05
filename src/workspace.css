@@ -119,7 +119,7 @@ kbd { font: inherit; border: 1px solid var(--line); border-radius: 3px; padding:
 
 #stage { background-image: linear-gradient(to right, rgb(102 118 83 / var(--grid-opacity, .08)) 1px, transparent 1px), linear-gradient(to bottom, rgb(102 118 83 / var(--grid-opacity, .08)) 1px, transparent 1px), linear-gradient(to right, #6676531c 1px, transparent 1px), linear-gradient(to bottom, #6676531c 1px, transparent 1px); background-size: var(--grid-step, 40px) var(--grid-step, 40px), var(--grid-step, 40px) var(--grid-step, 40px), var(--grid-major, 400px) var(--grid-major, 400px), var(--grid-major, 400px) var(--grid-major, 400px); background-position: var(--grid-x, 0) var(--grid-y, 0); }
 #stage.grid-off { background-image: none; }
-#grid-toggle[aria-pressed="true"] { background: #dce0c9; }
+#grid-toggle[aria-pressed="true"], #wires-toggle[aria-pressed="true"] { background: #dce0c9; }
 .canvas-cursor { position: absolute; left: 50%; top: 50%; width: 17px; height: 17px; transform: translate(-50%, -50%); pointer-events: none; opacity: .4; z-index: 1; }
 .canvas-cursor::before, .canvas-cursor::after { content: ""; position: absolute; background: #667653; }
 .canvas-cursor::before { top: 8px; left: 0; width: 17px; height: 1px; }
@@ -262,3 +262,28 @@ kbd { font: inherit; border: 1px solid var(--line); border-radius: 3px; padding:
   box-shadow: 0 6px 24px rgba(40, 36, 28, 0.18);
 }
 .recovery-banner button { padding: 4px 10px; }
+
+/* The slot edges behind a picked curve of the dependency overlay, one row
+   each, at the bottom left of the canvas in screen space. */
+.wire-panel {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  z-index: 20;
+  max-width: min(420px, calc(100% - 32px));
+  max-height: 40%;
+  overflow: auto;
+  padding: 8px 10px;
+  font-size: 12px;
+  background: var(--paper-light);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: 0 6px 24px rgba(40, 36, 28, 0.18);
+}
+.wire-panel__title { font-weight: 600; margin-bottom: 4px; }
+.wire-panel__rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}

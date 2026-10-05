@@ -67,10 +67,6 @@ be taken back.
 The items below are the graph surface that sections 19 and 20 open. The overlay
 comes first, because rewiring and arrangement both read what it draws.
 
-- Draw the dependency overlay behind a toggle, as specified in The dependency
-  overlay. A reader will know it is finished when one curve stands for each
-  ordered pair of objects and carries the count of slot edges behind it,
-  hovering an object dims the rest, and a refused cycle draws its ring.
 - Rewire a slot by dragging the reading end of a curve. A reader will know it is
   finished when the drag rewrites every occurrence of the old address in that
   formula, a drag closing a cycle refuses and names the slot, and a curve

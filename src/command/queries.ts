@@ -14,7 +14,7 @@
  * carries the value to the slot that crosses. The walk visits each slot once,
  * with the cheaper path to it kept, so it costs the edges it reaches.
  *
- * The edges come from readEdges below, which adds what the engine leaves out:
+ * The edges come from readEdges in the engine, which adds what the engine leaves out:
  * a formula or a text box that reads an empty cell inside the extent of a
  * table. The engine leaves that edge out, because an empty cell is a place
  * with no slot to order, and the reader still reads the table. A delete without force names
@@ -30,22 +30,8 @@
  */
 import {
   addressKey,
-  deriveEdges,
   DOC_TYPE,
-  enumerateRangeCellAddresses,
-  extractDependencies,
-  extractTextDependencies,
   formatFormula,
-  getObjectSchema,
-  isInExtentTableCellAddressForObject,
-  isRangeEnumerationError,
-  parseTextContent,
-  resolveNonDerivedSlotPaths,
-  slotKey,
-  TEXT_CONTENT_PATH,
-  TEXT_RESOLVED_CONTENT_PATH,
-  TEXT_TYPE,
-  type Dependency,
   isErrorValue,
   mathSourceWithNames,
   TABLE_CELL_PATH_PREFIX,
@@ -53,46 +39,6 @@ import {
   type Edge,
   type GraphObject,
 } from "../engine/index.ts";
-
-/**
- * Every slot edge of the document, with an edge added for each read of an
- * empty cell inside the extent of a table, from a formula slot or from the
- * content of a text box.
- */
-export function readEdges(objects: readonly GraphObject[]): readonly Edge[] {
-  const edges = [...deriveEdges(objects)];
-  const byId = new Map(objects.map((object) => [object.id, object]));
-  const emptyCellReads = (dependencies: readonly Dependency[], dependentSlot: Address): void => {
-    for (const dependency of dependencies) {
-      if (dependency.kind === "reference") {
-        const table = byId.get(dependency.address.objectId);
-        if (table?.slots[slotKey(dependency.address.path)] === undefined && isInExtentTableCellAddressForObject(dependency.address, table)) {
-          edges.push({ sourceSlot: dependency.address, dependentSlot });
-        }
-        continue;
-      }
-      const table = byId.get(dependency.start.objectId);
-      if (table === undefined) continue;
-      const cells = enumerateRangeCellAddresses(dependency.start, dependency.end, table);
-      if (isRangeEnumerationError(cells)) continue;
-      for (const cell of cells) {
-        if (table.slots[slotKey(cell.path)] === undefined) edges.push({ sourceSlot: cell, dependentSlot });
-      }
-    }
-  };
-  for (const object of objects) {
-    const schema = getObjectSchema(object.type);
-    for (const path of schema === undefined ? [] : resolveNonDerivedSlotPaths(object, schema.nonDerivedSlotPaths)) {
-      const slot = object.slots[slotKey(path)];
-      if (slot?.kind === "formula") emptyCellReads(extractDependencies(slot.ast), { objectId: object.id, path });
-    }
-    const content = object.slots[slotKey(TEXT_CONTENT_PATH)];
-    if (object.type === TEXT_TYPE && content?.kind === "literal" && typeof content.value === "string") {
-      emptyCellReads(extractTextDependencies(parseTextContent(content.value, objects)), { objectId: object.id, path: TEXT_RESOLVED_CONTENT_PATH });
-    }
-  }
-  return edges;
-}
 
 /** Where a walk starts: a whole object, or one slot on it. */
 export interface WalkStart {

@@ -81,6 +81,7 @@ const DOCUMENTED_EXAMPLES: readonly { readonly line: string; readonly command: C
   { line: "upstream circle_1 2", command: { kind: "upstream", target: "circle_1", depth: 2 } },
   { line: "downstream doc.speed", command: { kind: "downstream", target: "doc.speed" } },
   { line: "orphans", command: { kind: "orphans" } },
+  { line: "wires on", command: { kind: "wires", state: "on" } },
   { line: "broken", command: { kind: "broken" } },
   { line: "find \"table_1.A1\"", command: { kind: "find", text: "table_1.A1" } },
 ];

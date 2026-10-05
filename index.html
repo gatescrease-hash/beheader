@@ -632,6 +632,8 @@
               <dd>Ctrl+Z or <code>undo</code> steps back one change, and a whole drag counts as one. Ctrl+Shift+Z, Ctrl+Y or <code>redo</code> steps forward again.</dd>
               <dt>Ask the graph</dt>
               <dd><code>upstream circle_1</code> and <code>downstream circle_1</code> select what it reads and what reads it, and a number after the name limits the steps. <code>orphans</code>, <code>broken</code> and <code>find</code> &lt;text&gt; select too.</dd>
+              <dt>See the wiring</dt>
+              <dd>Wires, or <code>wires on</code>, draws a curve from each object to each object that reads it. Hover an object to pick out its curves, and click a curve to list the slots behind it.</dd>
               <dt>Use commands</dt>
               <dd>Type a command below. Tab completes names and addresses. ↑ / ↓ recalls commands. Esc cancels.</dd>
               <dt>Keep your work</dt>
@@ -640,6 +642,7 @@
           </aside>
           <div class="view-controls" aria-label="Canvas view">
             <button id="grid-toggle" aria-pressed="true" title="Toggle canvas grid">Grid</button>
+            <button id="wires-toggle" aria-pressed="false" title="Show what reads what">Wires</button>
             <button data-command="zoom 0.8" aria-label="Zoom out">−</button>
             <span id="zoom-level">100%</span>
             <button data-command="zoom 1.25" aria-label="Zoom in">+</button>

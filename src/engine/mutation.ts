@@ -278,9 +278,20 @@ export function validateIntegrity(objects: readonly GraphObject[], edges: readon
   return { ok: true };
 }
 
+/**
+ * A refused batch or evaluation. A refusal for a cycle also carries the ring
+ * of slots the cycle check found, in order, so a surface can draw the loop the
+ * message names.
+ */
+export interface MutationRefusal {
+  readonly ok: false;
+  readonly message: string;
+  readonly cycle?: readonly Address[];
+}
+
 export type GraphEvaluationResult =
   | { readonly ok: true; readonly objects: readonly GraphObject[] }
-  | { readonly ok: false; readonly message: string };
+  | MutationRefusal;
 
 export interface EvaluationStrategyInput {
   readonly previousObjects: readonly GraphObject[];
@@ -460,7 +471,7 @@ export function refreshHostInputs(
 /** A whole-document pass hands back the edges it derived, so a commit can index them. */
 type CheckedEvaluation =
   | { readonly ok: true; readonly objects: readonly GraphObject[]; readonly edges: readonly Edge[] }
-  | { readonly ok: false; readonly message: string };
+  | MutationRefusal;
 
 function deriveValidateAndEvaluateWithStrategy(
   objects: readonly GraphObject[],
@@ -478,7 +489,7 @@ function deriveValidateAndEvaluateWithStrategy(
 
   const cycleCheck = detectCycle(edges);
   if (cycleCheck.hasCycle) {
-    return { ok: false, message: formatCycleRejection(cycleCheck.cycle, objects) };
+    return { ok: false, message: formatCycleRejection(cycleCheck.cycle, objects), cycle: cycleCheck.cycle };
   }
 
   return {
@@ -1404,7 +1415,7 @@ export type MutationResult =
       readonly journal: readonly MutationJournalEntry[];
       readonly brokenSlots: readonly Address[];
     }
-  | { readonly ok: false; readonly message: string };
+  | MutationRefusal;
 
 /**
  * The one entry point for state change. It runs all seven steps.

@@ -1674,6 +1674,18 @@ answers what this reads and what reads this with no command at all.
 found, and the log names them. The overlay draws that ring, so the loop a message
 describes is also a loop an operator sees.
 
+**How the overlay sits on the canvas.** The ordinary curves draw beneath the
+objects, so a curve never covers a table or a label, and a press inside an
+object reaches the object. The curves that touch the hovered object, the
+selected curve and a refused ring draw above the objects. A curve keeps one
+width on screen at any zoom. A variable shows on the canvas through its copies,
+so a curve to or from a variable runs from or to each copy, and a variable with
+no copy stays off the overlay. Selecting a curve lists its slot edges in a panel,
+one row each, and in the log. The toggle and the selected curve are view state,
+which no save carries and no undo steps through. A refused ring draws whether or
+not the toggle is on, until the next committed change, the next refusal, or
+Escape.
+
 ### Rewiring by the edge
 
 Drag the reading end of a curve from one source to another and the formula behind

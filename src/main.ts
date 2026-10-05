@@ -43,6 +43,11 @@ import {
   redoJournal,
   startUndoHistory,
   undoJournal,
+  type Address,
+  type Edge,
+  formatAddress,
+  TEXT_TYPE,
+  TEXT_RESOLVED_CONTENT_PATH,
   type MutationJournalEntry,
   type UndoHistory,
   type Document,
@@ -116,6 +121,8 @@ import { createScriptRunner, createWorkerBackend, type WorkerLike } from "./pyth
 import { clearRecovery, isDirty, readRecovery, writeRecovery } from "./recovery.ts";
 import { createMathMeasurer, MATH_MACROS, mathMarkup, mathOverlayPlacement, readMathDrawnLatex, readMathLatex } from "./render/math.ts";
 import { hitTest } from "./render/hittest.ts";
+import { placedWires } from "./render/overlay.ts";
+import { objectWires, wireAt, type Wire } from "./render/wires.ts";
 import { worldToScreen } from "./render/camera.ts";
 import type { TextMathRun } from "./render/renderer.ts";
 import {
@@ -155,7 +162,19 @@ export interface AppState {
   readonly gesture: GestureBase | undefined;
   /** The journal at the last save or load, against which recovery.ts decides the document is dirty. */
   readonly savedJournal: readonly MutationJournalEntry[] | null;
+  /** The dependency overlay, which is view state: no save carries it and no undo steps through it. */
+  readonly wires: WiresState;
+  /** The ring of slots the last refusal for a cycle named, until the next change, refusal or Escape. */
+  readonly refusedCycle: readonly Address[] | undefined;
 }
+
+export interface WiresState {
+  readonly visible: boolean;
+  /** The curve the operator picked, by the object that is read and the object that reads it. */
+  readonly selected: { readonly sourceId: string; readonly readerId: string } | undefined;
+}
+
+export const INITIAL_WIRES_STATE: WiresState = { visible: false, selected: undefined };
 
 export interface GestureBase {
   readonly objects: readonly GraphObject[];
@@ -195,6 +214,8 @@ export function initialAppState(
     history: startUndoHistory(document.objects, document.journal, context),
     gesture: undefined,
     savedJournal,
+    wires: INITIAL_WIRES_STATE,
+    refusedCycle: undefined,
   };
 }
 
@@ -308,16 +329,19 @@ export function promptPreview(state: AppState): PathPreview | undefined {
 
 export function escape(state: AppState): AppState {
   const cancelled = state.pending === undefined ? state : withLog({ ...state, pending: undefined }, [sessionMessage(cancelCommand())]);
-  return withInteraction(cancelled, deselect());
+  // A half finished command goes first, and the picked curve and the ring of
+  // a refused cycle go with the next Escape.
+  const cleared = state.pending === undefined ? { ...cancelled, wires: { ...cancelled.wires, selected: undefined }, refusedCycle: undefined } : cancelled;
+  return withInteraction(cleared, deselect());
 }
 
 function advance(state: AppState, session: CommandSession, viewport: Viewport, context: EvalContext): AppTransition {
   switch (session.status) {
     case "complete": {
-      const cleared: AppState = { ...state, pending: undefined };
+      const cleared: AppState = { ...state, pending: undefined, refusedCycle: undefined };
       const outcome = executeCommand(session.command, cleared.document, context);
       if (!outcome.ok) {
-        return transition(withLog(cleared, [outcome.message]), true);
+        return transition(withLog({ ...cleared, refusedCycle: outcome.cycle }, [outcome.message]), true);
       }
       const executed = withLog({ ...cleared, document: outcome.document }, outcome.lines);
       if (outcome.effect !== undefined) {
@@ -388,6 +412,8 @@ export function performEffect(effect: CommandEffect, state: AppState, viewport: 
       return transition(zoomBy(state, effect.factor, viewport));
     case "fit":
       return transition(fitToDocument(state, viewport));
+    case "wires":
+      return transition({ ...state, wires: { visible: effect.visible, selected: effect.visible ? state.wires.selected : undefined } });
     case "save":
       return { state: { ...state, savedJournal: state.document.journal }, fileRequest: "save", refused: false };
     case "load":
@@ -507,6 +533,59 @@ function describeEntry(entry: MutationJournalEntry, ...states: readonly (readonl
   return `${count} to ${shown}`;
 }
 
+/** How near a curve a press lands to pick it, in screen pixels. */
+const WIRE_PICK_TOLERANCE_SCREEN = 5;
+
+/** How near the middle of a curve with a count a press lands to pick it, in screen pixels. */
+const WIRE_COUNT_RADIUS_SCREEN = 10;
+
+/**
+ * Picks the curve under a press on empty canvas while the overlay is on, and
+ * lists its slot edges in the log. An object under the press wins, because
+ * the ordinary curves draw beneath the objects. The answer is undefined when
+ * no curve is there, and the press then goes on to the objects.
+ */
+export function pickWireAt(state: AppState, point: ScreenPoint): AppState | undefined {
+  if (!state.wires.visible || hitTest(point, state.document.objects, state.document.camera) !== undefined) {
+    return undefined;
+  }
+  const camera = state.document.camera;
+  const picked = wireAt(
+    placedWires(state.document.objects),
+    screenToWorld(camera, point),
+    WIRE_PICK_TOLERANCE_SCREEN / camera.zoom,
+    WIRE_COUNT_RADIUS_SCREEN / camera.zoom,
+  );
+  if (picked === undefined) {
+    return undefined;
+  }
+  const { sourceId, readerId } = picked.wire;
+  const selected = withInteraction({ ...state, wires: { ...state.wires, selected: { sourceId, readerId } } }, deselect());
+  return withLog(selected, wireEdgeLines(state.document.objects, picked.wire.edges));
+}
+
+/**
+ * The slot edges behind a curve as an operator reads them, one line each. A
+ * text box reads in its content, and the engine hangs the edge on the slot
+ * that resolves the content, so the line names the slot the operator wrote.
+ */
+export function wireEdgeLines(objects: readonly GraphObject[], edges: readonly Edge[]): readonly string[] {
+  const name = (address: Address): string => {
+    const object = objects.find((candidate) => candidate.id === address.objectId);
+    const shown = object?.type === TEXT_TYPE && slotKey(address.path) === slotKey(TEXT_RESOLVED_CONTENT_PATH) ? { ...address, path: TEXT_CONTENT_PATH } : address;
+    const formatted = formatAddress(shown, objects);
+    return typeof formatted === "string" ? formatted : formatted.message;
+  };
+  return edges.map((edge) => `${name(edge.sourceSlot)} → ${name(edge.dependentSlot)}`);
+}
+
+/** The curve the operator picked, while both of its objects and an edge between them remain. */
+export function selectedWire(state: AppState): Wire | undefined {
+  const selected = state.wires.selected;
+  if (selected === undefined) return undefined;
+  return objectWires(state.document.objects).find((wire) => wire.sourceId === selected.sourceId && wire.readerId === selected.readerId);
+}
+
 export function pointerDownAt(
   state: AppState,
   screenPoint: ScreenPoint,
@@ -604,7 +683,8 @@ export function replaceDocument(
   context: EvalContext = NULL_EVAL_CONTEXT,
   savedJournal: readonly MutationJournalEntry[] | null = document.journal,
 ): AppState {
-  return withLog(initialAppState(document, state.log, context, savedJournal), [line]);
+  const opened = initialAppState(document, state.log, context, savedJournal);
+  return withLog({ ...opened, wires: { visible: state.wires.visible, selected: undefined } }, [line]);
 }
 
 /** True when the document holds a change made since the last save or load. */
@@ -837,9 +917,9 @@ function runPanelCommand(
   const echoed = withLog(state, [`> ${describePanelCommand(command)}`]);
   const outcome = executeCommand(command, echoed.document, context);
   if (!outcome.ok) {
-    return withLog(echoed, [outcome.message]);
+    return withLog({ ...echoed, refusedCycle: outcome.cycle }, [outcome.message]);
   }
-  return withLog({ ...echoed, document: outcome.document }, outcome.lines);
+  return withLog({ ...echoed, document: outcome.document, refusedCycle: undefined }, outcome.lines);
 }
 
 export function commitPanelEdit(
@@ -1347,6 +1427,38 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   const cellHighlight = document.createElement("div"); cellHighlight.className = "cell-highlight";
   canvas.parentElement?.append(cellHighlight);
   let gridVisible = true;
+  /** The object under the pointer while the overlay is on, whose curves draw at full strength. */
+  let hoveredObjectId: string | undefined;
+  const wiresToggle = document.querySelector<HTMLElement>("#wires-toggle");
+  const wirePanel = document.createElement("div");
+  wirePanel.className = "wire-panel";
+  wirePanel.hidden = true;
+  canvas.parentElement?.append(wirePanel);
+  /**
+   * Lists the slot edges behind the picked curve, one row each. A curve that
+   * stands for more than one edge names them here, so the operator can read
+   * which slots it carries.
+   */
+  const updateWirePanel = (): void => {
+    const wire = selectedWire(state);
+    if (wire === undefined || !state.wires.visible) {
+      wirePanel.hidden = true;
+      return;
+    }
+    const name = (id: string): string => state.document.objects.find((object) => object.id === id)?.name ?? id;
+    const title = document.createElement("div");
+    title.className = "wire-panel__title";
+    title.textContent = `${name(wire.sourceId)} → ${name(wire.readerId)} · ${wire.edges.length === 1 ? "1 edge" : `${wire.edges.length} edges`}`;
+    const rows = document.createElement("ul");
+    rows.className = "wire-panel__rows";
+    for (const line of wireEdgeLines(state.document.objects, wire.edges)) {
+      const row = document.createElement("li");
+      row.textContent = line;
+      rows.append(row);
+    }
+    wirePanel.replaceChildren(title, rows);
+    wirePanel.hidden = false;
+  };
   let inPlaceMirror: HTMLElement | undefined;
   let inPlaceEditorFromCreation = false;
   const editorLayer: HTMLElement = canvas.parentElement ?? panelsContainer;
@@ -1400,7 +1512,15 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       promptPreview(state),
       state.interaction.focus?.grip,
       measureMathForLayout,
+      {
+        visible: state.wires.visible,
+        ...(hoveredObjectId === undefined ? {} : { hoveredObjectId }),
+        ...(selectedWire(state) === undefined || state.wires.selected === undefined ? {} : { selectedWire: state.wires.selected }),
+        ...(state.refusedCycle === undefined ? {} : { cycle: state.refusedCycle }),
+      },
     );
+    updateWirePanel();
+    wiresToggle?.setAttribute("aria-pressed", String(state.wires.visible));
     updatePanels(panelledIds);
     updateMathOverlays(report.mathRuns);
     updateEditor();
@@ -2014,7 +2134,9 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   };
 
   const apply = (next: AppState): void => {
-    state = next;
+    // A committed change ends the ring of the refusal before it, whatever made the change.
+    state = next.refusedCycle !== undefined && next.refusedCycle === state.refusedCycle && next.document.journal !== state.document.journal
+      ? { ...next, refusedCycle: undefined } : next;
     drawLog(logElement, state.log);
     paint();
     document.title = hasUnsavedWork(state) ? "● Beheader — unsaved" : "Beheader";
@@ -2273,6 +2395,9 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
 
   document.addEventListener("selectionchange", () => {
     if (inPlaceEditor?.kind === "text" && document.activeElement === inPlaceElement) { savedTextRange = undefined; updateFormatToolbar(); }
+  });
+  wiresToggle?.addEventListener("click", () => {
+    applyTransition(submitLine(state, state.wires.visible ? "wires off" : "wires on", viewport(), evalContext));
   });
   document.querySelector("#grid-toggle")?.addEventListener("click", event => {
     gridVisible = !gridVisible; (event.currentTarget as HTMLElement).setAttribute("aria-pressed", String(gridVisible)); paint();
@@ -2648,7 +2773,13 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     if (tableResize) return;
     const cell = editorTargetAt(point, state.document.objects, state.document.camera);
     activeCell = cell?.kind === "cell" ? { objectId: cell.objectId, cell: cell.cell } : undefined;
-    applyTransition(pointerDownAt(state, point, viewport(), event.shiftKey, evalContext));
+    const picked = pickWireAt(state, point);
+    if (picked !== undefined) {
+      apply(picked);
+      return;
+    }
+    const unpicked = state.wires.selected === undefined ? state : { ...state, wires: { ...state.wires, selected: undefined } };
+    applyTransition(pointerDownAt(unpicked, point, viewport(), event.shiftKey, evalContext));
   });
 
   canvas.addEventListener("dblclick", (event: MouseEvent) => {
@@ -2745,11 +2876,18 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     const overGrip = pathGripUnder(state.interaction, point, state.document.objects, state.document.camera);
     const boundary = tableBoundaryAt(point);
     canvas.style.cursor = boundary ? boundary.axis === "column" ? "col-resize" : "row-resize" : overHandle !== undefined ? resizeCursor(overHandle) : overGrip === undefined ? "" : "pointer";
+    // Hover dims the curves that leave the object alone, and only while no
+    // button is held, so a drag keeps the overlay as it was at the press.
+    hoveredObjectId = state.wires.visible && event.buttons === 0 ? hitTest(point, state.document.objects, state.document.camera)?.id : undefined;
     apply(pointerMoveTo(state, point, evalContext));
   });
 
   canvas.addEventListener("pointerleave", () => {
     cursor.hidden = true;
+    if (hoveredObjectId !== undefined) {
+      hoveredObjectId = undefined;
+      paint();
+    }
   });
 
   const endGesture = (event: PointerEvent): void => {

@@ -15,7 +15,7 @@ register, and the measurements behind leaving that migration unscheduled.
 | --- | --- |
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
-| Tests | 2869 Vitest tests and 2 tooling tests pass, with 0 skipped. |
+| Tests | 2884 Vitest tests and 2 tooling tests pass, with 0 skipped. |
 | Spec | Built through section 18 and section 21, except the parts section 17 postpones. Sections 19, 20 and 22 are partly built or unbuilt. |
 | Scripts | Python runs in a Pyodide worker. Groups are script nodes with members. |
 | Rule 5 | Met for slot writes, cell clears, creates, renames and plain deletes. Other structural batches and refusals still cost the whole document. |
@@ -154,6 +154,7 @@ covers everything it calls.
 | `math/eval.ts` | A program and its inputs to a value for each export, the search for a root included. |
 | `script/script.ts` | The script node, its ports, and the one seam a run goes through. |
 | `groups.ts` | Group membership, its integrity rule, and the operations that group and ungroup. |
+| `reads.ts` | Every slot edge as an operator reads the graph, with the reads of empty cells. |
 | `mutation.ts` | The state-change channel, its operations and evaluation strategies. |
 | `journal.ts` | Replay of the journal, and the undo that rests on it. |
 | `document.ts` | Save and load, and the versioned JSON format. |
@@ -179,6 +180,8 @@ covers everything it calls.
 | `editor.ts` | Where the in place editor goes, and how it looks. |
 | `interaction.ts` | Pointer state to mutation calls: select, drag, resize and bend. |
 | `panel.ts` | Where a properties panel sits beside its object. |
+| `wires.ts` | The curves of the dependency overlay, where each runs, and which one a press picks. |
+| `overlay.ts` | The two passes that draw the overlay around the objects, and the ring of a refused cycle. |
 
 ### `src/python/` - the Python host
 

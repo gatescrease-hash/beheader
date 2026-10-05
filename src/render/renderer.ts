@@ -41,6 +41,7 @@
  * that line for nothing else. Nothing in the engine imports this file, so a
  * GPU renderer can replace the whole layer later.
  */
+import { drawWiresOver, drawWiresUnder, type WireOverlay } from "./overlay.ts";
 import {
   docrefLabel,
   DOCREF_STYLE,
@@ -436,7 +437,9 @@ export function renderDocument(
   preview: PathPreview | undefined = undefined,
   focusedGrip: PathGrip | undefined = undefined,
   measureMath: MathRunMeasurer | undefined = undefined,
+  wires: WireOverlay | undefined = undefined,
 ): RenderReport {
+  const documentObjects = objects;
   objects = displayObjects(objects);
   clearScreen(ctx, viewportWidth, viewportHeight);
   const mathRuns: TextMathRun[] = [];
@@ -457,12 +460,16 @@ export function renderDocument(
     drawGroup(ctx, group, objects, selectedIds.has(group.id));
   }
 
+  drawWiresUnder(ctx, camera, documentObjects, wires);
+
   for (const object of objects) {
     if (object.id === editingTextId) {
       continue;
     }
     drawObject(ctx, object, editingCellOn(object.id), images, measureMath, mathRuns);
   }
+
+  drawWiresOver(ctx, camera, documentObjects, wires);
 
   for (const object of objects) {
     if (selectedIds.has(object.id) && object.id !== editingTextId) {

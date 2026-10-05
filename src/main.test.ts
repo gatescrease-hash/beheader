@@ -19,6 +19,8 @@ import { objectExtent } from "./render/extent.ts";
 import type { PathGrip } from "./render/grips.ts";
 import { createCanvas2dTextMeasurer, type MeasurementContext } from "./render/measure.ts";
 import { renderDocument } from "./render/renderer.ts";
+import { placedWires } from "./render/overlay.ts";
+import { wirePoint } from "./render/wires.ts";
 import { MAX_ZOOM, MIN_ZOOM, screenToWorld, worldToScreen } from "./render/camera.ts";
 import {
   abandonCreatedTextBox,
@@ -33,6 +35,8 @@ import {
   dismissPanel,
   editorSeed,
   escape,
+  pickWireAt,
+  selectedWire,
   initialAppState,
   movePanel,
   performEffect,
@@ -2375,5 +2379,54 @@ describe("groups — grouping, selecting, dragging and dissolving", () => {
     expect(refused.refused).toBe(true);
     expect(refused.state.log.at(-1)).toContain("circle_2.radius");
     expect(refused.state.log.at(-1)).toContain("ungroup group_1 force");
+  });
+});
+
+describe("the dependency overlay", () => {
+  function chained(): AppState {
+    let state = typed(opened(), "circle x=0 y=0 r=10");
+    state = typed(state, "circle x=300 y=0 r=10");
+    state = typed(state, "set circle_2.radius = circle_1.radius");
+    return typed(state, "set circle_2.origin.y = circle_1.origin.y");
+  }
+
+  it("turns on and off by command, as view state that a save or an undo leaves alone", () => {
+    const on = typed(chained(), "wires on");
+    expect(on.wires.visible).toBe(true);
+    expect(on.document.journal.length).toBe(chained().document.journal.length);
+    expect(typed(on, "undo").wires.visible).toBe(true);
+    expect(typed(on, "wires off").wires.visible).toBe(false);
+    expect(submitLine(on, "wires maybe", VIEWPORT).refused).toBe(true);
+    expect(replaceDocument(on, on.document, "loaded").wires.visible).toBe(true);
+  });
+
+  it("picks the curve under a press on empty canvas, lists its edges, and lets Escape drop it", () => {
+    const state = typed(chained(), "wires on");
+    const [placed] = placedWires(state.document.objects);
+    const onCurve = worldToScreen(state.document.camera, wirePoint(placed!, 0.5));
+    const picked = pickWireAt(state, onCurve);
+    expect(picked?.wires.selected).toEqual({ sourceId: objectNamed(state, "circle_1").id, readerId: objectNamed(state, "circle_2").id });
+    expect(picked?.log.slice(-2)).toEqual(["circle_1.origin.y → circle_2.origin.y", "circle_1.radius → circle_2.radius"]);
+    expect(picked && selectedWire(picked)?.edges).toHaveLength(2);
+    expect(pickWireAt({ ...state, wires: { visible: false, selected: undefined } }, onCurve)).toBeUndefined();
+    expect(pickWireAt(state, { x: onCurve.x, y: onCurve.y + 200 })).toBeUndefined();
+    expect(escape(picked!).wires.selected).toBeUndefined();
+  });
+
+  it("forgets a picked curve once the edges behind it are gone", () => {
+    const state = typed(chained(), "wires on");
+    const picked = { ...state, wires: { ...state.wires, selected: { sourceId: objectNamed(state, "circle_1").id, readerId: objectNamed(state, "circle_2").id } } };
+    const unlinked = typed(typed(picked, "unlink circle_2.radius"), "unlink circle_2.origin.y");
+    expect(selectedWire(unlinked)).toBeUndefined();
+  });
+
+  it("keeps the ring a refused cycle names until the next commit, refusal or Escape", () => {
+    const refused = typed(chained(), "set circle_1.radius = circle_2.radius");
+    expect(refused.refusedCycle?.map((address) => address.objectId).sort()).toEqual([objectNamed(refused, "circle_1").id, objectNamed(refused, "circle_2").id]);
+    expect(typed(refused, "set circle_1.origin.x 5").refusedCycle).toBeUndefined();
+    expect(typed(refused, "set nothing_here.x 5").refusedCycle).toBeUndefined();
+    expect(escape(refused).refusedCycle).toBeUndefined();
+    const fromPanel = commitPanelEdit(chained(), objectNamed(chained(), "circle_1").id, "radius", "= circle_2.radius");
+    expect(fromPanel.refusedCycle).toBeDefined();
   });
 });

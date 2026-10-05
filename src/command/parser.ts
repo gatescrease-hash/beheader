@@ -261,6 +261,12 @@ export interface FindCommand {
   readonly text: string;
 }
 
+/** `wires on` or `wires off`, the toggle of the dependency overlay. */
+export interface WiresCommand {
+  readonly kind: "wires";
+  readonly state: string;
+}
+
 export interface UndoCommand {
   readonly kind: "undo";
 }
@@ -312,7 +318,8 @@ export type Command =
   | GraphWalkCommand
   | OrphansCommand
   | BrokenCommand
-  | FindCommand;
+  | FindCommand
+  | WiresCommand;
 
 export interface CommandParseSuccess {
   readonly ok: true;
@@ -826,6 +833,14 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
     named: [],
     flags: [],
     build: (args) => ({ kind: "find", text: textArgument(args, "text") }),
+  },
+  {
+    name: "wires",
+    usage: "wires on|off",
+    positional: [text("state")],
+    named: [],
+    flags: [],
+    build: (args) => ({ kind: "wires", state: textArgument(args, "state") }),
   },
   {
     name: "props",
