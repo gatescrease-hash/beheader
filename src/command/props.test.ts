@@ -75,6 +75,7 @@ describe("buildSlotDescriptors — one object's slots, in schema order", () => {
         name: "table_1",
         type: "table",
         slots: {
+          box: { kind: "derived", value: null },
           "origin.x": { kind: "literal", value: 0 },
           "origin.y": { kind: "literal", value: 0 },
           rows: { kind: "literal", value: rows },
@@ -102,9 +103,9 @@ describe("buildSlotDescriptors — one object's slots, in schema order", () => {
       expect(summary?.value).toBe("8×8 grid — 0 of 64 cells written");
     });
 
-    it("lists the table's own slots before the cells summary, in schema order", () => {
+    it("lists the table's own slots before the cells summary, in schema order, and the derived box after both", () => {
       const object = table(2, 2, {});
-      expect(buildSlotDescriptors(object, [object]).map((descriptor) => descriptor.path.join("."))).toEqual(["origin.x", "origin.y", "rows", "cols", "cells"]);
+      expect(buildSlotDescriptors(object, [object]).map((descriptor) => descriptor.path.join("."))).toEqual(["origin.x", "origin.y", "rows", "cols", "cells", "box"]);
     });
   });
 });

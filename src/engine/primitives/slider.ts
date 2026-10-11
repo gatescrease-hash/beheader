@@ -23,6 +23,9 @@ export const SLIDER_MAX_PATH: readonly string[] = ["max"];
 export const SLIDER_STEP_PATH: readonly string[] = ["step"];
 export const SLIDER_VALUE_PATH: readonly string[] = ["value"];
 
+/** The height of a slider's box, in world units, which holds the value and the track below it. */
+export const SLIDER_HEIGHT = 32;
+
 export const DEFAULT_SLIDER_WIDTH = 200;
 export const DEFAULT_SLIDER_MIN = 0;
 export const DEFAULT_SLIDER_MAX = 10;

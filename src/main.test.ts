@@ -319,7 +319,7 @@ describe("performEffect — zoom and fit write the camera directly", () => {
   });
 
   it("says so, and moves nothing, when objects exist but none of them draws anything", () => {
-    const undrawable: Document = { ...createEmptyDocument(), objects: [{ id: "obj_1", name: "text_1", type: "text", slots: {} }] };
+    const undrawable: Document = { ...createEmptyDocument(), objects: [{ id: "obj_1", name: "text_1", type: "text", slots: { box: { kind: "derived", value: null } } }] };
     const before = initialAppState(undrawable);
     const after = performEffect({ kind: "fit" }, before, VIEWPORT).state;
     expect(after.document.camera).toEqual(before.document.camera);
@@ -448,7 +448,7 @@ describe("buildPanelModel — the rows of the properties panel", () => {
     const state = typed(opened(), "table x=0 y=0 rows=3 cols=3");
     const model = buildPanelModel(objectNamed(state, "table_1"), state.document.objects);
     expect(model.modifiable.map((row) => row.path)).toEqual(["origin.x", "origin.y", "rows", "cols", "cells"]);
-    expect(model.derived).toEqual([]);
+    expect(model.derived.map((row) => row.path)).toEqual(["box"]);
     expect(model.modifiable.find((row) => row.path === "cells")?.synthetic).toBe(true);
     expect(model.modifiable.find((row) => row.path === "origin.x")?.synthetic).toBe(false);
   });
@@ -911,6 +911,7 @@ describe("submitLine / pointerMoveTo forward the EvalContext", () => {
       name: "text_1",
       type: "text",
       slots: {
+        box: { kind: "derived", value: null },
         content: { kind: "literal", value: "hello" },
         width: { kind: "literal", value: "auto" },
         "style.font": { kind: "literal", value: "sans" },
@@ -1682,6 +1683,7 @@ describe("a document saved before `autoresize` existed still loads (2026-09-02)"
           name: "text_1",
           type: "text",
           slots: {
+            box: { kind: "derived", value: null },
             "origin.x": { kind: "literal", value: 10 },
             "origin.y": { kind: "literal", value: 20 },
             content: { kind: "literal", value: "hello" },
@@ -2328,7 +2330,7 @@ describe("the Python editor's transitions", () => {
     const state = typed(typed(typed(opened(), "script x=0 y=0"), "addport script_1.out.result"), "set script_1.placeholder.result 4");
     expect(scriptStatusLines(objectNamed(state, "script_1"))).toEqual(["result = 4"]);
     expect(scriptStatusLines(objectNamed(typed(opened(), "script x=0 y=0"), "script_1"))).toEqual(["no outputs yet"]);
-    const failed: GraphObject = { id: "s", name: "s", type: "script", ports: { in: [], out: ["a"] }, slots: { "out.a": { kind: "derived", value: { error: "#SCRIPT", message: "line 2: NameError" } } } };
+    const failed: GraphObject = { id: "s", name: "s", type: "script", ports: { in: [], out: ["a"] }, slots: { box: { kind: "derived", value: null }, "out.a": { kind: "derived", value: { error: "#SCRIPT", message: "line 2: NameError" } } } };
     expect(scriptStatusLines(failed)).toEqual(["a: #SCRIPT line 2: NameError"]);
   });
 });

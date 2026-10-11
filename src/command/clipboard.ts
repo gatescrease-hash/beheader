@@ -53,6 +53,7 @@ import {
   type Operation,
   type Slot,
   type Value,
+  withSchemaDerivedSlots,
 } from "../engine/index.ts";
 
 export interface ObjectsPayload {
@@ -143,7 +144,10 @@ export function pasteObjects(document: Document, payload: ObjectsPayload, offset
         slots[key] = moved;
       }
     }
-    return { ...copy, slots } as GraphObject;
+    // A copy taken by an older build can lack a derived slot its type now
+    // declares, so the paste fills it the way a load does.
+    const pasted = { ...copy, slots } as GraphObject;
+    return { ...pasted, slots: withSchemaDerivedSlots(pasted) };
   });
   return {
     operations: copies.map((object) => ({ kind: "createObject", object })),

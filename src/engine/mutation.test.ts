@@ -174,7 +174,7 @@ function stagingFixture(): { readonly objects: readonly GraphObject[]; readonly 
           slots: { value: { kind: "formula", ast: { type: "reference", address: addr("staging_poly", "vertex", "2", "x") }, value: null } },
         },
       },
-      { kind: "createObject", object: { id: "staging_script", name: "script_1", type: "script", slots: {}, ports: { in: ["factor"], out: [] } } },
+      { kind: "createObject", object: { id: "staging_script", name: "script_1", type: "script", slots: { box: { kind: "derived", value: null } }, ports: { in: ["factor"], out: [] } } },
     ],
     document.journal,
     stagingContext,
@@ -2129,6 +2129,7 @@ describe("mutate — ExplodeOperation, behind `explode`, turns a preset into an 
       name: "polygon_1",
       type: "polygon",
       slots: {
+        box: { kind: "derived", value: null },
         sides: { kind: "literal", value: 2 },
         radius: { kind: "literal", value: 5 },
         "origin.x": { kind: "literal", value: 0 },
@@ -2154,6 +2155,7 @@ describe("mutate — ExplodeOperation, behind `explode`, turns a preset into an 
       name: "circle_1",
       type: "circle",
       slots: {
+        box: { kind: "derived", value: null },
         "origin.x": { kind: "literal", value: 1 },
         "origin.y": { kind: "literal", value: 0 },
         radius: { kind: "literal", value: 1 },
@@ -2184,6 +2186,7 @@ describe("mutate — ExplodeOperation, behind `explode`, turns a preset into an 
       name: "circle_1",
       type: "circle",
       slots: {
+        box: { kind: "derived", value: null },
         "origin.x": { kind: "literal", value: 0 },
         "origin.y": { kind: "literal", value: 0 },
         radius: { kind: "literal", value: 0 },
@@ -2369,11 +2372,20 @@ function tableObject(id: string, name: string, rows: number, cols: number, cellS
     name,
     type: "table",
     slots: {
+      box: { kind: "derived", value: null },
       rows: { kind: "literal", value: rows },
       cols: { kind: "literal", value: cols },
       ...cellSlots,
     },
   };
+}
+
+/** The two edges into the box of a table fixture, which carries rows and cols and no origin. */
+function tableBoxEdges(id: string): readonly Edge[] {
+  return [
+    { sourceSlot: addr(id, "rows"), dependentSlot: addr(id, "box") },
+    { sourceSlot: addr(id, "cols"), dependentSlot: addr(id, "box") },
+  ];
 }
 
 function polylinePlaceholders(): Record<string, Slot> {
@@ -2387,6 +2399,7 @@ function polylinePlaceholders(): Record<string, Slot> {
     "bounds.minY": { kind: "derived", value: null },
     "bounds.maxX": { kind: "derived", value: null },
     "bounds.maxY": { kind: "derived", value: null },
+    box: { kind: "derived", value: null },
   };
 }
 
@@ -2396,7 +2409,7 @@ function polylineObject(id: string, name: string, points: readonly { readonly x:
     slots[`vertex.${index}.x`] = { kind: "literal", value: point.x };
     slots[`vertex.${index}.y`] = { kind: "literal", value: point.y };
   });
-  return { id, name, type: "polyline", vertexCount: points.length, slots: { ...slots, ...vertexSlots } };
+  return { id, name, type: "polyline", vertexCount: points.length, slots: { box: { kind: "derived", value: null }, ...slots, ...vertexSlots } };
 }
 
 function createdPolyline(
@@ -2434,6 +2447,7 @@ function presetPlaceholders(): Record<string, Slot> {
     "bounds.minY": { kind: "derived", value: null },
     "bounds.maxX": { kind: "derived", value: null },
     "bounds.maxY": { kind: "derived", value: null },
+    box: { kind: "derived", value: null },
   };
 }
 
@@ -2443,6 +2457,7 @@ function rectObject(id: string, name: string, originX: number, originY: number, 
     name,
     type: "rect",
     slots: {
+      box: { kind: "derived", value: null },
       "origin.x": { kind: "literal", value: originX },
       "origin.y": { kind: "literal", value: originY },
       width: { kind: "literal", value: width },
@@ -2476,7 +2491,7 @@ describe("deriveEdges — table's dynamic cell family", () => {
 
     const edges = deriveEdges(objects);
 
-    expectSameEdges(edges, [{ sourceSlot: addr("obj_1", "value"), dependentSlot: addr("obj_2", "cells", "A1") }]);
+    expectSameEdges(edges, [{ sourceSlot: addr("obj_1", "value"), dependentSlot: addr("obj_2", "cells", "A1") }, ...tableBoxEdges("obj_2")]);
   });
 
   it("derives edges for every populated cell across the table's whole current extent, not just A1", () => {
@@ -2492,6 +2507,7 @@ describe("deriveEdges — table's dynamic cell family", () => {
     expectSameEdges(deriveEdges(objects), [
       { sourceSlot: addr("obj_1", "value"), dependentSlot: addr("obj_3", "cells", "A1") },
       { sourceSlot: addr("obj_2", "value"), dependentSlot: addr("obj_3", "cells", "B2") },
+      ...tableBoxEdges("obj_3"),
     ]);
   });
 
@@ -2519,6 +2535,8 @@ describe("deriveEdges — table's dynamic cell family", () => {
 
     expectSameEdges(deriveEdges(objects), [
       { sourceSlot: addr("obj_1", "cells", "A1"), dependentSlot: addr("obj_2", "cells", "A1") },
+      ...tableBoxEdges("obj_1"),
+      ...tableBoxEdges("obj_2"),
     ]);
   });
 });
@@ -2629,6 +2647,7 @@ describe("table dimensions are literal-only, so evaluation cannot resize a table
       name: "table_x",
       type: "table",
       slots: {
+        box: { kind: "derived", value: null },
         rows: { kind: "formula", ast: { type: "reference", address: addr("obj_1", "value") }, value: cachedRows },
         cols: { kind: "literal", value: 1 },
         ...cellSlots,
@@ -2962,7 +2981,8 @@ describe("deriveEdges and mutate — range expansion is bounded by the current e
     };
     const consumer: GraphObject = { id: "obj_2", name: "value_1", type: "value", slots: { value: rangeFormula } };
 
-    const smallEdges = deriveEdges([small, consumer]);
+    // The edges into the consumer, apart from the two that size the table's own box.
+    const smallEdges = deriveEdges([small, consumer]).filter((edge) => edge.dependentSlot.objectId === "obj_2");
     expect(smallEdges).toHaveLength(1);
 
     const grown = tableObject("obj_1", "table_x", 2, 2, {
@@ -2971,7 +2991,7 @@ describe("deriveEdges and mutate — range expansion is bounded by the current e
       "cells.A2": { kind: "literal", value: 3 },
       "cells.B2": { kind: "literal", value: 4 },
     });
-    const grownEdges = deriveEdges([grown, consumer]);
+    const grownEdges = deriveEdges([grown, consumer]).filter((edge) => edge.dependentSlot.objectId === "obj_2");
     expect(grownEdges).toHaveLength(4);
   });
 });
@@ -3252,7 +3272,7 @@ describe("mutate — a bare reference to an empty in-extent cell reads as 0 and 
       },
     ];
 
-    expectSameEdges(deriveEdges(objects), []);
+    expectSameEdges(deriveEdges(objects), tableBoxEdges("obj_1"));
   });
 
   it("the other boundary: a cell outside the extent is still a dangling reference, because no bound makes it legal", () => {
@@ -3635,6 +3655,7 @@ describe("mutate — findInvalidTableResizes refuses an insert whose dimension i
       name: "table_x",
       type: "table",
       slots: {
+        box: { kind: "derived", value: null },
         rows: { kind: "formula", ast: { type: "literal", value: 2 }, value: 2 },
         cols: { kind: "literal", value: 1 },
         "cells.A1": { kind: "literal", value: 1 },
@@ -3658,6 +3679,7 @@ describe("mutate — findInvalidTableResizes refuses an insert whose dimension i
       name: "table_x",
       type: "table",
       slots: {
+        box: { kind: "derived", value: null },
         rows: { kind: "literal", value: 1 },
         cols: { kind: "formula", ast: { type: "literal", value: 2 }, value: 2 },
       },
@@ -3684,6 +3706,7 @@ describe("mutate — findInvalidTableResizes refuses an insert whose dimension i
       name: "table_x",
       type: "table",
       slots: {
+        box: { kind: "derived", value: null },
         rows: { kind: "literal", value: 3 },
         cols: { kind: "formula", ast: { type: "reference", address: addr("obj_2", "value") }, value: 0 },
         "cells.A1": { kind: "literal", value: 1 },
@@ -3979,7 +4002,7 @@ describe("mutate — DeleteTableLineOperation, the row and column delete, and th
       id: "obj_1",
       name: "table_x",
       type: "table",
-      slots: { rows: { kind: "formula", ast: { type: "literal", value: 2 }, value: 2 }, cols: { kind: "literal", value: 1 } },
+      slots: { box: { kind: "derived", value: null }, rows: { kind: "formula", ast: { type: "literal", value: 2 }, value: 2 }, cols: { kind: "literal", value: 1 } },
     };
     const result = mutate([table], [{ kind: "deleteTableLine", objectId: "obj_1", axis: "row", index: 1 }], []);
 
@@ -3996,6 +4019,7 @@ describe("mutate — DeleteTableLineOperation, the row and column delete, and th
       name: "table_x",
       type: "table",
       slots: {
+        box: { kind: "derived", value: null },
         rows: { kind: "literal", value: 3 },
         cols: { kind: "formula", ast: { type: "reference", address: addr("obj_2", "value") }, value: 0 },
         "cells.A1": { kind: "literal", value: 1 },
@@ -4178,6 +4202,7 @@ describe("mutate — a known incoherence, pinned and not fixed: a row or column 
       name: "table_x",
       type: "table",
       slots: {
+        box: { kind: "derived", value: null },
         rows: { kind: "literal", value: 3 },
         cols: { kind: "literal", value: 1 },
         "cells.A1": { kind: "literal", value: 1 },
@@ -4283,7 +4308,7 @@ describe("mutate — RenameObjectOperation, behind `rename`", () => {
 
 describe("mutate — AddPortOperation/RemovePortOperation", () => {
   function scriptObject(id: string, name: string, ports?: { readonly in: readonly string[]; readonly out: readonly string[] }): GraphObject {
-    return ports === undefined ? { id, name, type: "script", slots: {} } : { id, name, type: "script", slots: {}, ports };
+    return ports === undefined ? { id, name, type: "script", slots: { box: { kind: "derived", value: null } } } : { id, name, type: "script", slots: { box: { kind: "derived", value: null } }, ports };
   }
 
   it("addPort appends to an absent ports field, creating { in: [], out: [] } implicitly", () => {
@@ -4299,6 +4324,7 @@ describe("mutate — AddPortOperation/RemovePortOperation", () => {
         name: "script_1",
         type: "script",
         slots: {
+          box: { kind: "derived", value: null },
           "in.factor": { kind: "literal", value: 1 },
           "placeholder.result": { kind: "literal", value: 0 },
           "out.result": { kind: "derived", value: null },
@@ -4337,7 +4363,7 @@ describe("mutate — AddPortOperation/RemovePortOperation", () => {
 
   it("ALLOWS the same name in the OTHER family — 'in' and 'out' are independent namespaces", () => {
     const objects: readonly GraphObject[] = [
-      { id: "obj_1", name: "script_1", type: "script", slots: { "in.result": { kind: "literal", value: 1 } }, ports: { in: ["result"], out: [] } },
+      { id: "obj_1", name: "script_1", type: "script", slots: { box: { kind: "derived", value: null }, "in.result": { kind: "literal", value: 1 } }, ports: { in: ["result"], out: [] } },
     ];
     const result = mutate(
       objects,
@@ -4354,7 +4380,7 @@ describe("mutate — AddPortOperation/RemovePortOperation", () => {
 
   it("removePort removes the name from its family and drops the corresponding slot, if present", () => {
     const objects: readonly GraphObject[] = [
-      { id: "obj_1", name: "script_1", type: "script", slots: { "out.result": { kind: "derived", value: 5 } }, ports: { in: [], out: ["result"] } },
+      { id: "obj_1", name: "script_1", type: "script", slots: { box: { kind: "derived", value: null }, "out.result": { kind: "derived", value: 5 } }, ports: { in: [], out: ["result"] } },
     ];
     const result = mutate(objects, [{ kind: "removePort", objectId: "obj_1", family: "out", name: "result" }], []);
     expect(result.ok).toBe(true);
@@ -4372,7 +4398,7 @@ describe("mutate — AddPortOperation/RemovePortOperation", () => {
       id: "obj_1",
       name: "script_1",
       type: "script",
-      slots: { "out.result": { kind: "derived", value: 5 } },
+      slots: { box: { kind: "derived", value: null }, "out.result": { kind: "derived", value: 5 } },
       ports: { in: [], out: ["result"] },
     };
     const dependent: GraphObject = {
@@ -4391,7 +4417,7 @@ describe("mutate — AddPortOperation/RemovePortOperation", () => {
         id: "obj_1",
         name: "script_1",
         type: "script",
-        slots: { "placeholder.result": { kind: "literal", value: 0 }, "out.result": { kind: "derived", value: null } },
+        slots: { box: { kind: "derived", value: null }, "placeholder.result": { kind: "literal", value: 0 }, "out.result": { kind: "derived", value: null } },
         ports: { in: [], out: ["result"] },
       },
     ];
@@ -4549,6 +4575,7 @@ describe("text.resolvedContent end to end through mutate", () => {
       name,
       type: "text",
       slots: {
+        box: { kind: "derived", value: null },
         content: { kind: "literal", value: content },
         width: { kind: "literal", value: "auto" },
         "style.font": { kind: "literal", value: "sans" },
@@ -4586,6 +4613,8 @@ describe("text.resolvedContent end to end through mutate", () => {
       { sourceSlot: addr("obj_x", "style", "font"), dependentSlot: addr("obj_x", "measuredWidth") },
       { sourceSlot: addr("obj_x", "style", "fontSize"), dependentSlot: addr("obj_x", "measuredWidth") },
       { sourceSlot: addr("obj_x", "style", "lineHeight"), dependentSlot: addr("obj_x", "measuredWidth") },
+      ...tableBoxEdges("obj_t"),
+      ...["width", "resolvedContent", "measuredWidth", "measuredHeight"].map((name) => ({ sourceSlot: addr("obj_x", name), dependentSlot: addr("obj_x", "box") })),
     ]);
   });
 
@@ -4654,6 +4683,7 @@ describe("text.measuredHeight end to end through mutate", () => {
     resolvedContent: { kind: "derived", value: null },
     measuredHeight: { kind: "derived", value: null },
     measuredWidth: { kind: "derived", value: null },
+    box: { kind: "derived", value: null },
   };
 
   function textObject(id: string, name: string, omit: readonly string[] = []): GraphObject {
@@ -5022,7 +5052,7 @@ describe("mutate — the structural operations commit through the index of the c
       { batch: [write(math, { kind: "literal", value: "y=x" }, ["source"])], ok: false },
       { batch: [write(doc, { kind: "literal", value: 3 }, ["rate"])], ok: true },
       { batch: [write(doc, { kind: "literal", value: 3 }, ["table_1"])], ok: false },
-      { batch: [{ kind: "createObject", object: { id: "rate_copy", name: "rate_copy", type: "docref", target: addr(doc, "rate"), slots: { "origin.x": { kind: "literal", value: 0 }, "origin.y": { kind: "literal", value: 0 }, value: { kind: "derived", value: null }, measuredWidth: { kind: "derived", value: null }, measuredHeight: { kind: "derived", value: null } } } }], ok: true },
+      { batch: [{ kind: "createObject", object: { id: "rate_copy", name: "rate_copy", type: "docref", target: addr(doc, "rate"), slots: { box: { kind: "derived", value: null }, "origin.x": { kind: "literal", value: 0 }, "origin.y": { kind: "literal", value: 0 }, value: { kind: "derived", value: null }, measuredWidth: { kind: "derived", value: null }, measuredHeight: { kind: "derived", value: null } } } }], ok: true },
       { batch: [{ kind: "renameVariable", address: addr(doc, "speed"), name: "velocity" }], ok: true },
       { batch: [{ kind: "renameVariable", address: addr(doc, "velocity"), name: "rate" }], ok: false },
       { batch: [{ kind: "clearSlot", address: addr(doc, "rate") }], ok: true },

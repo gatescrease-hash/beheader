@@ -102,7 +102,7 @@ import { asPointArray, readBoolean, readNumber, readShapeStyle, readText, SCRIPT
 import { tableLayout, cellStyle, fittedCellNumber } from "./table-layout.ts";
 import { SLIDER_KNOB_RADIUS, sliderLayout } from "./slider-layout.ts";
 import { displayObjects } from "../engine/index.ts";
-import { textBoxSize } from "./textbox.ts";
+import { textBoxSize } from "../engine/index.ts";
 import { GROUP_TAB_HEIGHT, groupBoundary, groupTabWidth, objectExtent } from "./extent.ts";
 
 const DEFAULT_SHAPE_STROKE_STYLE = "#1a1a1a";

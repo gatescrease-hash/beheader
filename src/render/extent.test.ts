@@ -6,8 +6,32 @@
  * handles both read objectExtent. Neither one measures a type of its own.
  */
 import { describe, expect, it } from "vitest";
-import type { GraphObject } from "../engine/index.ts";
+import { createEmptyDocument, type Document, type EvalContext, type GraphObject } from "../engine/index.ts";
+import { executeCommand, isCommandFailure } from "../command/commands.ts";
+import { isCommandParseFailure, parseCommand } from "../command/parser.ts";
 import { documentExtent, groupBoundary, objectExtent } from "./extent.ts";
+
+describe("objectExtent — the box the canvas draws is the box a formula reads", () => {
+  it("equals the derived box slot for every type that carries one", () => {
+    const context: EvalContext = { measurer: { measure: (text: string) => ({ width: text.length * 8, height: 20 }) } };
+    let document: Document = createEmptyDocument();
+    for (const line of ["circle x=100 y=50 r=20", "rect x=10 y=20 w=30 h=40", "polygon sides=5 x=0 y=0 r=10", "polyline 0,0 40,0 40,30", "table x=0 y=100 rows=2 cols=3",
+      'text x=0 y=300 "a note"', "image x=200 y=0", "script x=300 y=0", "slider x=0 y=400", "frame x=0 y=500 w=200 h=100", "docvar speed 12 x=400 y=400"]) {
+      const parsed = parseCommand(line);
+      if (isCommandParseFailure(parsed)) throw new Error(parsed.message);
+      const outcome = executeCommand(parsed.command, document, context);
+      if (isCommandFailure(outcome)) throw new Error(outcome.message);
+      document = outcome.document;
+    }
+    const boxed = document.objects.filter((object) => object.slots.box !== undefined);
+    expect(boxed).toHaveLength(11);
+    for (const object of boxed) {
+      const box = object.slots.box?.value as readonly { x: number; y: number }[];
+      const extent = objectExtent(object)!;
+      expect([extent.minX, extent.minY, extent.maxX, extent.maxY], object.name).toEqual([box[0]!.x, box[0]!.y, box[1]!.x, box[1]!.y].map((value) => expect.closeTo(value, 9)));
+    }
+  });
+});
 
 describe("objectExtent — polyline reads the same derived vertices slot the closed shapes read", () => {
   it("gives the bounding box of its vertices", () => {

@@ -171,6 +171,7 @@ describe("runMutationDifferential", () => {
         slots: {
           rows: { kind: "literal", value: unrelatedCount },
           cols: { kind: "literal", value: 1 },
+          box: { kind: "derived", value: null },
           ...Object.fromEntries(Array.from({ length: unrelatedCount }, (_, index) => [
             `cells.A${index + 1}`,
             { kind: "literal", value: index },

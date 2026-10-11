@@ -33,6 +33,7 @@ function table(id: string, name: string, cells: Record<string, GraphObject["slot
     name,
     type: "table",
     slots: {
+      box: { kind: "derived", value: null },
       "origin.x": { kind: "literal", value: 0 },
       "origin.y": { kind: "literal", value: 0 },
       rows: { kind: "literal", value: 2 },

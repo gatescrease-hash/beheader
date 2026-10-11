@@ -15,8 +15,8 @@ register, and the measurements behind leaving that migration unscheduled.
 | --- | --- |
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
-| Tests | 3071 Vitest tests and 2 tooling tests pass, with 0 skipped. |
-| Spec | Built through section 24, except the parts section 17 postpones. |
+| Tests | 3086 Vitest tests and 2 tooling tests pass, with 0 skipped. |
+| Spec | Built through section 24, and the derived box of section 25, except the parts section 17 postpones. |
 | Scripts | Python runs in a Pyodide worker. Groups are script nodes with members. |
 | Rule 5 | Met for every committed batch. A refusal and a list with no index still cost the whole document. |
 | Selection | A box selects by window or crossing, a drag moves the whole selection and snaps, and Ctrl+A, the arrows, Delete and Ctrl+D act on it. |
@@ -154,6 +154,8 @@ covers everything it calls.
 | `primitives/image.ts` | Slot path constants for the image type. |
 | `primitives/slider.ts` | The slots of a slider, and the rule that turns a place on its track into a value. |
 | `primitives/frame.ts` | The slots and defaults of a frame, which marks a named region and owns nothing. |
+| `primitives/textbox.ts` | The one rule for the size of a text box. |
+| `primitives/box.ts` | The one rule for the box of every object with a place, which the derived `box` slot and the canvas both read. |
 | `primitives/doc.ts` | The document variable, the copy of one on the canvas, and the names a variable may not take. |
 | `primitives/math.ts` | The slots a math object carries, the seeds a solve starts from, and the compute function behind each export. |
 | `math/ast.ts` | The node types of the math language, and the depth check over them. |
@@ -176,7 +178,6 @@ covers everything it calls.
 | `camera.ts` | World and screen coordinates, pan, zoom, and the limits on both. |
 | `extent.ts` | The world box of one object, and of the whole document. |
 | `slots.ts` | Defensive readers for a slot value, and the fixed box sizes. |
-| `textbox.ts` | The one rule for the size of a text box. |
 | `hittest.ts` | A screen point to the topmost object under it. |
 | `handles.ts` | The resize grabbers, and the box maths behind a resize. |
 | `menu.ts` | The right press menu, and the command line each entry writes. |
@@ -270,8 +271,10 @@ the code it constrains.
    at a point they pick.
 6. **`measure.ts` and `renderer.ts` move together.** One layout function, two
    readers.
-7. **`render/textbox.ts` holds the one rule for the size of a text box.** Three
-   readers use it, and a fourth does not belong there.
+7. **`primitives/box.ts` holds the one rule for the box of an object, and
+   `primitives/textbox.ts` the rule for a text box inside it.** The derived
+   `box` slot and the canvas read the same rule, so a connector aims at the box
+   the operator sees. A second rule in the render layer does not belong there.
 8. **`.text-editor` does not set a font, a padding or a border.** It sets
    `overflow-wrap: break-word` on purpose, and `measure.ts` implements the
    same rule. The pair changes together, or not at all.

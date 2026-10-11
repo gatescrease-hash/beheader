@@ -377,7 +377,7 @@ describe("creation — a typed line becomes an object", () => {
     expect(isCommandFailure(listed) ? undefined : listed.createdObjectId).toBeUndefined();
   });
 
-  it("creates an image with all eight non-derived slots — the five the spec names plus `source`, `preserveAspect` and `pictureAspect` — and no derived ones", () => {
+  it("creates an image with all eight non-derived slots — the five the spec names plus `source`, `preserveAspect` and `pictureAspect` — and the derived box", () => {
     const object = onlyObject(committed("image x=30 y=40", createEmptyDocument()));
     expect(object.type).toBe("image");
     expect(object.name).toBe("image_1");
@@ -389,7 +389,7 @@ describe("creation — a typed line becomes an object", () => {
     expect(literalValue(object, ["source"])).toBe("");
     expect(literalValue(object, ["preserveAspect"])).toBe(true);
     expect(literalValue(object, ["pictureAspect"])).toBe(0);
-    expect(Object.keys(object.slots).sort()).toEqual(["height", "opacity", "origin.x", "origin.y", "pictureAspect", "preserveAspect", "source", "width"]);
+    expect(Object.keys(object.slots).sort()).toEqual(["box", "height", "opacity", "origin.x", "origin.y", "pictureAspect", "preserveAspect", "source", "width"]);
   });
 
   it("gives an image the SAME origin paths every positioned object uses, so `link image_1.origin.x <cell>` commits", () => {
@@ -412,7 +412,7 @@ describe("creation — a typed line becomes an object", () => {
     expect(isCommandParseFailure(result) && result.message).toContain('"w"');
   });
 
-  it("creates a script with its four static slots and no ports, which the next slice adds", () => {
+  it("creates a script with its four static slots, its derived box and no ports, which the next slice adds", () => {
     const object = onlyObject(committed("script x=30 y=40", createEmptyDocument()));
     expect(object.type).toBe("script");
     expect(object.name).toBe("script_1");
@@ -421,7 +421,7 @@ describe("creation — a typed line becomes an object", () => {
     expect(literalValue(object, ["language"])).toBe("python");
     expect(literalValue(object, ["source"])).toBe("");
     expect(object.ports).toBeUndefined();
-    expect(Object.keys(object.slots).sort()).toEqual(["language", "origin.x", "origin.y", "source"]);
+    expect(Object.keys(object.slots).sort()).toEqual(["box", "language", "origin.x", "origin.y", "source"]);
   });
 
   it("gives a script the SAME origin paths every positioned object uses, so `link script_1.origin.x <cell>` commits", () => {
@@ -1389,12 +1389,13 @@ describe("delete, refs, props and list — the object commands that need no new 
 
     it("counts other objects' dependents apart from the target's own, because only the first kind can block a delete", () => {
       const reported = lines("refs table_1", wired());
-      expect(reported[reported.length - 1]).toBe("1 inbound edge from 1 dependent slot: 1 on other objects, 0 on table_1 itself");
+      expect(reported[reported.length - 1]).toBe("5 inbound edges from 2 dependent slots: 1 on other objects, 1 on table_1 itself");
     });
 
     it("reports a preset's own schema wiring rather than hiding it — its derived slots do read its parameters", () => {
       const reported = lines("refs polygon_1", sandbox());
-      expect(reported[reported.length - 1]).toBe("13 inbound edges from 9 dependent slots: 0 on other objects, 9 on polygon_1 itself");
+      expect(reported[reported.length - 1]).toBe("17 inbound edges from 10 dependent slots: 0 on other objects, 10 on polygon_1 itself");
+      expect(reported).toContain("polygon_1.bounds.minX → polygon_1.box");
       expect(reported).toContain("polygon_1.origin.x → polygon_1.vertices");
       expect(reported).toContain("polygon_1.vertices → polygon_1.centroid.x");
     });
@@ -1412,7 +1413,7 @@ describe("delete, refs, props and list — the object commands that need no new 
     });
 
     it("says nothing references a target rather than printing an empty report", () => {
-      expect(lines("refs table_1", sandbox())).toEqual(["nothing references table_1"]);
+      expect(lines("refs table_1.box", sandbox())).toEqual(["nothing references table_1.box"]);
       expect(lines("refs table_1.A1", sandbox())).toEqual(["nothing references table_1.A1"]);
     });
 
@@ -1437,7 +1438,11 @@ describe("delete, refs, props and list — the object commands that need no new 
       expect(lines("refs table_1.D4", linkedToEmptyCell)).toEqual(["nothing references table_1.D4"]);
       expect(lines("refs table_1", linkedToEmptyCell)).toEqual([
         "table_1.D4 → polygon_1.origin.x",
-        "1 inbound edge from 1 dependent slot: 1 on other objects, 0 on table_1 itself",
+        "table_1.origin.x → table_1.box",
+        "table_1.origin.y → table_1.box",
+        "table_1.rows → table_1.box",
+        "table_1.cols → table_1.box",
+        "5 inbound edges from 2 dependent slots: 1 on other objects, 1 on table_1 itself",
       ]);
       expect(refused("delete table_1", linkedToEmptyCell)).toContain("polygon_1.origin.x references a slot that does not exist");
     });
@@ -1458,7 +1463,11 @@ describe("delete, refs, props and list — the object commands that need no new 
       expect(lines("refs table_1", both)).toEqual([
         "table_1.A1 → polygon_1.origin.x",
         "table_1.A2 → polygon_1.origin.x",
-        "2 inbound edges from 1 dependent slot: 1 on other objects, 0 on table_1 itself",
+        "table_1.origin.x → table_1.box",
+        "table_1.origin.y → table_1.box",
+        "table_1.rows → table_1.box",
+        "table_1.cols → table_1.box",
+        "6 inbound edges from 2 dependent slots: 1 on other objects, 1 on table_1 itself",
       ]);
     });
 
@@ -1492,7 +1501,11 @@ describe("delete, refs, props and list — the object commands that need no new 
       it("is reported by refs, because it is the edge the deletion would leave dangling", () => {
         expect(lines("refs table_1", rangeReader())).toEqual([
           "table_1.A1 → table_2.A1",
-          "1 inbound edge from 1 dependent slot: 1 on other objects, 0 on table_1 itself",
+          "table_1.origin.x → table_1.box",
+          "table_1.origin.y → table_1.box",
+          "table_1.rows → table_1.box",
+          "table_1.cols → table_1.box",
+          "5 inbound edges from 2 dependent slots: 1 on other objects, 1 on table_1 itself",
         ]);
       });
 
@@ -1535,6 +1548,7 @@ describe("delete, refs, props and list — the object commands that need no new 
         "bounds.minY",
         "bounds.maxX",
         "bounds.maxY",
+        "box",
       ]);
     });
 
@@ -1563,11 +1577,11 @@ describe("delete, refs, props and list — the object commands that need no new 
       expect(lines("props table_1", sandbox())).toContain('cells = "4×4 grid — 0 of 16 cells written" (literal)');
     });
 
-    it("lists a table's own slots in schema order, the summary row last", () => {
+    it("lists a table's own slots in schema order, the summary row after them and the derived box last", () => {
       const paths = lines("props table_1", sandbox())
         .slice(1)
         .map((line) => line.split(" = ")[0]);
-      expect(paths).toEqual(["origin.x", "origin.y", "rows", "cols", "cells"]);
+      expect(paths).toEqual(["origin.x", "origin.y", "rows", "cols", "cells", "box"]);
     });
 
     it("refuses a name no object has", () => {
@@ -2247,6 +2261,7 @@ describe("executeCommand forwards the EvalContext to the evaluation in mutate", 
       name: "text_1",
       type: "text",
       slots: {
+        box: { kind: "derived", value: null },
         content: { kind: "literal", value: "hello there" },
         width: { kind: "literal", value: "auto" },
         "style.font": { kind: "literal", value: "sans" },

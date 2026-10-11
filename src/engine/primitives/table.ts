@@ -22,7 +22,7 @@
  */
 
 import { type Address, formatCellReference, parseCellReference, TABLE_CELL_PATH_PREFIX } from "../address.ts";
-import { getSlot, slotKey, TABLE_TYPE, type GraphObject, type Slot } from "../graph/node.ts";
+import { getSlot, slotKey, TABLE_TYPE, type GraphObject, type Slot, type Value } from "../graph/node.ts";
 
 export const MIN_TABLE_LINES = 1;
 export const MAX_TABLE_LINES = 1000;
@@ -114,6 +114,41 @@ export function enumerateRangeCellAddresses(
     }
   }
   return addresses;
+}
+
+/** The width of a column with no width of its own, in world units. */
+export const TABLE_DEFAULT_COLUMN_WIDTH = 80;
+/** The height of a row with no height of its own, in world units. */
+export const TABLE_DEFAULT_ROW_HEIGHT = 24;
+/** The narrowest a column draws, so a cell keeps room for a digit. */
+export const TABLE_MIN_COLUMN_WIDTH = 24;
+/** The shortest a row draws, so a cell keeps room for a line of text. */
+export const TABLE_MIN_ROW_HEIGHT = 20;
+
+/** The path of a column's own width, which a drag on the column's edge writes. */
+export function tableColumnWidthPath(column: number): readonly string[] {
+  return ["columns", String(column), "width"];
+}
+
+/** The path of a row's own height, which a drag on the row's edge writes. */
+export function tableRowHeightPath(row: number): readonly string[] {
+  return ["rowsizes", String(row), "height"];
+}
+
+/**
+ * The width of each column and the height of each row of a table, from the
+ * sizes its own slots carry and the defaults where they carry none. `read`
+ * gives a slot's value, so the derived box of a table reads through its
+ * declared dependencies and the render layer reads the object directly, by
+ * the same rule.
+ */
+export function tableSizes(rows: number, cols: number, read: (path: readonly string[]) => Value | undefined): { readonly widths: readonly number[]; readonly heights: readonly number[] } {
+  const size = (value: Value | undefined, fallback: number, minimum: number): number =>
+    typeof value === "number" && Number.isFinite(value) ? Math.max(minimum, value) : fallback;
+  return {
+    widths: Array.from({ length: cols }, (_unused, index) => size(read(tableColumnWidthPath(index + 1)), TABLE_DEFAULT_COLUMN_WIDTH, TABLE_MIN_COLUMN_WIDTH)),
+    heights: Array.from({ length: rows }, (_unused, index) => size(read(tableRowHeightPath(index + 1)), TABLE_DEFAULT_ROW_HEIGHT, TABLE_MIN_ROW_HEIGHT)),
+  };
 }
 
 export const TABLE_ROWS_PATH: readonly string[] = ["rows"];

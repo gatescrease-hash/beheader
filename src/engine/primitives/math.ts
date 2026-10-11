@@ -29,7 +29,7 @@
 import { formatAddress, isAddressError, parseAddress, type Address } from "../address.ts";
 import { hasMathMeasurer, type EvalContext } from "../eval-context.ts";
 import { isErrorValue, MATH_TYPE, slotKey, type GraphObject, type Slot, type Value } from "../graph/node.ts";
-import { ORIGIN_X_PATH, ORIGIN_Y_PATH } from "./geometry.ts";
+import { BOX_PATH, ORIGIN_X_PATH, ORIGIN_Y_PATH } from "./geometry.ts";
 import { mathExportLines, type MathProgram } from "../math/ast.ts";
 import { evaluateMathObject, mathAddressKey } from "../math/eval.ts";
 import { isMathNameError, resolveMathNames, type MathNames } from "../math/names.ts";
@@ -502,7 +502,7 @@ export const MATH_DEFAULT_INPUT: Value = null;
 
 /**
  * A math object with nothing typed into it yet, carrying every slot its schema
- * declares. The two measured slots are part of that set, so an object built any
+ * declares. The two measured slots and the box are part of that set, so an object built any
  * other way fails the integrity check the moment an edge derives into one.
  */
 export function createMathObject(id: string, name: string, originX: number, originY: number): GraphObject {
@@ -518,6 +518,7 @@ export function createMathObject(id: string, name: string, originX: number, orig
       [slotKey(MATH_DISPLAY_PATH)]: { kind: "literal", value: MATH_DEFAULT_DISPLAY },
       [slotKey(MATH_MEASURED_WIDTH_PATH)]: { kind: "derived", value: null },
       [slotKey(MATH_MEASURED_HEIGHT_PATH)]: { kind: "derived", value: null },
+      [slotKey(BOX_PATH)]: { kind: "derived", value: null },
     },
   };
 }

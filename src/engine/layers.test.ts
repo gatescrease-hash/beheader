@@ -13,7 +13,7 @@ function circle(): GraphObject {
   return object;
 }
 
-const table: GraphObject = { id: "table", name: "table_1", type: "table", slots: { rows: { kind: "literal", value: 2 }, cols: { kind: "literal", value: 2 }, "cells.A1": { kind: "literal", value: 2 } } };
+const table: GraphObject = { id: "table", name: "table_1", type: "table", slots: { box: { kind: "derived", value: null }, rows: { kind: "literal", value: 2 }, cols: { kind: "literal", value: 2 }, "cells.A1": { kind: "literal", value: 2 } } };
 
 function setup() {
   const objects = [createLayer("geom", "GEOM"), createLayer("txt", "TXT"), circle(), table];

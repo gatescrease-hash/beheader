@@ -100,6 +100,18 @@ export function scriptValue(raw: unknown): Value {
   return refuse(`a ${typeof raw === "object" ? "dict or object" : typeof raw}`);
 }
 
+/** The width of a script node's box, in world units. */
+export const SCRIPT_BOX_WIDTH = 200;
+/** The height of the band at the top of a script node, which holds its language and state. */
+export const SCRIPT_HEADER_HEIGHT = 24;
+/** The height of one row of ports, which holds one input on the left and one output on the right. */
+export const SCRIPT_PORT_ROW_HEIGHT = 18;
+
+/** The height of a script node's box: the header and one row for each pair of ports, and one row at least. */
+export function scriptBoxHeight(inPortCount: number, outPortCount: number): number {
+  return SCRIPT_HEADER_HEIGHT + Math.max(inPortCount, outPortCount, 1) * SCRIPT_PORT_ROW_HEIGHT;
+}
+
 export const SCRIPT_LANGUAGE_PATH: readonly string[] = ["language"];
 
 export const SCRIPT_SOURCE_PATH: readonly string[] = ["source"];

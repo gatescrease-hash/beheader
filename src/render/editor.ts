@@ -38,7 +38,7 @@ import { tableLayout, tableCellAt, cellStyle } from "./table-layout.ts";
 import { objectExtent, type WorldExtent } from "./extent.ts";
 import { hitTest } from "./hittest.ts";
 import { readBoolean, readNumber, readText, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";
-import { textBoxSize, TEXT_FALLBACK_BOX_HEIGHT, TEXT_FALLBACK_BOX_WIDTH, type TextBoxSize } from "./textbox.ts";
+import { textBoxSize, TEXT_FALLBACK_BOX_HEIGHT, TEXT_FALLBACK_BOX_WIDTH, type TextBoxSize } from "../engine/index.ts";
 
 export type EditorTarget =
   | { readonly kind: "docref"; readonly objectId: string }

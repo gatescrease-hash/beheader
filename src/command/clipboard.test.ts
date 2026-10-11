@@ -50,6 +50,17 @@ function formulaOf(document: Document, name: string, key: string): string {
 const PAIR = ["circle x=0 y=0 r=10", "circle x=100 y=0 r=5", "set circle_2.radius = circle_1.radius * 2"];
 
 describe("copying objects", () => {
+  it("pastes a copy taken before a type gained its box, and gives the pasted object one", () => {
+    const document = built(["rect x=0 y=0 w=10 h=10"]);
+    const payload = copyObjects(document.objects, [named(document, "rect_1").id]);
+    const old = { ...payload, objects: payload.objects.map((object) => ({ ...object, slots: Object.fromEntries(Object.entries(object.slots).filter(([key]) => key !== "box")) })) };
+    const plan = pasteObjects(document, old, { x: 20, y: 20 });
+    if ("ok" in plan) throw new Error(plan.message);
+    const result = mutate(document.objects, plan.operations, document.journal, CONTEXT);
+    if (!result.ok) throw new Error(result.message);
+    expect(result.objects.find((object) => object.name === "rect_2")?.slots.box?.value).toEqual([{ x: 20, y: 20 }, { x: 30, y: 30 }]);
+  });
+
   it("pastes a wired pair with its wiring on the copies, moved by the offset, under the next free names", () => {
     const document = pasted(built(PAIR), ["circle_1", "circle_2"]);
     expect(formulaOf(document, "circle_4", "radius")).toBe("circle_3.radius * 2");

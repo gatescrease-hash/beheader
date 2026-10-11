@@ -167,12 +167,13 @@ describe("saveDocument / loadDocument — round-trips to JSON and back identical
     expect(reloadedAdd1?.slots["out.result"]).toEqual({ kind: "derived", value: 7 });
   });
 
-  it("round-trips an `image` object — six literal slots, no derived ones, and now a SCHEMA to be reconciled against", () => {
+  it("round-trips an `image` object — six literal slots, the derived box, and now a SCHEMA to be reconciled against", () => {
     const image: GraphObject = {
       id: "obj_1",
       name: "image_1",
       type: "image",
       slots: {
+        box: { kind: "derived", value: null },
         "origin.x": { kind: "literal", value: 30 },
         "origin.y": { kind: "literal", value: 40 },
         width: { kind: "literal", value: 100 },
@@ -187,7 +188,9 @@ describe("saveDocument / loadDocument — round-trips to JSON and back identical
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.document).toEqual(document);
+      // The load evaluates the box again, from the origin and the size.
+      const boxed: GraphObject = { ...image, slots: { ...image.slots, box: { kind: "derived", value: [{ x: 30, y: 40 }, { x: 130, y: 140 }] } } };
+      expect(result.document).toEqual({ ...document, objects: [boxed] });
     }
   });
 });
@@ -404,6 +407,7 @@ describe("deserializeDocument — a loaded formula AST's SHAPE is validated at t
       name: "table_1",
       type: "table",
       slots: {
+        box: { kind: "derived", value: null },
         rows: { kind: "literal", value: 3 },
         cols: { kind: "literal", value: 3 },
         "cells.A1": { kind: "literal", value: 2 },
@@ -641,6 +645,7 @@ describe("deserializeDocument — ports, structural validation only", () => {
       const expectedSlots = expected.objects[0]?.slots;
       if (expectedSlots !== undefined) {
         expectedSlots["out.result"] = { kind: "derived" };
+        expectedSlots["box"] = { kind: "derived" };
       }
       expect(JSON.parse(saveDocument(loaded.document)) as unknown).toEqual(expected);
     }
@@ -717,6 +722,7 @@ describe("deserializeDocument — vertexCount, structural validation only", () =
         expectedSlots["bounds.maxX"] = { kind: "derived" };
         expectedSlots["bounds.maxY"] = { kind: "derived" };
         expectedSlots["vertices"] = { kind: "derived" };
+        expectedSlots["box"] = { kind: "derived" };
       }
       expect(JSON.parse(saveDocument(loaded.document)) as unknown).toEqual(expected);
     }
@@ -883,6 +889,7 @@ describe("deserializeDocument / loadDocument forward the EvalContext to the load
       name: "text_1",
       type: "text",
       slots: {
+        box: { kind: "derived", value: null },
         content: { kind: "literal", value: "loaded text" },
         width: { kind: "literal", value: width },
         "style.font": { kind: "literal", value: "sans" },

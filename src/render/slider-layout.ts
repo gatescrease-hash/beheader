@@ -18,6 +18,7 @@ import {
   ORIGIN_X_PATH,
   ORIGIN_Y_PATH,
   SLIDER_MAX_PATH,
+  SLIDER_HEIGHT,
   SLIDER_MIN_PATH,
   SLIDER_STEP_PATH,
   SLIDER_VALUE_PATH,
@@ -28,9 +29,6 @@ import {
 } from "../engine/index.ts";
 import type { WorldExtent } from "./extent.ts";
 import { readNumber } from "./slots.ts";
-
-/** The height of a slider's box, in world units. */
-export const SLIDER_HEIGHT = 32;
 
 /** The radius of the knob, in world units. */
 export const SLIDER_KNOB_RADIUS = 7;

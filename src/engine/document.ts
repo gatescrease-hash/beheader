@@ -218,7 +218,7 @@ export function deserializeDocument(raw: unknown, context: EvalContext = NULL_EV
   }
 
   const nextObjectId = raw.nextObjectId;
-  const journal = raw.journal as readonly MutationJournalEntry[];
+  const journal = withJournalDerivedSlots(raw.journal);
   let objects: readonly GraphObject[] = reconstructedObjects;
   if (objects.length > 0) {
     const operations: readonly Operation[] = objects.map((object) => ({ kind: "createObject", object }));
@@ -352,7 +352,41 @@ function reconstructPorts(raw: unknown, objectName: string): PortsReconstruction
   };
 }
 
-function withSchemaDerivedSlots(object: GraphObject): Record<string, Slot> {
+/**
+ * The journal with every object it creates given the derived slots its type
+ * declares now. Undo replays the journal from the start, so an entry that
+ * creates an object from before its type gained a derived slot would refuse,
+ * and leave nothing to undo. An operation of an unreadable shape passes
+ * through unchanged, and the replay refuses it by name as it always has.
+ */
+function withJournalDerivedSlots(raw: readonly unknown[]): readonly MutationJournalEntry[] {
+  return raw.map((entry) => {
+    if (!isPlainObject(entry) || !Array.isArray(entry.operations)) {
+      return entry;
+    }
+    const operations = entry.operations.map((operation: unknown) => {
+      if (!isPlainObject(operation) || operation.kind !== "createObject" || !isPlainObject(operation.object)) {
+        return operation;
+      }
+      const object = operation.object;
+      if (typeof object.type !== "string" || !isPlainObject(object.slots) || !reconstructPorts(object.ports, String(object.name)).ok) {
+        return operation;
+      }
+      const filled = object as unknown as GraphObject;
+      return { ...operation, object: { ...filled, slots: withSchemaDerivedSlots(filled) } };
+    });
+    return { ...entry, operations };
+  }) as unknown as readonly MutationJournalEntry[];
+}
+
+/**
+ * The slots of an object with each derived slot its type declares, filled
+ * with a placeholder where it is missing, and with each derived slot its type
+ * no longer declares taken away. Everything that brings an object in from
+ * outside the running program calls this: a load, the journal a load carries,
+ * and a paste. SPEC.md section 16 gives the reason mutate stays strict.
+ */
+export function withSchemaDerivedSlots(object: GraphObject): Record<string, Slot> {
   const schema = getObjectSchema(object.type);
   const slots = object.slots as Record<string, Slot>;
   if (schema === undefined) {

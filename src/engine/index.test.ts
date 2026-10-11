@@ -38,6 +38,7 @@ describe("engine/index.ts — the one public surface", () => {
       name: "circle_1",
       type: "circle",
       slots: {
+        box: { kind: "derived", value: null },
         [ORIGIN_X_PATH.join(".")]: { kind: "literal", value: 0 },
         [ORIGIN_Y_PATH.join(".")]: { kind: "literal", value: 0 },
         [RADIUS_PATH.join(".")]: { kind: "literal", value: 5 },

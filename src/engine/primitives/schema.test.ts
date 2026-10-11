@@ -60,20 +60,20 @@ describe("getObjectSchema", () => {
     expect(getObjectSchema("unbuilt" as GraphObject["type"])).toBeUndefined();
   });
 
-  it("returns a real entry for 'table', the first dynamic slot family, with no derived slots", () => {
+  it("returns a real entry for 'table', the first dynamic slot family, with the box as its one derived slot", () => {
     const schema = getObjectSchema("table");
     expect(schema).toBeDefined();
-    expect(resolveDerivedSlots(stubObject("table"), schema?.derivedSlots ?? [])).toEqual([]);
+    expect(resolveDerivedSlots(stubObject("table"), schema?.derivedSlots ?? []).map((slot) => slot.path)).toEqual([["box"]]);
   });
 
   it.each([
     ["polygon", [["sides"], ["radius"], ["origin", "x"], ["origin", "y"], ["rotation"], ...STYLE_PATHS]],
     ["rect", [["origin", "x"], ["origin", "y"], ["width"], ["height"], ...STYLE_PATHS]],
-  ] as const)("returns a real entry for '%s', with vertices + the eight shared derived slots, and its own %s parameter paths", (type, paths) => {
+  ] as const)("returns a real entry for '%s', with vertices, the eight shared derived slots and the box, and its own %s parameter paths", (type, paths) => {
     const schema = getObjectSchema(type);
     expect(schema).toBeDefined();
     const derivedSlots = resolveDerivedSlots(stubObject(type), schema?.derivedSlots ?? []);
-    expect(derivedSlots).toHaveLength(9);
+    expect(derivedSlots).toHaveLength(10);
     expect(derivedSlots.map((slot) => slot.path)).toEqual(
       expect.arrayContaining([
         ["vertices"],
@@ -85,6 +85,7 @@ describe("getObjectSchema", () => {
         ["bounds", "minY"],
         ["bounds", "maxX"],
         ["bounds", "maxY"],
+        ["box"],
       ]),
     );
     expect(resolveNonDerivedSlotPaths({ id: "obj_1", name: "x", type, slots: {} }, schema?.nonDerivedSlotPaths ?? [])).toEqual(paths);
@@ -103,6 +104,7 @@ describe("getObjectSchema", () => {
       "bounds.minY",
       "bounds.maxX",
       "bounds.maxY",
+      "box",
     ]);
     expect(resolveNonDerivedSlotPaths({ id: "obj_1", name: "x", type: "circle", slots: {} }, schema?.nonDerivedSlotPaths ?? [])).toEqual([
       ["origin", "x"],
@@ -112,7 +114,7 @@ describe("getObjectSchema", () => {
     ]);
   });
 
-  it("returns a real entry for 'text', with eleven static non-derived paths (origin.x and origin.y at the front, and `autoresize` where `overflow` used to be) and three derived slots (resolvedContent, measuredHeight, measuredWidth)", () => {
+  it("returns a real entry for 'text', with eleven static non-derived paths (origin.x and origin.y at the front, and `autoresize` where `overflow` used to be) and four derived slots (resolvedContent, measuredHeight, measuredWidth, box)", () => {
     const schema = getObjectSchema("text");
     expect(schema).toBeDefined();
     expect(resolveNonDerivedSlotPaths({ id: "obj_1", name: "text_1", type: "text", slots: {} }, schema?.nonDerivedSlotPaths ?? [])).toEqual([
@@ -129,13 +131,13 @@ describe("getObjectSchema", () => {
       ["style", "align"],
     ]);
     const textDerivedSlots = resolveDerivedSlots(stubObject("text"), schema?.derivedSlots ?? []);
-    expect(textDerivedSlots.map((slot) => slot.path)).toEqual([["resolvedContent"], ["measuredHeight"], ["measuredWidth"]]);
+    expect(textDerivedSlots.map((slot) => slot.path)).toEqual([["resolvedContent"], ["measuredHeight"], ["measuredWidth"], ["box"]]);
     expect(textDerivedSlots.filter((slot) => slot.usesContext === true).map((slot) => slot.path)).toEqual([
       ["measuredHeight"],
       ["measuredWidth"],
     ]);
     expect(textDerivedSlots[0]?.dependencies.kind).toBe("dynamic");
-    const dependencies = textDerivedSlots.slice(1).map(slot => derivedSlotDependencyAddresses(stubObject("text"), slot.dependencies));
+    const dependencies = textDerivedSlots.slice(1, 3).map(slot => derivedSlotDependencyAddresses(stubObject("text"), slot.dependencies));
     expect(dependencies[0]).toEqual([["resolvedContent"], ["width"], ["style", "font"], ["style", "fontSize"], ["style", "lineHeight"]].map(path => ({ objectId: "stub", path })));
     expect(dependencies[1]).toEqual(dependencies[0]);
     const bold: GraphObject = { ...stubObject("text"), slots: { "style.bold": { kind: "literal", value: true } } };
@@ -151,7 +153,7 @@ describe("getObjectSchema", () => {
     ]);
   });
 
-  it("returns a real entry for 'image', with eight static non-derived paths and NO derived slots", () => {
+  it("returns a real entry for 'image', with eight static non-derived paths and the box as its one derived slot", () => {
     const schema = getObjectSchema("image");
     expect(schema).toBeDefined();
     expect(resolveNonDerivedSlotPaths({ id: "obj_1", name: "image_1", type: "image", slots: {} }, schema?.nonDerivedSlotPaths ?? [])).toEqual([
@@ -164,13 +166,13 @@ describe("getObjectSchema", () => {
       ["preserveAspect"],
       ["pictureAspect"],
     ]);
-    expect(resolveDerivedSlots(stubObject("image"), schema?.derivedSlots ?? [])).toEqual([]);
+    expect(resolveDerivedSlots(stubObject("image"), schema?.derivedSlots ?? []).map((slot) => slot.path)).toEqual([["box"]]);
     expect(schema?.nonDerivedSlotPaths.map(group => group.kind)).toEqual(["static", "dynamic"]);
     const visible: GraphObject = { ...stubObject("image"), slots: { "view.visible": { kind: "literal", value: false } } };
     expect(resolveNonDerivedSlotPaths(visible, schema!.nonDerivedSlotPaths).at(-1)).toEqual(["view", "visible"]);
   });
 
-  it("returns a real entry for 'script', with two static + two dynamic non-derived groups and one dynamic derived group", () => {
+  it("returns a real entry for 'script', with two static + two dynamic non-derived groups, one dynamic derived group and the box", () => {
     const schema = getObjectSchema("script");
     expect(schema).toBeDefined();
     const portless: GraphObject = { id: "obj_1", name: "script_1", type: "script", slots: {} };
@@ -180,7 +182,7 @@ describe("getObjectSchema", () => {
       ["language"],
       ["source"],
     ]);
-    expect(resolveDerivedSlots(portless, schema?.derivedSlots ?? [])).toEqual([]);
+    expect(resolveDerivedSlots(portless, schema?.derivedSlots ?? []).map((slot) => slot.path)).toEqual([["box"]]);
 
     const wired: GraphObject = { id: "obj_1", name: "script_1", type: "script", slots: {}, ports: { in: ["factor"], out: ["result"] } };
     expect(resolveNonDerivedSlotPaths(wired, schema?.nonDerivedSlotPaths ?? [])).toEqual([
@@ -192,10 +194,15 @@ describe("getObjectSchema", () => {
       ["placeholder", "result"],
     ]);
     const derivedSlots = resolveDerivedSlots(wired, schema?.derivedSlots ?? []);
-    expect(derivedSlots.map((slot) => slot.path)).toEqual([["out", "result"]]);
+    expect(derivedSlots.map((slot) => slot.path)).toEqual([["out", "result"], ["box"]]);
     expect(derivedSlots[0]?.dependencies.kind).toBe("dynamic");
 
     expect(schema?.slotOptions).toEqual([{ path: ["language"], values: ["python"] }]);
+  });
+
+  it("gives a group the slots of a script node and no box, because a group's boundary comes from a scan of its members", () => {
+    const group: GraphObject = { id: "obj_1", name: "group_1", type: "group", slots: {}, ports: { in: [], out: ["result"] } };
+    expect(resolveDerivedSlots(group, getObjectSchema("group")?.derivedSlots ?? []).map((slot) => slot.path)).toEqual([["out", "result"]]);
   });
 });
 
@@ -226,6 +233,7 @@ function tableObject(id: string, name: string, rows: Value, cols: Value): GraphO
     name,
     type: "table",
     slots: {
+      box: { kind: "derived", value: null },
       rows: { kind: "literal", value: rows },
       cols: { kind: "literal", value: cols },
     },
@@ -341,7 +349,7 @@ describe("resolveDerivedSlots — a derived slot family that resolves per object
           (object.ports?.out ?? []).map((name) => ({ path: ["out", name], dependencies: { kind: "static" as const, paths: [] }, compute: noopCompute })),
       },
     ];
-    const script: GraphObject = { id: "obj_1", name: "script_1", type: "script", slots: { "out.result": { kind: "derived", value: null } }, ports: { in: [], out: ["result", "extra"] } };
+    const script: GraphObject = { id: "obj_1", name: "script_1", type: "script", slots: { box: { kind: "derived", value: null }, "out.result": { kind: "derived", value: null } }, ports: { in: [], out: ["result", "extra"] } };
     expect(resolveDerivedSlots(script, groups).map((slot) => slot.path)).toEqual([["out", "result"], ["out", "extra"]]);
   });
 

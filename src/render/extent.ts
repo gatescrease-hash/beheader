@@ -15,30 +15,19 @@
  * GPU renderer can replace the whole layer later.
  */
 import {
+  displayObjects,
   getSlot,
-  getTableDimensions,
   type GraphObject,
-  IMAGE_HEIGHT_PATH,
-  IMAGE_WIDTH_PATH,
+  groupOf,
+  objectBox,
   ORIGIN_X_PATH,
   ORIGIN_Y_PATH,
   pathBounds,
   pathEdgesOfObject,
   RADIUS_PATH,
-  TEXT_AUTORESIZE_PATH,
-  TEXT_HEIGHT_PATH,
-  TEXT_MEASURED_HEIGHT_PATH,
-  TEXT_MEASURED_WIDTH_PATH,
-  TEXT_RESOLVED_CONTENT_PATH,
-  TEXT_WIDTH_PATH,
   VERTICES_PATH,
 } from "../engine/index.ts";
-import { mathWorldBox } from "./math.ts";
-import { asPointArray, readBoolean, readNumber, scriptBoxHeight, SCRIPT_BOX_WIDTH, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";
-import { textBoxSize } from "./textbox.ts";
-import { tableLayout } from "./table-layout.ts";
-import { FRAME_HEIGHT_PATH, FRAME_WIDTH_PATH, groupOf, displayObjects } from "../engine/index.ts";
-import { sliderLayout } from "./slider-layout.ts";
+import { asPointArray, readNumber } from "./slots.ts";
 
 export interface WorldExtent {
   readonly minX: number;
@@ -51,27 +40,8 @@ export interface WorldExtent {
  * The world box of one object. A type with an arm here becomes clickable. A
  * type with no renderer arm in the same change becomes an invisible target.
  */
-/**
- * The box a copy takes where neither measured slot holds a number. It is wide
- * enough for a short name, an equals sign and a small value, so a copy stays
- * clickable in a document that was evaluated with no real measurer.
- */
-export const DOCREF_FALLBACK_WIDTH = 120;
-export const DOCREF_FALLBACK_HEIGHT = 20;
-
 export function objectExtent(object: GraphObject): WorldExtent | undefined {
   switch (object.type) {
-    // A copy is measured text, so its box comes from the two measured slots.
-    // The fallback covers a document evaluated with no real measurer, where
-    // both slots hold #MEASURE and a box of no size would make the copy
-    // impossible to click on.
-    case "docref": {
-      const x = readNumber(object, ORIGIN_X_PATH) ?? 0;
-      const y = readNumber(object, ORIGIN_Y_PATH) ?? 0;
-      const width = readNumber(object, ["measuredWidth"]) ?? DOCREF_FALLBACK_WIDTH;
-      const height = readNumber(object, ["measuredHeight"]) ?? DOCREF_FALLBACK_HEIGHT;
-      return { minX: x, minY: y, maxX: x + width, maxY: y + height };
-    }
     // The doc object has no origin and never draws, so it has no box. Every
     // caller already handles an object with no extent.
     case "doc":
@@ -84,22 +54,19 @@ export function objectExtent(object: GraphObject): WorldExtent | undefined {
       return verticesExtent(object);
     case "polyline":
       return polylineExtent(object);
+    // The engine's box rule sizes every other type, so the box drawn and
+    // pressed here is the box a formula reads from the `box` slot.
+    case "docref":
     case "table":
-      return tableExtent(object);
     case "text":
-      return textExtent(object);
     case "image":
-      return imageExtent(object);
     case "script":
-      return scriptExtent(object);
+    case "math":
+    case "slider":
+    case "frame":
+      return committedBox(object);
     case "group":
       return groupAnchorBox(object);
-    case "math":
-      return mathWorldBox(object);
-    case "slider":
-      return sliderLayout(object)?.box;
-    case "frame":
-      return frameExtent(object);
     case "value":
     case "add":
       return undefined;
@@ -109,6 +76,11 @@ export function objectExtent(object: GraphObject): WorldExtent | undefined {
       return undefined;
     }
   }
+}
+
+/** The box of an object by the engine's rule, read from the object as committed. */
+function committedBox(object: GraphObject): WorldExtent | undefined {
+  return objectBox(object, (path) => getSlot(object, path)?.value);
 }
 
 function verticesExtent(object: GraphObject): WorldExtent | undefined {
@@ -158,58 +130,6 @@ function polylineExtent(object: GraphObject): WorldExtent | undefined {
     return undefined;
   }
   return bounds;
-}
-
-function tableExtent(object: GraphObject): WorldExtent | undefined {
-  const originX = readNumber(object, ORIGIN_X_PATH) ?? 0;
-  const originY = readNumber(object, ORIGIN_Y_PATH) ?? 0;
-  const { rows, cols } = getTableDimensions(object);
-  const { width, height } = tableLayout(object);
-  if (width <= 0 || height <= 0) {
-    return undefined;
-  }
-  return { minX: originX, minY: originY, maxX: originX + width, maxY: originY + height };
-}
-
-function textExtent(object: GraphObject): WorldExtent | undefined {
-  const resolved = getSlot(object, TEXT_RESOLVED_CONTENT_PATH)?.value;
-  if (typeof resolved !== "string" || resolved === "") {
-    return undefined;
-  }
-  const originX = readNumber(object, ORIGIN_X_PATH) ?? 0;
-  const originY = readNumber(object, ORIGIN_Y_PATH) ?? 0;
-  const { width, height } = textBoxSize({
-    fixedWidth: readNumber(object, TEXT_WIDTH_PATH),
-    fixedHeight: readNumber(object, TEXT_HEIGHT_PATH),
-    autoresize: readBoolean(object, TEXT_AUTORESIZE_PATH) ?? true,
-    measuredWidth: readNumber(object, TEXT_MEASURED_WIDTH_PATH),
-    measuredHeight: readNumber(object, TEXT_MEASURED_HEIGHT_PATH),
-  });
-  return { minX: originX, minY: originY, maxX: originX + width, maxY: originY + height };
-}
-
-function imageExtent(object: GraphObject): WorldExtent | undefined {
-  const originX = readNumber(object, ORIGIN_X_PATH) ?? 0;
-  const originY = readNumber(object, ORIGIN_Y_PATH) ?? 0;
-  const width = readNumber(object, IMAGE_WIDTH_PATH);
-  const height = readNumber(object, IMAGE_HEIGHT_PATH);
-  if (width === undefined || height === undefined || !(width > 0) || !(height > 0)) {
-    return undefined;
-  }
-  if (!Number.isFinite(width) || !Number.isFinite(height) || !Number.isFinite(originX) || !Number.isFinite(originY)) {
-    return undefined;
-  }
-  return { minX: originX, minY: originY, maxX: originX + width, maxY: originY + height };
-}
-
-function scriptExtent(object: GraphObject): WorldExtent | undefined {
-  const originX = readNumber(object, ORIGIN_X_PATH) ?? 0;
-  const originY = readNumber(object, ORIGIN_Y_PATH) ?? 0;
-  if (!Number.isFinite(originX) || !Number.isFinite(originY)) {
-    return undefined;
-  }
-  const height = scriptBoxHeight(object.ports?.in.length ?? 0, object.ports?.out.length ?? 0);
-  return { minX: originX, minY: originY, maxX: originX + SCRIPT_BOX_WIDTH, maxY: originY + height };
 }
 
 /** The world box that holds every object. The fit command uses it. */
@@ -290,18 +210,6 @@ export const FRAME_LABEL_HEIGHT = 18;
 /** The width a frame's name takes above its corner, in world units, from the length of the name. */
 export function frameLabelWidth(frame: GraphObject): number {
   return frame.name.length * 7 + 12;
-}
-
-/** The region a frame marks, from its origin, width and height. */
-function frameExtent(object: GraphObject): WorldExtent | undefined {
-  const x = readNumber(object, ORIGIN_X_PATH);
-  const y = readNumber(object, ORIGIN_Y_PATH);
-  const width = readNumber(object, FRAME_WIDTH_PATH);
-  const height = readNumber(object, FRAME_HEIGHT_PATH);
-  if (x === undefined || y === undefined || width === undefined || height === undefined || !(width > 0) || !(height > 0)) {
-    return undefined;
-  }
-  return { minX: x, minY: y, maxX: x + width, maxY: y + height };
 }
 
 /** The width a group's name tab takes, in world units, from the length of the name. */

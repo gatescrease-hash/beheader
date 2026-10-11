@@ -270,7 +270,7 @@ function structuralBatches(random: SeededRandom, objectCount: number): Operation
     [{ kind: "renameObject", objectId: "obj_extra", name: "value_3" }],
     [{
       kind: "createObject",
-      object: { id: "obj_grid", name: "grid", type: "table", slots: { rows: literalSlot(2), cols: literalSlot(2) } },
+      object: withDerivedSlots({ id: "obj_grid", name: "grid", type: "table", slots: { rows: literalSlot(2), cols: literalSlot(2) } }),
     }, {
       kind: "setSlot", address: cell("A1"), slot: formulaSlot({ type: "reference", address: extraAddress }),
     }, {
@@ -363,12 +363,16 @@ function everyStructuralOperation(random: SeededRandom, objectCount: number): Op
   });
   return [
     [
-      { kind: "createObject", object: { id: sheet, name: "sheet", type: "table", slots: { rows: literalSlot(3), cols: literalSlot(3) } } },
+      { kind: "createObject", object: withDerivedSlots({ id: sheet, name: "sheet", type: "table", slots: { rows: literalSlot(3), cols: literalSlot(3) } }) },
       { kind: "setSlot", address: at(sheet, "cells", "A1"), slot: literalSlot(random.integer(9) + 1) },
       { kind: "setSlot", address: at(sheet, "cells", "B2"), slot: formulaSlot({ type: "binaryOp", operator: "*", left: { type: "reference", address: at(sheet, "cells", "A1") }, right: { type: "literal", value: 2 } }) },
       { kind: "setSlot", address: at(sheet, "cells", "C3"), slot: formulaSlot({ type: "functionCall", name: "SUM", args: [{ type: "range", start: at(sheet, "cells", "A1"), end: at(sheet, "cells", "B2") }] }) },
     ],
     [readerOf("obj_sheet_reader", "sheet_reader", at(sheet, "cells", "B2"))],
+    // A box reads the sizes of the table's own columns, and the first width a
+    // column takes is a slot the box gains an edge from.
+    [readerOf("obj_sheet_box_reader", "sheet_box_reader", at(sheet, "box"))],
+    [{ kind: "setSlot", address: at(sheet, "columns", "2", "width"), slot: literalSlot(60 + random.integer(60)) }],
     [{ kind: "insertTableLine", objectId: sheet, axis: "row", index: 1 + random.integer(2) }],
     [{ kind: "insertTableLine", objectId: sheet, axis: "column", index: 1 }],
     [{ kind: "deleteTableLine", objectId: sheet, axis: "row", index: 1 }],
@@ -379,14 +383,15 @@ function everyStructuralOperation(random: SeededRandom, objectCount: number): Op
     [{ kind: "setSlot", address: at(sheet, "cols"), slot: literalSlot(2.5) }],
     // A slider holds its value in a literal that readers take up, and a
     // formula in that value makes it a gauge of another slot.
-    [{ kind: "createObject", object: { id: "obj_slider", name: "slider", type: "slider", slots: { "origin.x": literalSlot(0), "origin.y": literalSlot(0), width: literalSlot(200), min: literalSlot(0), max: literalSlot(10), step: literalSlot(1), value: literalSlot(random.integer(10)) } } }],
+    [{ kind: "createObject", object: withDerivedSlots({ id: "obj_slider", name: "slider", type: "slider", slots: { "origin.x": literalSlot(0), "origin.y": literalSlot(0), width: literalSlot(200), min: literalSlot(0), max: literalSlot(10), step: literalSlot(1), value: literalSlot(random.integer(10)) } }) }],
     [readerOf("obj_slider_reader", "slider_reader", at("obj_slider", "value"))],
     [{ kind: "setSlot", address: at("obj_slider", "value"), slot: literalSlot(random.integer(10)) }],
     [{ kind: "setSlot", address: at("obj_slider", "value"), slot: formulaSlot({ type: "reference", address: at(sheet, "cells", "A1") }) }],
     // A frame marks a region, and a formula can size it from a slider.
-    [{ kind: "createObject", object: { id: "obj_frame", name: "frame", type: "frame", slots: { "origin.x": literalSlot(0), "origin.y": literalSlot(0), width: literalSlot(300), height: literalSlot(200), "style.fillColor": { kind: "literal", value: "#fffdf7" }, "style.strokeColor": { kind: "literal", value: "#d3cab5" } } } }],
+    [{ kind: "createObject", object: withDerivedSlots({ id: "obj_frame", name: "frame", type: "frame", slots: { "origin.x": literalSlot(0), "origin.y": literalSlot(0), width: literalSlot(300), height: literalSlot(200), "style.fillColor": { kind: "literal", value: "#fffdf7" }, "style.strokeColor": { kind: "literal", value: "#d3cab5" } } }) }],
     [{ kind: "setSlot", address: at("obj_frame", "width"), slot: formulaSlot({ type: "binaryOp", operator: "*", left: { type: "reference", address: at("obj_slider", "value") }, right: { type: "literal", value: 40 } }) }],
     [readerOf("obj_frame_reader", "frame_reader", at("obj_frame", "width"))],
+    [readerOf("obj_frame_box_reader", "frame_box_reader", at("obj_frame", "box"))],
     [{ kind: "createObject", object: withDerivedSlots({ id: path, name: "path", type: "polyline", vertexCount: pathPoints.length, slots: pathSlots }) }],
     [readerOf("obj_path_reader", "path_reader", at(path, "vertex", "2", "x"))],
     [{ kind: "addVertex", objectId: path, point: point(random.integer(50), 60) }],
@@ -394,12 +399,13 @@ function everyStructuralOperation(random: SeededRandom, objectCount: number): Op
     [{ kind: "deleteVertex", objectId: path, index: 0 }],
     [{ kind: "deleteVertex", objectId: path, index: 1 + random.integer(2) }],
     [{ kind: "deleteVertex", objectId: path, index: 1 + random.integer(2), force: true }],
-    [{ kind: "createObject", object: rect("obj_box", "box") }],
+    [{ kind: "createObject", object: rect("obj_box", "box") }, readerOf("obj_box_corners", "box_corners", at("obj_box", "box"))],
     [{ kind: "explode", objectId: "obj_box" }],
     [{ kind: "createObject", object: rect("obj_box_two", "box_two") }, readerOf("obj_box_reader", "box_reader", at("obj_box_two", "width"))],
     [{ kind: "explode", objectId: "obj_box_two" }],
     [{ kind: "explode", objectId: "obj_box_two", force: true }],
     [{ kind: "createObject", object: withDerivedSlots({ id: runner, name: "runner", type: "script", slots: { "origin.x": literalSlot(0), "origin.y": literalSlot(0), language: { kind: "literal", value: "python" }, source: { kind: "literal", value: "" } } }) }],
+    [readerOf("obj_runner_box_reader", "runner_box_reader", at(runner, "box"))],
     [{ kind: "addPort", objectId: runner, family: "in", name: "gain" }, { kind: "setSlot", address: at(runner, "in", "gain"), slot: formulaSlot({ type: "reference", address: valueRead }) }],
     [
       { kind: "addPort", objectId: runner, family: "out", name: "result" },

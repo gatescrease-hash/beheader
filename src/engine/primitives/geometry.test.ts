@@ -44,7 +44,7 @@ function readFrom(values: Record<string, Value>) {
   return (address: Address): Value | undefined => values[address.path.join(".")];
 }
 
-const OBJECT: GraphObject = { id: "obj_1", name: "shape_1", type: "circle", slots: {} };
+const OBJECT: GraphObject = { id: "obj_1", name: "shape_1", type: "circle", slots: { box: { kind: "derived", value: null } } };
 
 describe("computePolygonVertices", () => {
   it("places a square's 4 vertices at radius, 90 degrees apart, starting on the +x axis at rotation 0", () => {
@@ -399,6 +399,7 @@ describe("circle/polygon/rect wired through the real mutate() pipeline", () => {
       name: "circle_1",
       type: "circle",
       slots: {
+        box: { kind: "derived", value: null },
         "origin.x": { kind: "literal", value: 0 },
         "origin.y": { kind: "literal", value: 0 },
         radius: { kind: "literal", value: 2 },
@@ -431,13 +432,14 @@ describe("circle/polygon/rect wired through the real mutate() pipeline", () => {
       id: "obj_2",
       name: "table_x",
       type: "table",
-      slots: { rows: { kind: "literal", value: 1 }, cols: { kind: "literal", value: 1 }, "cells.A1": { kind: "literal", value: 5 } },
+      slots: { box: { kind: "derived", value: null }, rows: { kind: "literal", value: 1 }, cols: { kind: "literal", value: 1 }, "cells.A1": { kind: "literal", value: 5 } },
     };
     const polygon: GraphObject = {
       id: "obj_1",
       name: "polygon_1",
       type: "polygon",
       slots: {
+        box: { kind: "derived", value: null },
         sides: { kind: "literal", value: 6 },
         radius: {
           kind: "formula",
@@ -508,7 +510,7 @@ describe("every preset winds counterclockwise (positive doubled signed area)", (
 
 describe("enumeratePolylineVertexSlotPaths — the count comes from vertexCount, a field and not a slot", () => {
   it("lists all seven parts of each vertex, in order", () => {
-    const object: GraphObject = { id: "obj_1", name: "polyline_1", type: "polyline", slots: {}, vertexCount: 2 };
+    const object: GraphObject = { id: "obj_1", name: "polyline_1", type: "polyline", slots: { box: { kind: "derived", value: null } }, vertexCount: 2 };
     expect(enumeratePolylineVertexSlotPaths(object)).toEqual([
       ["vertex", "0", "x"],
       ["vertex", "0", "y"],
@@ -528,7 +530,7 @@ describe("enumeratePolylineVertexSlotPaths — the count comes from vertexCount,
   });
 
   it("leaves the bulge out of the coordinate list the vertices slot depends on", () => {
-    const object: GraphObject = { id: "obj_1", name: "polyline_1", type: "polyline", slots: {}, vertexCount: 2 };
+    const object: GraphObject = { id: "obj_1", name: "polyline_1", type: "polyline", slots: { box: { kind: "derived", value: null } }, vertexCount: 2 };
     expect(enumeratePolylineCoordinateSlotPaths(object)).toEqual([
       ["vertex", "0", "x"],
       ["vertex", "0", "y"],
@@ -538,13 +540,13 @@ describe("enumeratePolylineVertexSlotPaths — the count comes from vertexCount,
   });
 
   it("lists nothing for a polyline with no vertexCount field at all", () => {
-    const object: GraphObject = { id: "obj_1", name: "polyline_1", type: "polyline", slots: {} };
+    const object: GraphObject = { id: "obj_1", name: "polyline_1", type: "polyline", slots: { box: { kind: "derived", value: null } } };
     expect(enumeratePolylineVertexSlotPaths(object)).toEqual([]);
   });
 });
 
 describe("computePolylineVerticesSlot — gathers the per vertex slots into one Point[]", () => {
-  const object: GraphObject = { id: "obj_1", name: "polyline_1", type: "polyline", slots: {}, vertexCount: 2 };
+  const object: GraphObject = { id: "obj_1", name: "polyline_1", type: "polyline", slots: { box: { kind: "derived", value: null } }, vertexCount: 2 };
 
   it("reads vertex.0 then vertex.1, in index order, not in whatever order the slots were written", () => {
     const vertices = computePolylineVerticesSlot(object, readFrom({ "vertex.0.x": 0, "vertex.0.y": 0, "vertex.1.x": 10, "vertex.1.y": 20 }));
@@ -555,7 +557,7 @@ describe("computePolylineVerticesSlot — gathers the per vertex slots into one 
   });
 
   it(`refuses fewer than ${MIN_POLYLINE_VERTICES} vertices with #TYPE, before it reads a single one`, () => {
-    const tooFew: GraphObject = { id: "obj_1", name: "polyline_1", type: "polyline", slots: {}, vertexCount: 1 };
+    const tooFew: GraphObject = { id: "obj_1", name: "polyline_1", type: "polyline", slots: { box: { kind: "derived", value: null } }, vertexCount: 1 };
     expect(computePolylineVerticesSlot(tooFew, readFrom({ "vertex.0.x": 0, "vertex.0.y": 0 }))).toEqual({
       error: "#TYPE",
       message: `polyline.vertices: a polyline needs at least ${MIN_POLYLINE_VERTICES} vertices`,
@@ -612,7 +614,7 @@ describe("pathDerivedSlots — one slot set, and the closed slot picks the math"
   });
 
   it("every slot depends on closed as well as on vertices, once the object has a closed slot", () => {
-    const open: GraphObject = { id: "obj_1", name: "path_1", type: "polyline", slots: {} };
+    const open: GraphObject = { id: "obj_1", name: "path_1", type: "polyline", slots: { box: { kind: "derived", value: null } } };
     const closed: GraphObject = { ...open, slots: { closed: { kind: "literal", value: true } } };
     for (const slot of pathDerivedSlots("polyline")) {
       if (slot.dependencies.kind !== "dynamic") {
@@ -624,7 +626,7 @@ describe("pathDerivedSlots — one slot set, and the closed slot picks the math"
   });
 
   it("reads an absent closed slot as an open path", () => {
-    const object: GraphObject = { id: "obj_1", name: "path_1", type: "polyline", slots: {} };
+    const object: GraphObject = { id: "obj_1", name: "path_1", type: "polyline", slots: { box: { kind: "derived", value: null } } };
     expect(readClosedFlag(object, () => undefined, "polyline")).toBe(false);
   });
 
@@ -633,7 +635,7 @@ describe("pathDerivedSlots — one slot set, and the closed slot picks the math"
       id: "obj_1",
       name: "path_1",
       type: "polyline",
-      slots: { closed: { kind: "literal", value: "yes" } },
+      slots: { box: { kind: "derived", value: null }, closed: { kind: "literal", value: "yes" } },
     };
     expect(readClosedFlag(object, () => "yes", "polyline")).toEqual({
       error: "#TYPE",
@@ -650,6 +652,7 @@ describe("polyline wired through the real mutate() pipeline", () => {
       type: "polyline",
       vertexCount: 3,
       slots: {
+        box: { kind: "derived", value: null },
         [vertexXPath(0).join(".")]: { kind: "literal", value: 0 },
         [vertexYPath(0).join(".")]: { kind: "literal", value: 0 },
         [vertexXPath(1).join(".")]: { kind: "literal", value: 3 },
@@ -849,6 +852,7 @@ describe("polyline wired through the real mutate() pipeline", () => {
       type: "polyline",
       vertexCount: 2,
       slots: {
+        box: { kind: "derived", value: null },
         [vertexXPath(0).join(".")]: { kind: "literal", value: 0 },
         [vertexYPath(0).join(".")]: { kind: "literal", value: 0 },
         [vertexXPath(1).join(".")]: { kind: "literal", value: 1 },
@@ -877,6 +881,7 @@ describe("explodeObjectToPolyline — snapshots the current vertices, drops the 
     name: "rect_1",
     type: "rect",
     slots: {
+      box: { kind: "derived", value: null },
       "origin.x": { kind: "literal", value: 0 },
       "origin.y": { kind: "literal", value: 0 },
       width: { kind: "literal", value: 10 },
@@ -983,7 +988,7 @@ describe("explodeObjectToPolyline — snapshots the current vertices, drops the 
   });
 
   it("refuses when vertices has not resolved at all", () => {
-    const stub: GraphObject = { id: "obj_1", name: "rect_1", type: "rect", slots: {} };
+    const stub: GraphObject = { id: "obj_1", name: "rect_1", type: "rect", slots: { box: { kind: "derived", value: null } } };
     const result = explodeObjectToPolyline(stub, "rect_1");
     expect(result.ok).toBe(false);
   });

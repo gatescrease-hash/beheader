@@ -141,6 +141,8 @@ export const BOUNDS_MIN_X_PATH: readonly string[] = ["bounds", "minX"];
 export const BOUNDS_MIN_Y_PATH: readonly string[] = ["bounds", "minY"];
 export const BOUNDS_MAX_X_PATH: readonly string[] = ["bounds", "maxX"];
 export const BOUNDS_MAX_Y_PATH: readonly string[] = ["bounds", "maxY"];
+/** The derived box every placed object carries. box.ts holds the rule, and the path is defined here beside the origin so geometry reads it with no import cycle. */
+export const BOX_PATH: readonly string[] = ["box"];
 
 export const MIN_POLYGON_SIDES = 3;
 
@@ -983,13 +985,14 @@ const POLYLINE_DERIVED_PATHS: readonly (readonly string[])[] = [
   BOUNDS_MIN_Y_PATH,
   BOUNDS_MAX_X_PATH,
   BOUNDS_MAX_Y_PATH,
+  BOX_PATH,
 ];
 
 /**
  * Snapshots a preset's current vertices into a fresh polyline object, same id
  * and name. The parameter slots (origin, radius, sides, and so on) are gone.
  * The new path closes, because every preset it accepts is a closed shape. So
- * vertices, centroid, area, length and bounds all survive at the same paths,
+ * vertices, centroid, area, length, bounds and box all survive at the same paths,
  * and so does the style. A formula that reads one of them does not need
  * repair.
  */

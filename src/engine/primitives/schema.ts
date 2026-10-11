@@ -29,6 +29,7 @@
 import type { Address } from "../address.ts";
 import { STYLE_PATHS, VIEW_PATHS } from "../layers.ts";
 import { GROUP_MEMBERSHIP_PATH } from "../groups.ts";
+import { BOX_DERIVED_SLOT } from "./box.ts";
 import { DOCREF_DERIVED_SLOTS } from "./doc.ts";
 import type { EvalContext } from "../eval-context.ts";
 import type { ReadRange } from "../formula/eval.ts";
@@ -288,13 +289,16 @@ const ADD_SCHEMA: ObjectSchema = {
   ],
 };
 
+/** The derived box, which box.ts computes, as a group of one for the schemas below. */
+const BOX_SLOTS: DerivedSlotGroup = { kind: "static", slots: [BOX_DERIVED_SLOT] };
+
 const TABLE_SCHEMA: ObjectSchema = {
   type: "table",
   nonDerivedSlotPaths: [
     { kind: "static", paths: [ORIGIN_X_PATH, ORIGIN_Y_PATH, TABLE_ROWS_PATH, TABLE_COLS_PATH] },
     { kind: "dynamic", enumerate: enumerateTableCellSlotPaths },
   ],
-  derivedSlots: [],
+  derivedSlots: [BOX_SLOTS],
 };
 
 const GEOMETRY_COLOR_FORMATS: readonly SlotFormatSet[] = [
@@ -306,7 +310,7 @@ const CIRCLE_SCHEMA: ObjectSchema = {
   type: "circle",
   slotFormats: GEOMETRY_COLOR_FORMATS,
   nonDerivedSlotPaths: [{ kind: "static", paths: [ORIGIN_X_PATH, ORIGIN_Y_PATH, RADIUS_PATH, ...GEOMETRY_STYLE_PATHS] }],
-  derivedSlots: [{ kind: "static", slots: [...circleDerivedSlots("circle")] }],
+  derivedSlots: [{ kind: "static", slots: [...circleDerivedSlots("circle")] }, BOX_SLOTS],
 };
 
 const POLYGON_SCHEMA: ObjectSchema = {
@@ -322,7 +326,7 @@ const POLYGON_SCHEMA: ObjectSchema = {
       compute: computePolygonVerticesSlot,
     },
     ...verticesDerivedSlots("polygon"),
-  ] }],
+  ] }, BOX_SLOTS],
 };
 
 const RECT_SCHEMA: ObjectSchema = {
@@ -338,7 +342,7 @@ const RECT_SCHEMA: ObjectSchema = {
       compute: computeRectVerticesSlot,
     },
     ...verticesDerivedSlots("rect"),
-  ] }],
+  ] }, BOX_SLOTS],
 };
 
 const POLYLINE_SCHEMA: ObjectSchema = {
@@ -352,7 +356,7 @@ const POLYLINE_SCHEMA: ObjectSchema = {
   derivedSlots: [{ kind: "static", slots: [
     { path: VERTICES_PATH, dependencies: polylineVerticesDependencies, compute: computePolylineVerticesSlot },
     ...pathDerivedSlots("polyline"),
-  ] }],
+  ] }, BOX_SLOTS],
 };
 
 const TEXT_SCHEMA: ObjectSchema = {
@@ -422,7 +426,7 @@ const TEXT_SCHEMA: ObjectSchema = {
       },
       compute: computeMeasuredWidth,
     },
-  ] }],
+  ] }, BOX_SLOTS],
 };
 
 const IMAGE_SCHEMA: ObjectSchema = {
@@ -449,10 +453,11 @@ const IMAGE_SCHEMA: ObjectSchema = {
       labels: ["keep the picture's proportions", "stretch to fill the box"],
     },
   ],
-  derivedSlots: [],
+  derivedSlots: [BOX_SLOTS],
 };
 
-const SCRIPT_SCHEMA: ObjectSchema = {
+/** The slots a script node and a group share, which leaves out the box a group has none of. */
+const SCRIPT_NODE_SCHEMA: ObjectSchema = {
   type: "script",
   nonDerivedSlotPaths: [
     { kind: "static", paths: [ORIGIN_X_PATH, ORIGIN_Y_PATH, SCRIPT_LANGUAGE_PATH, SCRIPT_SOURCE_PATH] },
@@ -463,11 +468,14 @@ const SCRIPT_SCHEMA: ObjectSchema = {
   slotOptions: [{ path: SCRIPT_LANGUAGE_PATH, values: ["python"] }],
 };
 
+const SCRIPT_SCHEMA: ObjectSchema = { ...SCRIPT_NODE_SCHEMA, derivedSlots: [...SCRIPT_NODE_SCHEMA.derivedSlots, BOX_SLOTS] };
+
 /**
  * A group carries a script node's slots and ports beside its members, which
- * live on the members themselves. groups.ts gives the reason.
+ * live on the members themselves. groups.ts gives the reason. A group is left
+ * with no box, and box.ts gives the reason.
  */
-const GROUP_SCHEMA: ObjectSchema = { ...SCRIPT_SCHEMA, type: "group" };
+const GROUP_SCHEMA: ObjectSchema = { ...SCRIPT_NODE_SCHEMA, type: "group" };
 
 const MATH_SCHEMA: ObjectSchema = {
   type: "math",
@@ -479,6 +487,7 @@ const MATH_SCHEMA: ObjectSchema = {
   derivedSlots: [
     { kind: "static", slots: MATH_MEASURED_SLOTS },
     { kind: "dynamic", enumerate: enumerateMathOutDerivedSlots },
+    BOX_SLOTS,
   ],
   slotOptions: [
     {
@@ -499,7 +508,7 @@ const SLIDER_SCHEMA: ObjectSchema = {
   nonDerivedSlotPaths: [
     { kind: "static", paths: [ORIGIN_X_PATH, ORIGIN_Y_PATH, SLIDER_WIDTH_PATH, SLIDER_MIN_PATH, SLIDER_MAX_PATH, SLIDER_STEP_PATH, SLIDER_VALUE_PATH] },
   ],
-  derivedSlots: [],
+  derivedSlots: [BOX_SLOTS],
 };
 
 /**
@@ -512,7 +521,7 @@ const FRAME_SCHEMA: ObjectSchema = {
   nonDerivedSlotPaths: [
     { kind: "static", paths: [ORIGIN_X_PATH, ORIGIN_Y_PATH, FRAME_WIDTH_PATH, FRAME_HEIGHT_PATH, STYLE_FILL_COLOR_PATH, STYLE_STROKE_COLOR_PATH] },
   ],
-  derivedSlots: [],
+  derivedSlots: [BOX_SLOTS],
 };
 
 const SCHEMAS: Partial<Record<ObjectType, ObjectSchema>> = {
@@ -535,7 +544,7 @@ const SCHEMAS: Partial<Record<ObjectType, ObjectSchema>> = {
   docref: {
     type: "docref",
     nonDerivedSlotPaths: [{ kind: "static", paths: [ORIGIN_X_PATH, ORIGIN_Y_PATH] }],
-    derivedSlots: [{ kind: "static", slots: DOCREF_DERIVED_SLOTS }],
+    derivedSlots: [{ kind: "static", slots: DOCREF_DERIVED_SLOTS }, BOX_SLOTS],
   },
   value: VALUE_SCHEMA,
   add: ADD_SCHEMA,

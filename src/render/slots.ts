@@ -68,13 +68,7 @@ export function asPointArray(value: Value | undefined): readonly Point[] | undef
   return value as readonly Point[];
 }
 
-export const TABLE_CELL_WIDTH = 80;
-export const TABLE_CELL_HEIGHT = 24;
-
-export const SCRIPT_BOX_WIDTH = 200;
-export const SCRIPT_HEADER_HEIGHT = 24;
-export const SCRIPT_PORT_ROW_HEIGHT = 18;
-
-export function scriptBoxHeight(inPortCount: number, outPortCount: number): number {
-  return SCRIPT_HEADER_HEIGHT + Math.max(inPortCount, outPortCount, 1) * SCRIPT_PORT_ROW_HEIGHT;
-}
+// The sizes of a table cell and a script node belong to the engine, which
+// computes the box a formula reads, and the drawing reads them from there.
+export { TABLE_DEFAULT_COLUMN_WIDTH as TABLE_CELL_WIDTH, TABLE_DEFAULT_ROW_HEIGHT as TABLE_CELL_HEIGHT } from "../engine/index.ts";
+export { SCRIPT_BOX_WIDTH, SCRIPT_HEADER_HEIGHT, SCRIPT_PORT_ROW_HEIGHT, scriptBoxHeight } from "../engine/index.ts";

@@ -22,7 +22,7 @@ import {
 } from "./script.ts";
 
 function scriptObject(ports?: { readonly in: readonly string[]; readonly out: readonly string[] }): GraphObject {
-  return ports === undefined ? { id: "obj_1", name: "script_1", type: "script", slots: {} } : { id: "obj_1", name: "script_1", type: "script", slots: {}, ports };
+  return ports === undefined ? { id: "obj_1", name: "script_1", type: "script", slots: { box: { kind: "derived", value: null } } } : { id: "obj_1", name: "script_1", type: "script", slots: { box: { kind: "derived", value: null } }, ports };
 }
 
 describe("scriptInPortPath / scriptOutPortPath / scriptPlaceholderPath", () => {
@@ -216,6 +216,7 @@ describe("scripts through a runner", () => {
     const created = mutate([], [
       { kind: "createObject", object: { id: "v", name: "speed", type: "value", slots: { value: { kind: "literal", value: 3 } } } },
       { kind: "createObject", object: { id: "s", name: "script_1", type: "script", slots: {
+        box: { kind: "derived", value: null },
         "origin.x": { kind: "literal", value: 0 }, "origin.y": { kind: "literal", value: 0 },
         language: { kind: "literal", value: "python" }, source: { kind: "literal", value: "" },
       } } },

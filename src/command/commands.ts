@@ -1922,6 +1922,7 @@ function writeDocumentVariable(command: Extract<Command, { kind: "docvar" }>, do
           value: { kind: "derived", value: null },
           measuredWidth: { kind: "derived", value: null },
           measuredHeight: { kind: "derived", value: null },
+          box: { kind: "derived", value: null },
         },
       },
     });

@@ -40,6 +40,7 @@ function rectObject(originX: number, originY: number): GraphObject {
     name: "rect_1",
     type: "rect",
     slots: {
+      box: { kind: "derived", value: null },
       "origin.x": { kind: "literal", value: originX },
       "origin.y": { kind: "literal", value: originY },
       width: { kind: "literal", value: 20 },
@@ -101,7 +102,7 @@ function tableObject(cols: number, values: readonly number[]): GraphObject {
     id: "obj_2",
     name: "table_x",
     type: "table",
-    slots: { rows: { kind: "literal", value: 1 }, cols: { kind: "literal", value: cols }, ...cells },
+    slots: { box: { kind: "derived", value: null }, rows: { kind: "literal", value: 1 }, cols: { kind: "literal", value: cols }, ...cells },
   };
 }
 
@@ -595,7 +596,7 @@ describe("pointerMove — failure paths", () => {
       id: "obj_1",
       name: "rect_1",
       type: "rect",
-      slots: { "origin.x": { kind: "literal", value: { error: "#REF", message: "gone" } } },
+      slots: { box: { kind: "derived", value: null }, "origin.x": { kind: "literal", value: { error: "#REF", message: "gone" } } },
     };
     expect(() => pointerMove(dragFromOrigin("obj_1"), { x: 5, y: 5 }, [broken], [], CAMERA_IDENTITY)).not.toThrow();
     const outcome = pointerMove(dragFromOrigin("obj_1"), { x: 5, y: 5 }, [broken], [], CAMERA_IDENTITY);
@@ -611,6 +612,7 @@ describe("pointerMove forwards the EvalContext to mutate", () => {
       name: "text_1",
       type: "text",
       slots: {
+        box: { kind: "derived", value: null },
         content: { kind: "literal", value: "label" },
         width: { kind: "literal", value: "auto" },
         "origin.x": { kind: "literal", value: 500 },
@@ -648,6 +650,7 @@ describe("resize — a text box's eight grabbers (2026-09-02)", () => {
       name: "text_1",
       type: "text",
       slots: {
+        box: { kind: "derived", value: null },
         content: { kind: "literal", value: "label" },
         width: { kind: "literal", value: "auto" },
         height: { kind: "literal", value: "auto" },
@@ -810,6 +813,7 @@ describe("resize — an image's grabbers write its own width/height slots", () =
       name: "image_1",
       type: "image",
       slots: {
+        box: { kind: "derived", value: null },
         "origin.x": { kind: "literal", value: 0 },
         "origin.y": { kind: "literal", value: 0 },
         width: { kind: "literal", value: 200 },
@@ -875,6 +879,7 @@ describe("resize — an image's grabbers write its own width/height slots", () =
       name: "image_1",
       type: "image",
       slots: {
+        box: { kind: "derived", value: null },
         "origin.x": { kind: "literal", value: 0 },
         "origin.y": { kind: "literal", value: 0 },
         width: { kind: "literal", value: 200 },
@@ -900,6 +905,7 @@ describe("resize — an image's grabbers write its own width/height slots", () =
       name: "image_1",
       type: "image",
       slots: {
+        box: { kind: "derived", value: null },
         "origin.x": { kind: "literal", value: 0 },
         "origin.y": { kind: "literal", value: 0 },
         width: { kind: "formula", ast: { type: "reference", address: { objectId: "obj_2", path: ["cells", "A1"] } }, value: 200 },
@@ -1371,7 +1377,7 @@ describe("the knob of a slider", () => {
   // The track runs from x 7 to x 193 along y 22, and the knob of a value of 5 sits at x 100.
   function sliderObject(value: Slot = { kind: "literal", value: 5 }): GraphObject {
     const literal = (number: number): Slot => ({ kind: "literal", value: number });
-    return { id: "obj_s", name: "slider_1", type: "slider", slots: { "origin.x": literal(0), "origin.y": literal(0), width: literal(200), min: literal(0), max: literal(10), step: literal(1), value } };
+    return { id: "obj_s", name: "slider_1", type: "slider", slots: { box: { kind: "derived", value: null }, "origin.x": literal(0), "origin.y": literal(0), width: literal(200), min: literal(0), max: literal(10), step: literal(1), value } };
   }
 
   it("is grabbed by a plain press on the track, which selects the slider", () => {
@@ -1415,7 +1421,7 @@ describe("a frame marks a region, and moves what lies in it", () => {
   // frame_1 spans 0..300 by 0..200, with its name above its top left corner.
   function frameObject(id: string, name: string, x: number, y: number, width: number, height: number): GraphObject {
     const literal = (value: number | string): Slot => ({ kind: "literal", value });
-    return { id, name, type: "frame", slots: { "origin.x": literal(x), "origin.y": literal(y), width: literal(width), height: literal(height), "style.fillColor": literal("#fffdf7"), "style.strokeColor": literal("#d3cab5") } };
+    return { id, name, type: "frame", slots: { box: { kind: "derived", value: null }, "origin.x": literal(x), "origin.y": literal(y), width: literal(width), height: literal(height), "style.fillColor": literal("#fffdf7"), "style.strokeColor": literal("#d3cab5") } };
   }
   const scene = () => commit([
     frameObject("obj_f", "frame_1", 0, 0, 300, 200),

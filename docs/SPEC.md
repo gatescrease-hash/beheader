@@ -618,8 +618,8 @@ loses nothing, and the operator gets an editable path.
 
 ### Derived slots
 
-`centroid.x`, `centroid.y`, `area` (closed paths only), `length` and
-`bounds.{minX,minY,maxX,maxY}`. All are `derived`. A formula can read them. No
+`centroid.x`, `centroid.y`, `area` (closed paths only), `length`,
+`bounds.{minX,minY,maxX,maxY}` and the `box` of section 25. All are `derived`. A formula can read them. No
 formula can write them. A `link` to one fails at parse time.
 
 ---
@@ -676,7 +676,8 @@ A text specific dependency walker recurses the block tree and calls
 `extractDependencies` on every embedded AST. It includes untaken branches, per
 section 6. Evaluation of the tree stops early as normal.
 
-**Derived slots:** `resolvedContent`, `measuredHeight` and `measuredWidth`. None
+**Derived slots:** `resolvedContent`, `measuredHeight`, `measuredWidth` and the
+`box` of section 25. None
 of them accepts a write. All of them evaluate in the topological pass. So
 `= text_1.measuredHeight` is a legal formula and the order is correct.
 
@@ -1638,6 +1639,7 @@ script x=0 y=0
 image x=0 y=0
 slider x=0 y=0 [min=0] [max=10] [step=1] [value=5] [w=200]
 frame x=0 y=0 w=800 h=600
+connect rect_1 text_1 [arrow=end]
 group circle_1,rect_1
 ungroup group_1 [force]
 duplicate circle_1,rect_1
@@ -1724,6 +1726,16 @@ values, stored ASTs, style), the mutation journal and the camera state.
 
 **The program never stores a derived slot value.** A full evaluation pass on
 load regenerates them.
+
+**A document from before a type gained a derived slot still loads, and still
+undoes.** A load fills each derived slot a type now declares, with a placeholder
+for evaluation to fill, in every object and in every object the journal creates.
+The journal needs it as much as the objects do, because undo replays the journal
+from the start, and an entry that creates an object with a slot missing would
+refuse and leave nothing to undo. A paste of objects a copy took before the
+change gets the same fill. The mutation itself stays strict, and refuses an
+object created with a derived slot missing, because a constructor that forgot
+one is a fault to report rather than to mend.
 
 A load applies objects through the mutation API and then evaluates. Save by JSON
 download. Load by file input. Do not build a file manager.
@@ -2181,7 +2193,56 @@ exactly, with no margin, and draw everything that overlaps it, cut at its edges.
 
 ---
 
-## 25. When the spec is silent
+## 25. Connectors
+
+A connector is a line from one object to another that follows both. A diagram
+is boxes joined by lines, and a line drawn by hand stays where it was drawn while
+the boxes move away from it. A connector reads where its two objects are,
+through the graph, so a move of either redraws it.
+
+```
+connect rect_1 text_1 [arrow=end]   // or the word alone, then two objects
+```
+
+**Every object with a place carries a box.** A derived slot `box` holds the
+corners of the object's box, as two points, the top left and then the bottom
+right. It comes from one rule in the engine, the rule the canvas draws and picks
+by, so the box a formula reads is the box the operator sees. A group has none,
+because its boundary depends on members found by a scan, which section 11 gives
+as the reason it is drawn rather than addressable. A connector has none either,
+because it carries its points in `vertices`. An object with no box to give, such
+as a text with nothing in it, holds null.
+
+**A connector reads two boxes.** `from` and `to` are formula slots, such as
+`= rect_1.box` and `= text_1.box`, so each end is an edge of the graph like any
+other, and a formula can aim an end anywhere. A derived `vertices` holds the two
+points the line runs between: from the centre of one box toward the centre of
+the other, each cut where it leaves its own box. An end may hold a point rather
+than a box, and the line then starts or stops exactly there. Two boxes that
+overlap draw no line, because no part of the line runs outside both. An end
+stops at the box, so on a round shape the line stops a little short of the
+outline, by up to four tenths of the radius on the diagonal.
+
+**Moving and rewiring.** A connector has no position of its own: a selection
+that holds one moves the objects in it and leaves the connector to follow, a
+frame takes no connector along, and an arrangement and a snap ignore it. The
+overlay of section 19 draws its two ends as curves from the two objects, and
+dragging the start of one onto another object rewires that end to the box of
+the object it lands on.
+
+**Deleting.** Deleting an object takes along every connector with an end that
+reads the box of that object and nothing else, in the same batch, because a
+connector to nothing is no part of a diagram. A formula of any other kind that
+reads the box still refuses the delete by name, as section 4 has it. A cut takes
+the same connectors along.
+
+**Drawing.** A line in the connector's stroke, with an arrowhead at the end its
+`arrow` slot names: `end`, `start`, `both` or `none`. The arrowhead scales with
+the stroke, so a heavier line has a larger head.
+
+---
+
+## 26. When the spec is silent
 
 Prefer, in this order:
 

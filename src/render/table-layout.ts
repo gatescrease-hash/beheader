@@ -8,7 +8,7 @@
  * and the vector picture, which measure text their own ways, fit a number the
  * same way when their measures agree.
  */
-import { formatCellReference, getTableDimensions, type GraphObject, type Value } from "../engine/index.ts";
+import { formatCellReference, getTableDimensions, tableSizes, type GraphObject, type Value } from "../engine/index.ts";
 
 function positive(value: Value | undefined, fallback: number, minimum: number): number {
   return typeof value === "number" && Number.isFinite(value) ? Math.max(minimum, value) : fallback;
@@ -16,8 +16,7 @@ function positive(value: Value | undefined, fallback: number, minimum: number): 
 
 export function tableLayout(object: GraphObject) {
   const { rows, cols } = getTableDimensions(object);
-  const widths = Array.from({ length: cols }, (_, i) => positive(object.slots[`columns.${i + 1}.width`]?.value, 80, 24));
-  const heights = Array.from({ length: rows }, (_, i) => positive(object.slots[`rowsizes.${i + 1}.height`]?.value, 24, 20));
+  const { widths, heights } = tableSizes(rows, cols, (path) => object.slots[path.join(".")]?.value);
   const offsets = (sizes: readonly number[]): number[] => sizes.reduce<number[]>((out, size) => [...out, out[out.length - 1]! + size], [0]);
   const x = offsets(widths), y = offsets(heights);
   return { widths, heights, x, y, width: x[cols]!, height: y[rows]! };

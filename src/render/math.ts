@@ -45,14 +45,11 @@ import {
   getSlot,
   MATH_BOX_PADDING,
   MATH_FONT_SIZE,
-  MATH_MEASURED_HEIGHT_PATH,
-  MATH_MEASURED_WIDTH_PATH,
   MATH_REFERENCE_COMMAND,
   MATH_SOLVE_COMMAND,
   MATH_SOURCE_PATH,
+  objectBox,
   readMathDisplayLatex,
-  ORIGIN_X_PATH,
-  ORIGIN_Y_PATH,
 } from "../engine/index.ts";
 import { worldToScreen } from "./camera.ts";
 
@@ -171,20 +168,13 @@ export function readMathDrawnLatex(object: GraphObject): string {
 }
 
 /**
- * The world box of a math object, taken from its origin and the two measured
- * slots. A measurement that has not landed yet leaves the box undefined, and
- * every caller treats that as an object with no place on screen rather than
- * drawing a box of the wrong size.
+ * The world box of a math object, by the engine's box rule, from its origin
+ * and the two measured slots. A measurement that has not landed yet leaves the
+ * box undefined, and every caller treats that as an object with no place on
+ * screen rather than drawing a box of the wrong size.
  */
 export function mathWorldBox(object: GraphObject): { minX: number; minY: number; maxX: number; maxY: number } | undefined {
-  const originX = readNumber(object, ORIGIN_X_PATH);
-  const originY = readNumber(object, ORIGIN_Y_PATH);
-  const width = readNumber(object, MATH_MEASURED_WIDTH_PATH);
-  const height = readNumber(object, MATH_MEASURED_HEIGHT_PATH);
-  if (originX === undefined || originY === undefined || width === undefined || height === undefined) {
-    return undefined;
-  }
-  return { minX: originX, minY: originY, maxX: originX + width, maxY: originY + height };
+  return objectBox(object, (path) => getSlot(object, path)?.value);
 }
 
 /** Where the element holding the notation goes, in CSS pixels. */

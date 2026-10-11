@@ -48,6 +48,14 @@ export const DOCREF_TYPE = "docref";
 export const DOCREF_STYLE = { font: "monospace", fontSize: 16, lineHeight: 20 } as const;
 
 /**
+ * The box a copy takes where neither measured slot holds a number. It is wide
+ * enough for a short name, an equals sign and a small value, so a copy stays
+ * clickable in a document that was evaluated with no real measurer.
+ */
+export const DOCREF_FALLBACK_WIDTH = 120;
+export const DOCREF_FALLBACK_HEIGHT = 20;
+
+/**
  * The reason a name cannot become a variable, or `undefined` when it can.
  * `exclude` names the variable being renamed, which may keep its own spelling.
  *
