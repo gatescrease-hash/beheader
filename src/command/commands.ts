@@ -51,6 +51,13 @@ import {
   groupingOperations,
   ungroupingOperations,
   GROUP_MEMBERSHIP_PATH,
+  DEFAULT_FRAME_FILL,
+  DEFAULT_FRAME_STROKE,
+  STYLE_FILL_COLOR_PATH,
+  STYLE_STROKE_COLOR_PATH,
+  FRAME_HEIGHT_PATH,
+  FRAME_TYPE,
+  FRAME_WIDTH_PATH,
   SLIDER_MAX_PATH,
   SLIDER_MIN_PATH,
   SLIDER_STEP_PATH,
@@ -143,6 +150,7 @@ import type {
   CreateMathCommand,
   CreateScriptCommand,
   CreateSliderCommand,
+  CreateFrameCommand,
   CreateTableCommand,
   CreateTextCommand,
   DeleteCommand,
@@ -205,7 +213,8 @@ export type CommandEffect =
   | { readonly kind: "distribute"; readonly axis: "x" | "y" }
   | { readonly kind: "copy" | "cut"; readonly cells?: CellBlock }
   | { readonly kind: "paste" | "import"; readonly cell?: CellCorner }
-  | { readonly kind: "export"; readonly format: "png" | "svg"; readonly scale: number; readonly selection: boolean }
+  | { readonly kind: "export"; readonly format: "png" | "svg"; readonly scale: number; readonly selection: boolean; readonly frameId?: string }
+  | { readonly kind: "view"; readonly objectId: string }
   | { readonly kind: "undo" }
   | { readonly kind: "redo" };
 
@@ -379,8 +388,30 @@ export function executeCommand(command: Command, document: Document, context: Ev
       if (!Number.isFinite(scale) || scale <= 0 || scale > MAX_EXPORT_SCALE) {
         return { ok: false, message: `the scale must be a number above 0 and at most ${MAX_EXPORT_SCALE}, got ${scale}` };
       }
-      return { ok: true, document, lines: [], effect: { kind: "export", format, scale, selection: command.selection } };
+      if (command.frame === undefined) {
+        return { ok: true, document, lines: [], effect: { kind: "export", format, scale, selection: command.selection } };
+      }
+      if (command.selection) {
+        return { ok: false, message: "a picture covers the selection or a frame, not both — usage: export png|svg [scale] [selection|<frame>]" };
+      }
+      const frame = findGraphObjectByName(command.frame, document.objects);
+      if (frame === undefined) {
+        return { ok: false, message: `no object named "${command.frame}"${nameSuggestion(command.frame, document.objects.filter((object) => object.type === FRAME_TYPE).map((object) => object.name))}` };
+      }
+      if (frame.type !== FRAME_TYPE) {
+        return { ok: false, message: `${frame.name} is a ${frame.type}, and a picture covers a frame — select it and use "export ${format} selection" instead` };
+      }
+      return { ok: true, document, lines: [], effect: { kind: "export", format, scale, selection: false, frameId: frame.id } };
     }
+    case "view": {
+      const object = findGraphObjectByName(command.target, document.objects);
+      if (object === undefined) {
+        return { ok: false, message: `no object named "${command.target}"${nameSuggestion(command.target, document.objects.map((each) => each.name))}` };
+      }
+      return { ok: true, document, lines: [], effect: { kind: "view", objectId: object.id } };
+    }
+    case "frame":
+      return createFrame(command, document, context);
     case "import": {
       if (command.format.toLowerCase() !== "csv") {
         return { ok: false, message: `import reads csv, got "${command.format}" — usage: import csv [corner]` };
@@ -428,6 +459,8 @@ export const COMMANDS_WITH_HANDLERS: readonly string[] = [
   "image",
   "script",
   "slider",
+  "frame",
+  "view",
   "math",
   "set",
   "link",
@@ -599,6 +632,21 @@ function createImage(command: CreateImageCommand, document: Document, context: E
     { path: IMAGE_SOURCE_PATH, value: DEFAULT_IMAGE_SOURCE },
     { path: IMAGE_PRESERVE_ASPECT_PATH, value: DEFAULT_IMAGE_PRESERVE_ASPECT },
     { path: IMAGE_PICTURE_ASPECT_PATH, value: DEFAULT_IMAGE_PICTURE_ASPECT },
+  ], context);
+}
+
+/** Creates a frame. A frame of no width or height marks no region, so the command refuses one. */
+function createFrame(command: CreateFrameCommand, document: Document, context: EvalContext): CommandOutcome {
+  if (!(command.width > 0) || !(command.height > 0)) {
+    return { ok: false, message: `a frame needs a width and a height above 0 — got w=${command.width} h=${command.height}` };
+  }
+  return createObjectFromCommand(document, "frame", [
+    { path: ORIGIN_X_PATH, value: command.x },
+    { path: ORIGIN_Y_PATH, value: command.y },
+    { path: FRAME_WIDTH_PATH, value: command.width },
+    { path: FRAME_HEIGHT_PATH, value: command.height },
+    { path: STYLE_FILL_COLOR_PATH, value: DEFAULT_FRAME_FILL },
+    { path: STYLE_STROKE_COLOR_PATH, value: DEFAULT_FRAME_STROKE },
   ], context);
 }
 

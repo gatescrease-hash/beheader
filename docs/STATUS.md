@@ -15,11 +15,12 @@ register, and the measurements behind leaving that migration unscheduled.
 | --- | --- |
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
-| Tests | 3052 Vitest tests and 2 tooling tests pass, with 0 skipped. |
-| Spec | Built through section 23, except the parts section 17 postpones. |
+| Tests | 3070 Vitest tests and 2 tooling tests pass, with 0 skipped. |
+| Spec | Built through section 24, except the parts section 17 postpones. |
 | Scripts | Python runs in a Pyodide worker. Groups are script nodes with members. |
 | Rule 5 | Met for every committed batch. A refusal and a list with no index still cost the whole document. |
 | Selection | A box selects by window or crossing, a drag moves the whole selection and snaps, and Ctrl+A, the arrows, Delete and Ctrl+D act on it. |
+| Frames | A frame names a region. `view`, Page Down and Page Up go to one, and a picture can cover one. |
 | Workspace | Compact typography, a profile helmet, in-row style source controls, and full, compact and hidden sidebar modes with pointer and keyboard resizing. |
 
 ### How to run it
@@ -121,6 +122,7 @@ covers everything it calls.
 | `tools/export-check.cjs` | Browser checks that an exported raster carries its notation, at its scale, and that the vector form parses. |
 | `tools/selection-check.cjs` | Browser checks for selection boxes, a drag of many, snapping, and the keys of the canvas. |
 | `tools/slider-check.cjs` | Browser checks that a slider's knob sets its value, and that what reads it follows. |
+| `tools/frame-check.cjs` | Browser checks that a frame moves what lies in it, steps the view, and exports alone. |
 | `tools/prose-check.mjs` | The prose checker that enforces `docs/STYLE.md`. |
 
 ### `src/engine/` - the pure core
@@ -151,6 +153,7 @@ covers everything it calls.
 | `primitives/text.ts` | The text block tree, its dependencies, and its measurements. |
 | `primitives/image.ts` | Slot path constants for the image type. |
 | `primitives/slider.ts` | The slots of a slider, and the rule that turns a place on its track into a value. |
+| `primitives/frame.ts` | The slots and defaults of a frame, which marks a named region and owns nothing. |
 | `primitives/doc.ts` | The document variable, the copy of one on the canvas, and the names a variable may not take. |
 | `primitives/math.ts` | The slots a math object carries, the seeds a solve starts from, and the compute function behind each export. |
 | `math/ast.ts` | The node types of the math language, and the depth check over them. |

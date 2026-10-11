@@ -101,6 +101,15 @@ describe("exportSvg", () => {
     expect(svg).not.toContain("<foreignObject");
   });
 
+  it("covers a frame's box exactly, draws its sheet with no name, and cuts what crosses its edge", () => {
+    const document = built(["frame x=50 y=40 w=300 h=200", ...DRAWING]);
+    const frame = { minX: 50, minY: 40, maxX: 350, maxY: 240 };
+    const svg = exportSvg(document.objects, { measureText, mathml, measureMath, frame });
+    expect(svg).toContain(`<svg xmlns="http://www.w3.org/2000/svg" width="300" height="200" viewBox="0 0 300 200"`);
+    expect(svg).toContain(`fill="#fffdf7"`);
+    expect(svg).not.toContain(">frame_1</text>");
+  });
+
   it("draws a selection alone, and nothing for a selection with no box", () => {
     const document = built(DRAWING);
     const svg = exportSvg(exportedObjects(document.objects, [named(document, "rect_1").id]), { measureText, mathml, measureMath });

@@ -60,6 +60,9 @@ import {
   type FormulaSlot,
   getSlot,
   type GraphObject,
+  FRAME_HEIGHT_PATH,
+  FRAME_TYPE,
+  FRAME_WIDTH_PATH,
   IMAGE_HEIGHT_PATH,
   IMAGE_PRESERVE_ASPECT_PATH,
   IMAGE_TYPE,
@@ -85,7 +88,7 @@ import { groupBoundary, objectExtent, type WorldExtent } from "./extent.ts";
 import { constrainBoxToRatio, handleEdges, hasResizeHandles, resizeBox, resizeHandleAt, type ResizeHandle } from "./handles.ts";
 import { bulgeForGrabbedMidpoint, gripAt, hasPathGrips, sameGrip, type PathGrip } from "./grips.ts";
 import { hitTest, pathSegmentUnder, STROKE_HIT_TOLERANCE_SCREEN_PIXELS } from "./hittest.ts";
-import { marqueeBox, marqueeMode, marqueeUnits } from "./marquee.ts";
+import { canvasUnits, marqueeBox, marqueeMode, marqueeUnits } from "./marquee.ts";
 import { readBoolean, readNumber } from "./slots.ts";
 import { SNAP_TOLERANCE_SCREEN_PIXELS, snapTargets, snapTravel, type Guide, type SnapTargets } from "./snap.ts";
 import { onSliderTrack, sliderLayout, sliderValueUnder } from "./slider-layout.ts";
@@ -264,7 +267,7 @@ export function pointerDown(
   const click = !already ? undefined : additive ? "out" : selectedObjectIds.length > 1 ? "alone" : undefined;
   // The drag moves units. The pressed object is one, unless a group around it
   // is selected as well, and then that group moves it.
-  const units = movingUnits(objects, selectedObjectIds);
+  const units = withFrameContents(objects, movingUnits(objects, selectedObjectIds));
   const lead = units.find((unit) => unit.id === object.id) ?? units.find((unit) => groupDescendants(unit.id, objects).some((member) => member.id === object.id)) ?? object;
   const moving = units.length === 0 ? [lead] : units;
   return {
@@ -365,6 +368,31 @@ function pointSnapTargets(object: GraphObject, vertices: readonly number[], obje
 }
 
 /**
+ * The units a move of these units takes along: each one, and, for each frame
+ * among them, every unit on show whose box lies wholly inside the frame now.
+ * A frame inside a moving frame lies inside it, so it comes along with what it
+ * holds. A unit half inside stays, because a frame that took half of something
+ * would pull a drawing apart. A group counts by the outline it draws.
+ */
+export function withFrameContents(objects: readonly GraphObject[], units: readonly GraphObject[]): readonly GraphObject[] {
+  const frames = units.map((unit) => (unit.type === "frame" ? objectExtent(unit) : undefined)).filter((box): box is WorldExtent => box !== undefined);
+  if (frames.length === 0) {
+    return units;
+  }
+  const taken = new Set(units.map((unit) => unit.id));
+  const result = [...units];
+  for (const unit of canvasUnits(objects)) {
+    if (taken.has(unit.id)) continue;
+    const box = unit.type === "group" ? groupBoundary(unit, objects) : objectExtent(unit);
+    if (box !== undefined && frames.some((frame) => box.minX >= frame.minX && box.maxX <= frame.maxX && box.minY >= frame.minY && box.maxY <= frame.maxY)) {
+      taken.add(unit.id);
+      result.push(unit);
+    }
+  }
+  return result;
+}
+
+/**
  * The objects that move when these are selected: each selected object, less
  * any object with a selected group around it, which moves with that group,
  * and less the variable holder and the layers, which have no place to move.
@@ -383,7 +411,7 @@ export function movingUnits(objects: readonly GraphObject[], selectedObjectIds: 
  * moving unit through planMove, under the rule a drag follows.
  */
 export function planNudge(objects: readonly GraphObject[], selectedObjectIds: readonly string[], deltaX: number, deltaY: number): DragPlan {
-  const plan = joinPlans(movingUnits(objects, selectedObjectIds).map((unit) => planMove(unit, objects, deltaX, deltaY)));
+  const plan = joinPlans(withFrameContents(objects, movingUnits(objects, selectedObjectIds)).map((unit) => planMove(unit, objects, deltaX, deltaY)));
   // A step of 0.1 adds in binary, so 100.2 and 0.1 make 100.30000000000001.
   // Each written value keeps as many decimals as the step or the value before
   // it had, which drops that error and nothing the operator wrote.
@@ -882,6 +910,9 @@ function resizePlanShape(object: GraphObject): ResizePlanShape | undefined {
       keepsRatio: readBoolean(object, IMAGE_PRESERVE_ASPECT_PATH) ?? true,
       dropsAutoresize: false,
     };
+  }
+  if (object.type === FRAME_TYPE) {
+    return { widthPath: FRAME_WIDTH_PATH, heightPath: FRAME_HEIGHT_PATH, keepsRatio: false, dropsAutoresize: false };
   }
   return undefined;
 }

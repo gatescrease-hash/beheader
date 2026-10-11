@@ -383,6 +383,10 @@ function everyStructuralOperation(random: SeededRandom, objectCount: number): Op
     [readerOf("obj_slider_reader", "slider_reader", at("obj_slider", "value"))],
     [{ kind: "setSlot", address: at("obj_slider", "value"), slot: literalSlot(random.integer(10)) }],
     [{ kind: "setSlot", address: at("obj_slider", "value"), slot: formulaSlot({ type: "reference", address: at(sheet, "cells", "A1") }) }],
+    // A frame marks a region, and a formula can size it from a slider.
+    [{ kind: "createObject", object: { id: "obj_frame", name: "frame", type: "frame", slots: { "origin.x": literalSlot(0), "origin.y": literalSlot(0), width: literalSlot(300), height: literalSlot(200), "style.fillColor": { kind: "literal", value: "#fffdf7" }, "style.strokeColor": { kind: "literal", value: "#d3cab5" } } } }],
+    [{ kind: "setSlot", address: at("obj_frame", "width"), slot: formulaSlot({ type: "binaryOp", operator: "*", left: { type: "reference", address: at("obj_slider", "value") }, right: { type: "literal", value: 40 } }) }],
+    [readerOf("obj_frame_reader", "frame_reader", at("obj_frame", "width"))],
     [{ kind: "createObject", object: withDerivedSlots({ id: path, name: "path", type: "polyline", vertexCount: pathPoints.length, slots: pathSlots }) }],
     [readerOf("obj_path_reader", "path_reader", at(path, "vertex", "2", "x"))],
     [{ kind: "addVertex", objectId: path, point: point(random.integer(50), 60) }],

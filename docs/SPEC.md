@@ -1637,6 +1637,7 @@ table x=0 y=0 rows=8 cols=8
 script x=0 y=0
 image x=0 y=0
 slider x=0 y=0 [min=0] [max=10] [step=1] [value=5] [w=200]
+frame x=0 y=0 w=800 h=600
 group circle_1,rect_1
 ungroup group_1 [force]
 duplicate circle_1,rect_1
@@ -1662,6 +1663,7 @@ list
 select intersection_a
 zoom <factor> / fit
 save / load
+view frame_1
 
 upstream circle_1 [depth]        # section 19, answers with a selection
 downstream doc.speed [depth]
@@ -2129,7 +2131,57 @@ postpones. The slider is the source, and other objects read it.
 
 ---
 
-## 24. When the spec is silent
+## 24. Frames
+
+A frame marks a region of the canvas and gives it a name. A document that grows
+past one screen splits into parts, a sketch beside a table beside a set of
+results, and a frame is how the operator names a part, goes back to it, takes a
+picture of it, and moves it. It answers the want for more than one canvas with
+no second canvas: on one canvas every formula, curve and selection works across
+the parts, which a page boundary would cut.
+
+```
+frame x=0 y=0 w=800 h=600      // or the word alone, then two corners
+view frame_1                   // fit the view to the frame
+export png [scale] frame_1     // a picture of the frame alone
+```
+
+**A frame owns nothing.** It has an origin, a width, a height, a fill and a
+stroke, and no members. What lies inside it is worked out when it is needed,
+from the boxes on the canvas at that moment, and never written down, for the
+reason the boundary of a group is drawn rather than addressable: a slot that
+listed the contents would depend on a scan rather than on state. A group holds
+its members, and a frame marks where things are. So deleting a frame leaves what
+was inside it, and a copy of a frame is a copy of the frame alone.
+
+**A frame draws beneath everything,** groups included, as a sheet with its name
+above its top left corner. It hits on its border and its name alone, so
+everything inside stays clickable through it, and a press on its empty inside
+starts a selection box. A window takes a frame it encloses, and a crossing
+takes a frame only where the box crosses its border or its name, so a crossing
+drawn inside a frame picks what is in the frame and leaves the frame.
+
+**Moving a frame moves what lies in it.** A drag or an arrow that moves a frame
+also moves every unit whose box lies wholly inside the frame when the move
+starts, under the per component rule. A frame inside a frame lies inside it, so
+it goes too, with what it holds. A unit half inside stays where it is, because
+a frame that took half of something would pull a drawing apart. An arrangement
+leaves frames where they are, because a frame marks a region rather than a part
+of the drawing.
+
+**A frame resizes by its handles,** the eight a text box has.
+
+**Views.** `view frame_1` fits the frame to the view, with a margin, and writes no
+journal entry, because the camera is view state. Page Down and Page Up step the
+view through the frames in document order, so a document of frames reads like a
+deck.
+
+**Pictures.** `export png frame_1` and `export svg frame_1` cover the frame's box
+exactly, with no margin, and draw everything that overlaps it, cut at its edges.
+
+---
+
+## 25. When the spec is silent
 
 Prefer, in this order:
 

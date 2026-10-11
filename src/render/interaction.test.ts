@@ -1410,3 +1410,57 @@ describe("the knob of a slider", () => {
     expect(above.drag?.objectId).toBe("obj_s");
   });
 });
+
+describe("a frame marks a region, and moves what lies in it", () => {
+  // frame_1 spans 0..300 by 0..200, with its name above its top left corner.
+  function frameObject(id: string, name: string, x: number, y: number, width: number, height: number): GraphObject {
+    const literal = (value: number | string): Slot => ({ kind: "literal", value });
+    return { id, name, type: "frame", slots: { "origin.x": literal(x), "origin.y": literal(y), width: literal(width), height: literal(height), "style.fillColor": literal("#fffdf7"), "style.strokeColor": literal("#d3cab5") } };
+  }
+  const scene = () => commit([
+    frameObject("obj_f", "frame_1", 0, 0, 300, 200),
+    rectNamed("obj_1", "rect_1", 40, 40),
+    rectNamed("obj_3", "rect_2", 290, 100),
+    frameObject("obj_g", "frame_2", 100, 120, 80, 60),
+    rectNamed("obj_2", "rect_3", 110, 130),
+  ]);
+
+  it("hits on its border and its name, and passes a press inside through to what lies there", () => {
+    const { objects } = scene();
+    expect(pointerDown(INITIAL_INTERACTION_STATE, { x: 300, y: 50 }, objects, CAMERA_IDENTITY).drag?.objectId).toBe("obj_f");
+    expect(pointerDown(INITIAL_INTERACTION_STATE, { x: 10, y: -8 }, objects, CAMERA_IDENTITY).drag?.objectId).toBe("obj_f");
+    expect(pointerDown(INITIAL_INTERACTION_STATE, { x: 50, y: 40 }, objects, CAMERA_IDENTITY).drag?.objectId).toBe("obj_1");
+    expect(pointerDown(INITIAL_INTERACTION_STATE, { x: 200, y: 20 }, objects, CAMERA_IDENTITY).marquee).toBeDefined();
+  });
+
+  it("moves with every unit wholly inside it, a frame inside it with what that holds, and leaves a unit half inside", () => {
+    const { objects, journal } = scene();
+    const pressed = pointerDown(INITIAL_INTERACTION_STATE, { x: 300, y: 50 }, objects, CAMERA_IDENTITY);
+    expect(pressed.drag?.carried).toEqual(["obj_1", "obj_g", "obj_2"]);
+    const moved = pointerMove(pressed, { x: 300, y: 60 }, objects, journal, CAMERA_IDENTITY);
+    expect(["obj_f", "obj_1", "obj_g", "obj_2", "obj_3"].map((id) => slotValue(moved.objects, id, "origin.y"))).toEqual([10, 50, 130, 140, 100]);
+  });
+
+  it("takes what lies in it along with an arrow key too", () => {
+    const { objects } = scene();
+    expect(planNudge(objects, ["obj_g"], 1, 0).operations.map((operation) => (operation.kind === "setSlot" ? operation.address.objectId : ""))).toEqual(["obj_g", "obj_2"]);
+  });
+
+  it("is taken by a window around it, and by a crossing over its border, but not by a crossing inside it", () => {
+    const { objects } = scene();
+    const box = (from: { x: number; y: number }, to: { x: number; y: number }) =>
+      pointerMove(pointerDown(INITIAL_INTERACTION_STATE, from, objects, CAMERA_IDENTITY), to, objects, [], CAMERA_IDENTITY).state.selectedObjectIds;
+    expect(box({ x: 90, y: 110 }, { x: 190, y: 190 })).toEqual(["obj_g", "obj_2"]);
+    expect(box({ x: 70, y: 70 }, { x: 30, y: 30 })).toEqual(["obj_1"]);
+    expect(box({ x: 320, y: 30 }, { x: 280, y: 20 })).toEqual(["obj_f"]);
+  });
+
+  it("resizes by its handles", () => {
+    const { objects, journal } = scene();
+    const selected: InteractionState = { ...INITIAL_INTERACTION_STATE, selectedObjectIds: ["obj_f"] };
+    const grabbed = pointerDown(selected, { x: 300, y: 200 }, objects, CAMERA_IDENTITY);
+    expect(grabbed.resize?.handle).toBe("se");
+    const resized = pointerMove(grabbed, { x: 350, y: 260 }, objects, journal, CAMERA_IDENTITY);
+    expect([slotValue(resized.objects, "obj_f", "width"), slotValue(resized.objects, "obj_f", "height")]).toEqual([350, 260]);
+  });
+});

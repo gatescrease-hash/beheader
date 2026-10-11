@@ -80,6 +80,8 @@ const DOCUMENTED_EXAMPLES: readonly { readonly line: string; readonly command: C
   { line: "ungroup group_1 force", command: { kind: "ungroup", target: "group_1", force: true } },
   { line: "duplicate circle_1,rect_1", command: { kind: "duplicate", targets: ["circle_1", "rect_1"] } },
   { line: "snap off", command: { kind: "snap", state: "off" } },
+  { line: "frame x=0 y=0 w=300 h=200", command: { kind: "frame", x: 0, y: 0, width: 300, height: 200 } },
+  { line: "view frame_1", command: { kind: "view", target: "frame_1" } },
   { line: "slider x=1 y=2 max=20 step=0.5", command: { kind: "slider", x: 1, y: 2, min: 0, max: 20, step: 0.5, value: 5, width: 200 } },
   { line: "upstream circle_1 2", command: { kind: "upstream", target: "circle_1", depth: 2 } },
   { line: "downstream doc.speed", command: { kind: "downstream", target: "doc.speed" } },
@@ -503,5 +505,13 @@ describe("an argument that names something declares which kind it is", () => {
   it("finds an object or an address argument on every command that takes one", () => {
     const named = COMMAND_NAMES.filter((name) => positionalKinds(name).some((kind) => kind === "object" || kind === "address"));
     expect(named.length).toBeGreaterThan(10);
+  });
+});
+
+describe("export names a frame after an optional scale", () => {
+  it("reads a word where the scale goes as the frame, and a number as the scale", () => {
+    expect(parsed("export png frame_1")).toEqual({ kind: "export", format: "png", selection: false, frame: "frame_1" });
+    expect(parsed("export png 3 frame_1")).toEqual({ kind: "export", format: "png", selection: false, scale: 3, frame: "frame_1" });
+    expect(parsed("export svg")).toEqual({ kind: "export", format: "svg", selection: false });
   });
 });

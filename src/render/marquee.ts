@@ -52,7 +52,7 @@ import {
 } from "../engine/index.ts";
 import { worldToScreen, type WorldPoint } from "./camera.ts";
 import type { DrawingContext } from "./drawing.ts";
-import { GROUP_TAB_HEIGHT, groupBoundary, groupTabWidth, objectExtent, type WorldExtent } from "./extent.ts";
+import { FRAME_LABEL_HEIGHT, frameLabelWidth, GROUP_TAB_HEIGHT, groupBoundary, groupTabWidth, objectExtent, type WorldExtent } from "./extent.ts";
 import { asPointArray, readBoolean, readNumber, readShapeStyle } from "./slots.ts";
 
 /** A window takes what lies wholly inside the box, and a crossing takes what the box touches. */
@@ -136,6 +136,11 @@ function inside(point: Point, box: WorldExtent): boolean {
 /** True when the box touches what a press on the object would hit. */
 function touches(object: GraphObject, box: WorldExtent): boolean {
   const extent = objectExtent(object);
+  if (object.type === "frame" && extent !== undefined) {
+    // The name sits above the box, so a crossing can touch it with no overlap of the box.
+    const label: WorldExtent = { minX: extent.minX, minY: extent.minY - FRAME_LABEL_HEIGHT, maxX: extent.minX + frameLabelWidth(object), maxY: extent.minY };
+    if (overlaps(label, box)) return true;
+  }
   if (extent === undefined || !overlaps(extent, box)) {
     return false;
   }
@@ -153,6 +158,13 @@ function touches(object: GraphObject, box: WorldExtent): boolean {
     }
     case "polyline":
       return edgesTouch(pathEdgesOfObject(object), box, filled && readBoolean(object, CLOSED_PATH) === true);
+    // A frame hits on its border and its name alone, so a crossing drawn inside
+    // it takes what is in the frame and leaves the frame.
+    case "frame": {
+      const label: WorldExtent = { minX: extent.minX, minY: extent.minY - FRAME_LABEL_HEIGHT, maxX: extent.minX + frameLabelWidth(object), maxY: extent.minY };
+      const within = box.minX > extent.minX && box.maxX < extent.maxX && box.minY > extent.minY && box.maxY < extent.maxY;
+      return overlaps(label, box) || !within;
+    }
     default:
       return true;
   }

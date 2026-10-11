@@ -40,6 +40,7 @@ const EQUIVALENT_FORMS: readonly { readonly name: string; readonly typedLine: st
   { name: "table", typedLine: "table x=0 y=0 rows=8 cols=8", responses: [picked(0, 0), typed(""), typed("")] },
   { name: "image", typedLine: "image x=0 y=0", responses: [picked(0, 0)] },
   { name: "slider", typedLine: "slider x=0 y=0", responses: [picked(0, 0)] },
+  { name: "frame", typedLine: "frame x=0 y=0 w=300 h=200", responses: [picked(0, 0), picked(300, 200)] },
   { name: "script", typedLine: "script x=0 y=0", responses: [picked(0, 0)] },
   { name: "math", typedLine: 'math x=0 y=0 ""', responses: [picked(0, 0)] },
   { name: "text", typedLine: 'text x=0 y=0 ""', responses: [picked(0, 0)] },

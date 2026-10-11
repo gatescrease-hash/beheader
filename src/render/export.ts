@@ -19,6 +19,10 @@
  * two the program defines are expanded first, from the same definitions the
  * screen uses.
  *
+ * A picture of a frame covers the frame's box exactly, with no margin, and
+ * draws everything that overlaps it, cut at its edges by the edges of the
+ * picture.
+ *
  * A selection picture holds the selected objects and everything inside a
  * selected group, and covers their box. An object outside the selection stays
  * out of the picture even where it overlaps the frame, because a picture of
@@ -183,6 +187,8 @@ export interface SvgExportOptions {
   readonly mathml: (latex: string) => string;
   readonly images?: ImageBitmaps;
   readonly measureMath?: MathRunMeasurer;
+  /** The box the picture covers exactly, for a picture of a frame, in place of the box around the objects. */
+  readonly frame?: WorldExtent;
 }
 
 /**
@@ -191,7 +197,7 @@ export interface SvgExportOptions {
  * canvas, with its chrome off, and the notation goes in on top.
  */
 export function exportSvg(objects: readonly GraphObject[], options: SvgExportOptions): string | undefined {
-  const frame = exportFrame(objects);
+  const frame = options.frame ?? exportFrame(objects);
   if (frame === undefined) {
     return undefined;
   }

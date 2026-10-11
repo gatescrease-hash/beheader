@@ -89,7 +89,7 @@ import {
   type EditorTarget,
   type EditorTextStyle,
 } from "./render/editor.ts";
-import { documentExtent, objectExtent, type WorldExtent } from "./render/extent.ts";
+import { documentExtent, FRAME_LABEL_HEIGHT, groupBoundary, objectExtent, type WorldExtent } from "./render/extent.ts";
 import {
   deselect,
   movingUnits,
@@ -190,6 +190,8 @@ export interface AppState {
   readonly nudgeBase: GestureBase | undefined;
   /** Whether a drag snaps to the lines around it, which `snap on|off` sets. View state, which no save carries. */
   readonly snap: boolean;
+  /** The frame the view went to last, which Page Down and Page Up step from. No save carries it. */
+  readonly frameCursor: string | undefined;
 }
 
 export interface WiresState {
@@ -226,6 +228,10 @@ export interface ExportRequest {
   readonly scale: number;
   /** The objects the picture holds, already widened to the members of a selected group. */
   readonly objectIds: readonly string[] | undefined;
+  /** The box the picture covers exactly, for a picture of a frame, in place of the box around its objects. */
+  readonly frame?: WorldExtent;
+  /** The name of the file, before its extension. */
+  readonly fileName: string;
 }
 
 export interface AppTransition {
@@ -271,6 +277,7 @@ export function initialAppState(
     pasteCount: 0,
     nudgeBase: undefined,
     snap: true,
+    frameCursor: undefined,
   };
 }
 
@@ -484,6 +491,8 @@ export function performEffect(effect: CommandEffect, state: AppState, viewport: 
       return transition({ ...state, wires: { visible: effect.visible, selected: effect.visible ? state.wires.selected : undefined } });
     case "snap":
       return transition({ ...state, snap: effect.enabled });
+    case "view":
+      return viewObject(state, effect.objectId, viewport);
     case "save":
       return { state: { ...state, savedJournal: state.document.journal }, fileRequest: "save", refused: false };
     case "load":
@@ -504,11 +513,49 @@ function zoomBy(state: AppState, factor: number, viewport: Viewport): AppState {
 }
 
 function fitToDocument(state: AppState, viewport: Viewport): AppState {
-  const camera = state.document.camera;
   const extent = documentExtent(state.document.objects);
   if (extent === undefined) {
     return withLog(state, ["nothing on the canvas has an extent to fit to"]);
   }
+  const fitted = fitToExtent(state.document.camera, extent, viewport);
+  const line = fitted.fits ? describeZoom(fitted.camera.zoom, fitted.camera.zoom) : `the document's extent is a single point — centred it at zoom ${roundedZoom(fitted.camera.zoom)}`;
+  return withLog(withCamera(state, fitted.camera), [line]);
+}
+
+/**
+ * Fits the view to one object, as `view` does: a frame with the name above it,
+ * a group by the outline it draws, and anything else by its box. A view of a
+ * frame becomes the place Page Down and Page Up step from.
+ */
+export function viewObject(state: AppState, objectId: string, viewport: Viewport): AppTransition {
+  const object = state.document.objects.find((candidate) => candidate.id === objectId);
+  const box = object === undefined ? undefined : object.type === "group" ? groupBoundary(object, state.document.objects) : objectExtent(object);
+  if (object === undefined || box === undefined) {
+    return transition(logLine(state, object === undefined ? "that object is gone" : `${object.name} has no place on the canvas to view`), true);
+  }
+  const shown = object.type === "frame" ? { ...box, minY: box.minY - FRAME_LABEL_HEIGHT } : box;
+  const fitted = fitToExtent(state.document.camera, shown, viewport);
+  const viewed = withLog(withCamera(state, fitted.camera), [`viewing ${object.name}`]);
+  return transition({ ...viewed, frameCursor: object.type === "frame" ? object.id : state.frameCursor });
+}
+
+/**
+ * Views the next frame in document order, or the one before, as Page Down and
+ * Page Up do. The first step goes to the first frame, or the last one going
+ * back, and a step past either end stays where it is.
+ */
+export function stepFrame(state: AppState, direction: 1 | -1, viewport: Viewport): AppTransition {
+  const frames = displayObjects(state.document.objects).filter((object) => object.type === "frame");
+  if (frames.length === 0) {
+    return transition(logLine(state, "the document has no frames to step through — frame x=0 y=0 makes one"), true);
+  }
+  const at = frames.findIndex((frame) => frame.id === state.frameCursor);
+  const next = at < 0 ? (direction === 1 ? 0 : frames.length - 1) : Math.max(0, Math.min(frames.length - 1, at + direction));
+  return viewObject(state, frames[next]!.id, viewport);
+}
+
+/** The camera that fits a box in the view with a margin, and whether the box had any size to fit. */
+function fitToExtent(camera: CameraState, extent: WorldExtent, viewport: Viewport): { readonly camera: CameraState; readonly fits: boolean } {
   const width = extent.maxX - extent.minX;
   const height = extent.maxY - extent.minY;
   const fits = (width > 0 || height > 0) && viewport.width > 0 && viewport.height > 0;
@@ -517,9 +564,7 @@ function fitToDocument(state: AppState, viewport: Viewport): AppState {
     : camera.zoom;
   const centreX = (extent.minX + extent.maxX) / 2;
   const centreY = (extent.minY + extent.maxY) / 2;
-  const fitted = clampCamera({ x: centreX - viewport.width / (2 * zoom), y: centreY - viewport.height / (2 * zoom), zoom });
-  const line = fits ? describeZoom(fitted.zoom, fitted.zoom) : `the document's extent is a single point — centred it at zoom ${roundedZoom(fitted.zoom)}`;
-  return withLog(withCamera(state, fitted), [line]);
+  return { camera: clampCamera({ x: centreX - viewport.width / (2 * zoom), y: centreY - viewport.height / (2 * zoom), zoom }), fits };
 }
 
 /**
@@ -609,6 +654,16 @@ function describeEntry(entry: MutationJournalEntry, ...states: readonly (readonl
  * fit the largest side a browser can allocate at the scale asked for.
  */
 export function planExport(state: AppState, effect: Extract<CommandEffect, { kind: "export" }>): AppTransition {
+  if (effect.frameId !== undefined) {
+    const frameObject = state.document.objects.find((object) => object.id === effect.frameId);
+    const box = frameObject === undefined ? undefined : objectExtent(frameObject);
+    if (frameObject === undefined || box === undefined) {
+      return transition(logLine(state, "that frame has no region to draw"), true);
+    }
+    const tooLarge = effect.format === "png" ? exportTooLarge(box, effect.scale) : undefined;
+    if (tooLarge !== undefined) return transition(logLine(state, tooLarge), true);
+    return { ...transition(state), exportRequest: { format: effect.format, scale: effect.scale, objectIds: undefined, frame: box, fileName: frameObject.name } };
+  }
   const selected = state.interaction.selectedObjectIds;
   if (effect.selection && selected.length === 0) {
     return transition(logLine(state, "export selection needs a selection — select the objects to draw first"), true);
@@ -618,14 +673,19 @@ export function planExport(state: AppState, effect: Extract<CommandEffect, { kin
   if (frame === undefined) {
     return transition(logLine(state, effect.selection ? "nothing in the selection has a place on the canvas to draw" : "the document holds nothing to draw yet"), true);
   }
-  const width = Math.ceil((frame.maxX - frame.minX) * (effect.format === "png" ? effect.scale : 1));
-  const height = Math.ceil((frame.maxY - frame.minY) * (effect.format === "png" ? effect.scale : 1));
-  if (effect.format === "png" && Math.max(width, height) > MAX_EXPORT_PIXELS) {
-    const fits = Math.floor((MAX_EXPORT_PIXELS / Math.max(frame.maxX - frame.minX, frame.maxY - frame.minY)) * 100) / 100;
-    return transition(logLine(state, `a picture of ${width}×${height} pixels is past the limit of ${MAX_EXPORT_PIXELS} on a side — a scale of ${fits} or less fits`), true);
-  }
+  const tooLarge = effect.format === "png" ? exportTooLarge(frame, effect.scale) : undefined;
+  if (tooLarge !== undefined) return transition(logLine(state, tooLarge), true);
   const objectIds = effect.selection ? objects.map((object) => object.id) : undefined;
-  return { ...transition(state), exportRequest: { format: effect.format, scale: effect.scale, objectIds } };
+  return { ...transition(state), exportRequest: { format: effect.format, scale: effect.scale, objectIds, fileName: "beheader" } };
+}
+
+/** Why a raster picture of a box at a scale is past what a browser allocates, or undefined when it fits. */
+function exportTooLarge(frame: WorldExtent, scale: number): string | undefined {
+  const width = Math.ceil((frame.maxX - frame.minX) * scale);
+  const height = Math.ceil((frame.maxY - frame.minY) * scale);
+  if (Math.max(width, height) <= MAX_EXPORT_PIXELS) return undefined;
+  const fits = Math.floor((MAX_EXPORT_PIXELS / Math.max(frame.maxX - frame.minX, frame.maxY - frame.minY)) * 100) / 100;
+  return `a picture of ${width}×${height} pixels is past the limit of ${MAX_EXPORT_PIXELS} on a side — a scale of ${fits} or less fits`;
 }
 
 /** How far each paste of objects lands from the one before it, in world units. */
@@ -2695,12 +2755,12 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   const exportPicture = async (request: ExportRequest): Promise<string> => {
     const objects = request.objectIds === undefined ? state.document.objects : exportedObjects(state.document.objects, request.objectIds);
     if (request.format === "svg") {
-      const svg = exportSvg(objects, { measureText: measureTextInFont, mathml, images: imageBitmaps, measureMath: measureMathForLayout });
+      const svg = exportSvg(objects, { measureText: measureTextInFont, mathml, images: imageBitmaps, measureMath: measureMathForLayout, ...(request.frame === undefined ? {} : { frame: request.frame }) });
       if (svg === undefined) return "nothing to draw";
-      downloadBlob(new Blob([svg], { type: "image/svg+xml" }), "beheader.svg");
-      return `exported a vector picture to beheader.svg`;
+      downloadBlob(new Blob([svg], { type: "image/svg+xml" }), `${request.fileName}.svg`);
+      return `exported a vector picture to ${request.fileName}.svg`;
     }
-    const frame = exportFrame(objects);
+    const frame = request.frame ?? exportFrame(objects);
     if (frame === undefined) return "nothing to draw";
     const scale = request.scale;
     const picture = document.createElement("canvas");
@@ -2719,8 +2779,8 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     context.fillRect(0, 0, picture.width, picture.height);
     const blob = await new Promise<Blob | null>((resolve) => picture.toBlob(resolve, "image/png"));
     if (blob === null) throw new Error("the browser could not encode the picture");
-    downloadBlob(blob, "beheader.png");
-    return `exported a ${picture.width}×${picture.height} picture at ${scale}× to beheader.png`;
+    downloadBlob(blob, `${request.fileName}.png`);
+    return `exported a ${picture.width}×${picture.height} picture at ${scale}× to ${request.fileName}.png`;
   };
 
   /** True while a copy or cut event writes the clipboard itself, so the transition leaves the browser call out. */
@@ -3337,6 +3397,9 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       }
       if (command && key === "d") {
         event.preventDefault(); if (event.repeat) return; closeMenu(); keysToCanvas = true; applyTransition(duplicateSelection(state, viewport(), evalContext)); return;
+      }
+      if (!command && (event.key === "PageDown" || event.key === "PageUp")) {
+        event.preventDefault(); closeMenu(); applyTransition(stepFrame(state, event.key === "PageDown" ? 1 : -1, viewport())); return;
       }
       const arrow = ARROW_DIRECTIONS[event.key];
       if (!command && arrow !== undefined && keysFree && state.interaction.selectedObjectIds.length > 0) {

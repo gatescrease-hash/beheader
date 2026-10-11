@@ -604,6 +604,7 @@
             <button data-command="image"><span>▧</span>Image</button>
             <button data-command="script"><span>⌘</span>Script</button>
             <button data-command="slider"><span>⊸</span>Slider</button>
+            <button data-command="frame"><span>⬚</span>Frame</button>
           </div>
           <div class="section-heading objects-heading">LAYERS &amp; OBJECTS <span id="object-count">0</span></div>
           <input id="object-search" type="search" placeholder="Find an object…" aria-label="Find an object" />
@@ -627,6 +628,8 @@
               <dd>Drag across empty canvas: left to right selects what the box encloses, right to left what it touches. Shift adds. Ctrl+A selects everything, the arrows nudge the selection (Shift for a grid step), Delete removes it and Ctrl+D duplicates it.</dd>
               <dt>Set a number by hand</dt>
               <dd>Slider places one. Drag its knob, and everything that reads <code>slider_1.value</code> moves. A formula in its value turns it into a gauge.</dd>
+              <dt>Split the canvas into parts</dt>
+              <dd>Frame draws a named region. Dragging it moves what lies inside. <code>view frame_1</code> goes to it, Page Down and Page Up step through the frames, and <code>export png frame_1</code> takes a picture of it alone.</dd>
               <dt>Line things up</dt>
               <dd>A drag snaps to the edges and centres of other objects, with a pink guide, and to the grid. Hold Alt to drag freely, or type <code>snap off</code>.</dd>
               <dt>Move around</dt>

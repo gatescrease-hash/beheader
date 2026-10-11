@@ -33,7 +33,7 @@
  * Command-layer code: it turns a typed line into mutation calls, and
  * imports from the engine and from its own layer.
  */
-import { bulgeForTangentArc, DEFAULT_SLIDER_MAX, DEFAULT_SLIDER_MIN, DEFAULT_SLIDER_STEP, DEFAULT_SLIDER_VALUE, DEFAULT_SLIDER_WIDTH, DEFAULT_TABLE_COLS, DEFAULT_TABLE_ROWS, edgeEndDirection, MIN_POLYLINE_VERTICES } from "../engine/index.ts";
+import { bulgeForTangentArc, DEFAULT_FRAME_HEIGHT, DEFAULT_FRAME_WIDTH, DEFAULT_SLIDER_MAX, DEFAULT_SLIDER_MIN, DEFAULT_SLIDER_STEP, DEFAULT_SLIDER_VALUE, DEFAULT_SLIDER_WIDTH, DEFAULT_TABLE_COLS, DEFAULT_TABLE_ROWS, edgeEndDirection, MIN_POLYLINE_VERTICES } from "../engine/index.ts";
 
 export interface CreateCircleCommand {
   readonly kind: "circle";
@@ -234,6 +234,19 @@ export interface GroupCommand {
   readonly members: readonly string[];
 }
 
+export interface CreateFrameCommand {
+  readonly kind: "frame";
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+export interface ViewCommand {
+  readonly kind: "view";
+  readonly target: string;
+}
+
 export interface CreateSliderCommand {
   readonly kind: "slider";
   readonly x: number;
@@ -306,6 +319,8 @@ export interface ExportCommand {
   readonly format: string;
   readonly scale?: number;
   readonly selection: boolean;
+  /** The name of a frame whose box the picture covers exactly. */
+  readonly frame?: string;
 }
 
 /** `import csv`, into a new table or at a corner cell of a table. */
@@ -365,6 +380,8 @@ export type Command =
   | DuplicateCommand
   | SnapCommand
   | CreateSliderCommand
+  | CreateFrameCommand
+  | ViewCommand
   | UngroupCommand
   | GraphWalkCommand
   | OrphansCommand
@@ -689,6 +706,37 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
     },
   },
   {
+    name: "frame",
+    usage: "frame x=<number> y=<number> [w=<number>] [h=<number>]",
+    positional: [],
+    named: [requiredNumber("x"), requiredNumber("y"), optionalNumber("w", DEFAULT_FRAME_WIDTH), optionalNumber("h", DEFAULT_FRAME_HEIGHT)],
+    flags: [],
+    build: (args) => ({ kind: "frame", x: numberArgument(args, "x"), y: numberArgument(args, "y"), width: numberArgument(args, "w"), height: numberArgument(args, "h") }),
+    prompts: [
+      { name: "corner", message: "specify first corner", accepts: "point" },
+      { name: "opposite", message: "specify opposite corner", accepts: "point" },
+    ],
+    buildFromPrompts: (answers) => {
+      const corner = pointAnswer(answers, "corner");
+      const opposite = pointAnswer(answers, "opposite");
+      return {
+        kind: "frame",
+        x: Math.min(corner.x, opposite.x),
+        y: Math.min(corner.y, opposite.y),
+        width: Math.abs(opposite.x - corner.x),
+        height: Math.abs(opposite.y - corner.y),
+      };
+    },
+  },
+  {
+    name: "view",
+    usage: "view <object>",
+    positional: [objectName("target")],
+    named: [],
+    flags: [],
+    build: (args) => ({ kind: "view", target: textArgument(args, "target") }),
+  },
+  {
     name: "slider",
     usage: "slider x=<number> y=<number> [min=<number>] [max=<number>] [step=<number>] [value=<number>] [w=<number>]",
     positional: [],
@@ -985,14 +1033,16 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
   },
   {
     name: "export",
-    usage: "export png|svg [scale] [selection]",
-    positional: [text("format"), { name: "scale", kind: "number", optional: true }],
+    usage: "export png|svg [scale] [selection|<frame>]",
+    positional: [text("format"), { name: "scale", kind: "number", optional: true }, { name: "frame", kind: "object", optional: true }],
     named: [],
     flags: ["selection"],
     build: (args) => {
       const scale = findArgument(args, "scale")?.value;
+      const frame = findArgument(args, "frame")?.value;
       const base = { kind: "export" as const, format: textArgument(args, "format"), selection: hasFlag(args, "selection") };
-      return typeof scale === "number" ? { ...base, scale } : base;
+      const scaled = typeof scale === "number" ? { ...base, scale } : base;
+      return typeof frame === "string" ? { ...scaled, frame } : scaled;
     },
   },
   {
@@ -1254,7 +1304,8 @@ function matchArguments(
   const endOffset = line.length;
   const formulaAt = spec.positional.findIndex((parameter) => parameter.kind === "literal-or-formula");
 
-  const positionalTokens: CommandToken[] = [];
+  // A skipped optional positional holds undefined, so the tokens after it keep their places.
+  const positionalTokens: (CommandToken | undefined)[] = [];
   const namedTokens: NamedTokenMatch[] = [];
   const flags: string[] = [];
   let formula: string | undefined;
@@ -1303,6 +1354,14 @@ function matchArguments(
     // A flag word reads as the flag where the next positional is optional, so
     // `export png selection` names no scale rather than a scale of "selection".
     const flagSkipsOptional = flag !== undefined && spec.positional[positionalTokens.length]?.optional === true;
+    // A word that is no number passes over an optional number when a later
+    // positional can take it, so `export png frame_1` names no scale rather
+    // than a scale of "frame_1".
+    const next = spec.positional[positionalTokens.length];
+    if (flag === undefined && next?.optional === true && next.kind === "number" && (token.quoted || !NUMBER_PATTERN.test(token.text))
+      && positionalTokens.length + 1 < spec.positional.length) {
+      positionalTokens.push(undefined);
+    }
     if (!flagSkipsOptional && (positionalTokens.length < spec.positional.length || takesMorePoints)) {
       positionalTokens.push(token);
       continue;
@@ -1327,7 +1386,7 @@ function matchArguments(
       break;
     }
     if (parameter.kind === "points") {
-      const pointTokens = positionalTokens.slice(index);
+      const pointTokens = positionalTokens.slice(index).filter((pointToken): pointToken is CommandToken => pointToken !== undefined);
       if (pointTokens.length === 0) {
         return failure(`"${spec.name}" needs <${parameter.name}>, given as x,y — usage: ${spec.usage}`, endOffset);
       }

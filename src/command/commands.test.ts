@@ -823,6 +823,8 @@ describe("every registry command reaches a handler", () => {
     "duplicate rect_1",
     "snap on",
     "slider x=0 y=0",
+    "frame x=0 y=0",
+    "view polygon_1",
     "upstream polygon_1",
     "downstream polygon_1 1",
     "orphans",
@@ -2515,5 +2517,35 @@ describe("slider — a number set by hand", () => {
   it("takes a typed value outside its range, which the knob pins to the end", () => {
     const document = committed("set slider_1.value 50", committed("slider x=0 y=0", createEmptyDocument()));
     expect(literalValue(onlyNamed(document, "slider_1"), ["value"])).toBe(50);
+  });
+});
+
+describe("frame and view — named regions of the one canvas", () => {
+  it("creates a frame with the default size and colours", () => {
+    const frame = onlyNamed(committed("frame x=10 y=20", createEmptyDocument()), "frame_1");
+    expect([literalValue(frame, ["width"]), literalValue(frame, ["height"]), literalValue(frame, ["style", "fillColor"]), literalValue(frame, ["style", "strokeColor"])]).toEqual([800, 600, "#fffdf7", "#d3cab5"]);
+  });
+
+  it("refuses a frame of no width or height", () => {
+    expect(refused("frame x=0 y=0 w=0 h=10", createEmptyDocument())).toBe("a frame needs a width and a height above 0 — got w=0 h=10");
+  });
+
+  it("asks for a picture of a frame by name, with or without a scale, and refuses anything else as the frame", () => {
+    const document = committed("rect x=0 y=0 w=5 h=5", committed("frame x=0 y=0 w=300 h=200", createEmptyDocument()));
+    const frameId = onlyNamed(document, "frame_1").id;
+    const plain = run("export png frame_1", document);
+    expect(plain.ok && plain.effect).toEqual({ kind: "export", format: "png", scale: 2, selection: false, frameId });
+    const scaled = run("export png 3 frame_1", document);
+    expect(scaled.ok && scaled.effect).toEqual({ kind: "export", format: "png", scale: 3, selection: false, frameId });
+    expect(refused("export png rect_1", document)).toContain("a picture covers a frame");
+    expect(refused("export png selection frame_1", document)).toContain("not both");
+    expect(refused("export svg nosuch", document)).toContain('no object named "nosuch"');
+  });
+
+  it("asks the host to view an object by name", () => {
+    const document = committed("frame x=0 y=0 w=300 h=200", createEmptyDocument());
+    const outcome = run("view frame_1", document);
+    expect(outcome.ok && outcome.effect).toEqual({ kind: "view", objectId: onlyNamed(document, "frame_1").id });
+    expect(refused("view nosuch", document)).toContain('no object named "nosuch"');
   });
 });

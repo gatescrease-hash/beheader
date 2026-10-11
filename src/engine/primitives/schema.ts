@@ -57,6 +57,7 @@ import {
 } from "./geometry.ts";
 import { IMAGE_HEIGHT_PATH, IMAGE_OPACITY_PATH, IMAGE_PICTURE_ASPECT_PATH, IMAGE_PRESERVE_ASPECT_PATH, IMAGE_SOURCE_PATH, IMAGE_WIDTH_PATH } from "./image.ts";
 import { SLIDER_MAX_PATH, SLIDER_MIN_PATH, SLIDER_STEP_PATH, SLIDER_VALUE_PATH, SLIDER_WIDTH_PATH } from "./slider.ts";
+import { FRAME_HEIGHT_PATH, FRAME_WIDTH_PATH } from "./frame.ts";
 import {
   enumerateScriptInPaths,
   enumerateScriptOutDerivedSlots,
@@ -501,6 +502,19 @@ const SLIDER_SCHEMA: ObjectSchema = {
   derivedSlots: [],
 };
 
+/**
+ * A frame holds its region and its two colours, and no members. frame.ts
+ * gives the reason it lists no contents.
+ */
+const FRAME_SCHEMA: ObjectSchema = {
+  type: "frame",
+  slotFormats: GEOMETRY_COLOR_FORMATS,
+  nonDerivedSlotPaths: [
+    { kind: "static", paths: [ORIGIN_X_PATH, ORIGIN_Y_PATH, FRAME_WIDTH_PATH, FRAME_HEIGHT_PATH, STYLE_FILL_COLOR_PATH, STYLE_STROKE_COLOR_PATH] },
+  ],
+  derivedSlots: [],
+};
+
 const SCHEMAS: Partial<Record<ObjectType, ObjectSchema>> = {
   layer: {
     type: "layer", nonDerivedSlotPaths: [{ kind: "static", paths: STYLE_PATHS }], derivedSlots: [],
@@ -536,6 +550,7 @@ const SCHEMAS: Partial<Record<ObjectType, ObjectSchema>> = {
   group: GROUP_SCHEMA,
   math: MATH_SCHEMA,
   slider: SLIDER_SCHEMA,
+  frame: FRAME_SCHEMA,
 };
 
 /** The schema for a type, or undefined for a type with no entry yet. */

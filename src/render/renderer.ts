@@ -462,6 +462,12 @@ export function renderDocument(
 
   const selectedIds = new Set(selectedObjectIds);
 
+  // A frame is part of the drawing, so its sheet draws in a picture too, while
+  // its name is chrome, which a picture leaves out.
+  for (const object of objects) {
+    if (object.type === "frame") drawFrame(ctx, object, chrome);
+  }
+
   // An outer group draws before the groups inside it, so an inner boundary
   // and its tab sit on top of the outer one's wash.
   const depth = (group: GraphObject): number => ancestorGroups(group, (id) => objects.find((object) => object.id === id)).length;
@@ -670,6 +676,10 @@ function drawObject(
     case "slider":
       drawSlider(ctx, object);
       return;
+    // renderDocument draws every frame before any other object, groups
+    // included, so a frame sits beneath everything it holds.
+    case "frame":
+      return;
     case "value":
     case "add":
       return;
@@ -678,6 +688,39 @@ function drawObject(
       void exhaustive;
       return;
     }
+  }
+}
+
+const FRAME_LABEL_STYLE = "#6f7464";
+const FRAME_LABEL_FONT = "13px sans-serif";
+
+/**
+ * A frame: a sheet in its fill, a border in its stroke, and, with the chrome
+ * on, its name above its top left corner in world units, so the name scales
+ * with the sheet as the group tab does.
+ */
+function drawFrame(ctx: DrawingContext, frame: GraphObject, chrome: boolean): void {
+  const box = objectExtent(frame);
+  if (box === undefined) {
+    return;
+  }
+  const fill = readText(frame, ["style", "fillColor"]);
+  const stroke = readText(frame, ["style", "strokeColor"]);
+  if (fill !== undefined) {
+    ctx.fillStyle = fill;
+    ctx.fillRect(box.minX, box.minY, box.maxX - box.minX, box.maxY - box.minY);
+  }
+  if (stroke !== undefined) {
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(box.minX, box.minY, box.maxX - box.minX, box.maxY - box.minY);
+  }
+  if (chrome) {
+    ctx.font = FRAME_LABEL_FONT;
+    ctx.fillStyle = FRAME_LABEL_STYLE;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "bottom";
+    ctx.fillText(frame.name, box.minX + 2, box.minY - 4);
   }
 }
 
@@ -1078,7 +1121,8 @@ function drawSelectionHighlight(ctx: DrawingContext, object: GraphObject): void 
     case "docref":
     case "image":
     case "script":
-    case "slider": {
+    case "slider":
+    case "frame": {
       const extent = objectExtent(object);
       if (extent === undefined) {
         return;
@@ -1120,8 +1164,8 @@ function objectHasError(object: GraphObject): boolean {
 }
 
 function drawObjectChrome(ctx: DrawingContext, camera: CameraState, object: GraphObject, suppressName: boolean): void {
-  // A group draws its name on its own tab.
-  if (object.type === "group") {
+  // A group draws its name on its own tab, and a frame above its corner.
+  if (object.type === "group" || object.type === "frame") {
     return;
   }
   // A copy draws the variable name as the left half of its own label, and it

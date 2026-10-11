@@ -42,7 +42,7 @@ import {
   VERTICES_PATH,
 } from "../engine/index.ts";
 import { screenToWorld, type ScreenPoint, type WorldPoint } from "./camera.ts";
-import { GROUP_TAB_HEIGHT, groupBoundary, groupTabWidth, objectExtent } from "./extent.ts";
+import { FRAME_LABEL_HEIGHT, frameLabelWidth, GROUP_TAB_HEIGHT, groupBoundary, groupTabWidth, objectExtent } from "./extent.ts";
 import { tableLayout } from "./table-layout.ts";
 import { ancestorGroups, displayObjects } from "../engine/index.ts";
 import { asPointArray, readBoolean, readNumber, readShapeStyle, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";
@@ -141,6 +141,10 @@ function hitTestObject(object: GraphObject, worldPoint: WorldPoint, strokeTolera
     case "math":
     case "slider":
       return hitTestBoundingBox(object, worldPoint);
+    // A frame hits on its border and its name only, which hitTest checks after
+    // every other object and group, so everything inside stays clickable.
+    case "frame":
+      return false;
     case "polyline":
       return hitTestPolyline(object, worldPoint, strokeToleranceWorld);
     // A group hits on its outline and its name tab only, which hitTest checks
@@ -219,7 +223,27 @@ export function hitTest(screenPoint: ScreenPoint, objects: readonly GraphObject[
       return group;
     }
   }
+  // A frame draws beneath everything, groups included, so its border and its
+  // name come last, the frame latest in the list first.
+  for (let i = objects.length - 1; i >= 0; i -= 1) {
+    const frame = objects[i];
+    if (frame !== undefined && frame.type === "frame" && hitTestFrame(frame, worldPoint, strokeToleranceWorld)) {
+      return frame;
+    }
+  }
   return undefined;
+}
+
+function hitTestFrame(frame: GraphObject, worldPoint: WorldPoint, tolerance: number): boolean {
+  const box = objectExtent(frame);
+  if (box === undefined) {
+    return false;
+  }
+  const { x, y } = worldPoint;
+  const onLabel = x >= box.minX && x <= box.minX + frameLabelWidth(frame) && y >= box.minY - FRAME_LABEL_HEIGHT && y <= box.minY;
+  const withinOuter = x >= box.minX - tolerance && x <= box.maxX + tolerance && y >= box.minY - tolerance && y <= box.maxY + tolerance;
+  const insideInner = x > box.minX + tolerance && x < box.maxX - tolerance && y > box.minY + tolerance && y < box.maxY - tolerance;
+  return onLabel || (withinOuter && !insideInner);
 }
 
 function hitTestGroup(group: GraphObject, objects: readonly GraphObject[], worldPoint: WorldPoint, tolerance: number): boolean {

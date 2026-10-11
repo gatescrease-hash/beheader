@@ -37,7 +37,7 @@ import { mathWorldBox } from "./math.ts";
 import { asPointArray, readBoolean, readNumber, scriptBoxHeight, SCRIPT_BOX_WIDTH, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";
 import { textBoxSize } from "./textbox.ts";
 import { tableLayout } from "./table-layout.ts";
-import { groupOf, displayObjects } from "../engine/index.ts";
+import { FRAME_HEIGHT_PATH, FRAME_WIDTH_PATH, groupOf, displayObjects } from "../engine/index.ts";
 import { sliderLayout } from "./slider-layout.ts";
 
 export interface WorldExtent {
@@ -98,6 +98,8 @@ export function objectExtent(object: GraphObject): WorldExtent | undefined {
       return mathWorldBox(object);
     case "slider":
       return sliderLayout(object)?.box;
+    case "frame":
+      return frameExtent(object);
     case "value":
     case "add":
       return undefined;
@@ -280,6 +282,26 @@ export function groupBoundary(group: GraphObject, objects: readonly GraphObject[
     maxX: Math.max(anchor.minX, ...boxes.map((box) => box.maxX + GROUP_PADDING)),
     maxY: Math.max(anchor.minY, ...boxes.map((box) => box.maxY + GROUP_PADDING)),
   };
+}
+
+/** The height of the name a frame draws above its top left corner, in world units. */
+export const FRAME_LABEL_HEIGHT = 18;
+
+/** The width a frame's name takes above its corner, in world units, from the length of the name. */
+export function frameLabelWidth(frame: GraphObject): number {
+  return frame.name.length * 7 + 12;
+}
+
+/** The region a frame marks, from its origin, width and height. */
+function frameExtent(object: GraphObject): WorldExtent | undefined {
+  const x = readNumber(object, ORIGIN_X_PATH);
+  const y = readNumber(object, ORIGIN_Y_PATH);
+  const width = readNumber(object, FRAME_WIDTH_PATH);
+  const height = readNumber(object, FRAME_HEIGHT_PATH);
+  if (x === undefined || y === undefined || width === undefined || height === undefined || !(width > 0) || !(height > 0)) {
+    return undefined;
+  }
+  return { minX: x, minY: y, maxX: x + width, maxY: y + height };
 }
 
 /** The width a group's name tab takes, in world units, from the length of the name. */

@@ -81,7 +81,9 @@ export function arrangeUnits(objects: readonly GraphObject[], selectedIds: reado
   const units: Unit[] = [];
   const seen = new Set<string>();
   for (const object of chosen) {
-    if (seen.has(object.id) || object.type === "doc" || object.type === "layer") continue;
+    // A frame marks a region rather than a part of the drawing, so an
+    // arrangement leaves it where it is.
+    if (seen.has(object.id) || object.type === "doc" || object.type === "layer" || object.type === "frame") continue;
     seen.add(object.id);
     const box = object.type === "group" ? groupBoundary(object, shown) : objectExtent(object);
     if (box !== undefined) units.push({ object, box });

@@ -55,6 +55,7 @@ import {
   commitScriptSource,
   scriptStatusLines,
   groupSelection,
+  stepFrame,
   deleteSelection,
   duplicateSelection,
   nudgeSelection,
@@ -2587,7 +2588,7 @@ describe("picture export", () => {
     state = typed(state, "rect x=300 y=0 w=20 h=20");
     state = typed(state, "group circle_1,circle_2");
     const whole = submitLine(state, "export png", VIEWPORT);
-    expect(whole.exportRequest).toEqual({ format: "png", scale: 2, objectIds: undefined });
+    expect(whole.exportRequest).toEqual({ format: "png", scale: 2, objectIds: undefined, fileName: "beheader" });
     const grouped = withSelection(state, [objectNamed(state, "group_1").id]);
     const picked = submitLine(grouped, "export svg selection", VIEWPORT);
     expect(picked.exportRequest?.format).toBe("svg");
@@ -2802,5 +2803,47 @@ describe("a slider drives what reads it", () => {
     expect(numberAt(objectNamed(dragged, "circle_1"), ["radius"])).toBe(90);
     expect(dragged.document.journal).toHaveLength(before + 1);
     expect(numberAt(objectNamed(typed(dragged, "undo"), "circle_1"), ["radius"])).toBe(50);
+  });
+});
+
+describe("frames: views, steps and pictures", () => {
+  function framed(): AppState {
+    let state = typed(opened(), "frame x=0 y=0 w=400 h=300");
+    state = typed(state, "frame x=1000 y=0 w=200 h=100");
+    return typed(state, "rect x=50 y=50 w=20 h=20");
+  }
+  const centre = (state: AppState) => screenToWorld(state.document.camera, { x: VIEWPORT.width / 2, y: VIEWPORT.height / 2 });
+
+  it("fits the view to a frame by name, with its name above it in view, and logs no change to the journal", () => {
+    const state = framed();
+    const viewed = typed(state, "view frame_2");
+    expect(centre(viewed).x).toBeCloseTo(1100, 6);
+    expect(centre(viewed).y).toBeCloseTo((-18 + 100) / 2, 6);
+    expect(viewed.document.journal).toBe(state.document.journal);
+    expect(viewed.log.at(-1)).toBe("viewing frame_2");
+  });
+
+  it("steps through the frames in document order with Page Down and Page Up, and stays at either end", () => {
+    let state = framed();
+    state = stepFrame(state, 1, VIEWPORT).state;
+    expect(centre(state).x).toBeCloseTo(200, 6);
+    state = stepFrame(state, 1, VIEWPORT).state;
+    expect(centre(state).x).toBeCloseTo(1100, 6);
+    state = stepFrame(state, 1, VIEWPORT).state;
+    expect(centre(state).x).toBeCloseTo(1100, 6);
+    state = stepFrame(state, -1, VIEWPORT).state;
+    expect(centre(state).x).toBeCloseTo(200, 6);
+    expect(stepFrame(opened(), 1, VIEWPORT).refused).toBe(true);
+  });
+
+  it("asks the DOM half for a picture that covers a frame exactly, named after it", () => {
+    const request = submitLine(framed(), "export png frame_1", VIEWPORT).exportRequest;
+    expect(request).toEqual({ format: "png", scale: 2, objectIds: undefined, frame: { minX: 0, minY: 0, maxX: 400, maxY: 300 }, fileName: "frame_1" });
+  });
+
+  it("leaves frames where they are when an arrangement moves everything else", () => {
+    const arranged = typed(framed(), "arrange grid");
+    expect(numberAt(objectNamed(arranged, "frame_2"), ["origin", "x"])).toBe(1000);
+    expect(numberAt(objectNamed(arranged, "frame_1"), ["origin", "x"])).toBe(0);
   });
 });
