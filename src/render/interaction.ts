@@ -30,6 +30,19 @@
  * A grip answers a plain press only, so shift keeps both meanings it already
  * had.
  *
+ * A press on an object already selected leaves the selection alone, and the
+ * drag that follows moves every selected unit, each through planMove. The
+ * click lands on the release instead, and only when the pointer never passed
+ * the drag threshold: a plain click selects the pressed object alone, and a
+ * shift click takes it out. So one press serves both a drag of many objects
+ * and a click that picks one of them. Until the pointer travels
+ * DRAG_THRESHOLD_SCREEN_PIXELS a drag writes nothing, so a click that wobbles
+ * moves nothing either.
+ *
+ * A press on empty canvas arms a selection box, and marquee.ts decides what the
+ * box takes. The selection follows the box on every move, from the selection
+ * the press started with, so the release only ends the gesture.
+ *
  * Render-layer code: it reads engine state and calls mutations, and crosses
  * that line for nothing else. Nothing in the engine imports this file, so a
  * GPU renderer can replace the whole layer later.
@@ -70,7 +83,14 @@ import { objectExtent, type WorldExtent } from "./extent.ts";
 import { constrainBoxToRatio, handleEdges, hasResizeHandles, resizeBox, resizeHandleAt, type ResizeHandle } from "./handles.ts";
 import { bulgeForGrabbedMidpoint, gripAt, hasPathGrips, sameGrip, type PathGrip } from "./grips.ts";
 import { hitTest, pathSegmentUnder } from "./hittest.ts";
+import { marqueeBox, marqueeMode, marqueeUnits } from "./marquee.ts";
 import { readBoolean } from "./slots.ts";
+
+/**
+ * How far a press travels, in screen pixels, before it drags or draws a box.
+ * A shorter travel is a click.
+ */
+export const DRAG_THRESHOLD_SCREEN_PIXELS = 3;
 
 export interface DragState {
   readonly objectId: string;
@@ -78,6 +98,29 @@ export interface DragState {
   readonly emittedNotices: readonly string[];
   /** The vertices this drag moves. Undefined for an object that moves by its origin. */
   readonly vertices: readonly number[] | undefined;
+  /**
+   * The other objects the drag moves whole: the rest of the selection, less
+   * any object inside a selected group, which moves with the group.
+   */
+  readonly carried: readonly string[];
+  /** False until the pointer passes the drag threshold, and the drag writes nothing until then. */
+  readonly moved: boolean;
+  /**
+   * What a release does to the selection when the pointer never passed the
+   * threshold, after a press on an object that was already selected. "alone"
+   * selects that object by itself, and "out" takes it out of the selection.
+   */
+  readonly click: { readonly objectId: string; readonly selects: "alone" | "out" } | undefined;
+}
+
+/** A selection box on its way, in world units. */
+export interface MarqueeState {
+  readonly start: WorldPoint;
+  readonly end: WorldPoint;
+  /** The selection the box adds to: the selection at the press for a shift box, and nothing otherwise. */
+  readonly base: readonly string[];
+  /** False until the pointer passes the drag threshold. A box that never does is a click on empty canvas. */
+  readonly drawn: boolean;
 }
 
 export interface ResizeState {
@@ -106,6 +149,7 @@ export interface InteractionState {
   readonly resize: ResizeState | undefined;
   readonly bend: BendState | undefined;
   readonly focus: PathFocus | undefined;
+  readonly marquee: MarqueeState | undefined;
 }
 
 export const INITIAL_INTERACTION_STATE: InteractionState = {
@@ -114,6 +158,7 @@ export const INITIAL_INTERACTION_STATE: InteractionState = {
   resize: undefined,
   bend: undefined,
   focus: undefined,
+  marquee: undefined,
 };
 
 export interface PointerMoveOutcome {
@@ -148,37 +193,81 @@ export function pointerDown(
     return grabbedGrip;
   }
 
+  const worldPoint = screenToWorld(camera, screenPoint);
   const hit = hitTest(screenPoint, objects, camera);
   if (hit === undefined) {
-    if (!additive) {
-      return INITIAL_INTERACTION_STATE;
-    }
-    return state.drag === undefined && state.resize === undefined && state.bend === undefined ? state : idle(state);
+    // A plain press clears the selection at once, as a click on empty canvas
+    // always did, and a shift press keeps it for the box to add to.
+    const base = additive ? state.selectedObjectIds : [];
+    return {
+      ...idle(state),
+      selectedObjectIds: base,
+      focus: additive ? keptFocus(state.focus, base) : undefined,
+      marquee: { start: worldPoint, end: worldPoint, base, drawn: false },
+    };
   }
   // A press inside a group takes the outermost group, or whichever level of
   // the way down is already selected, so a selected group drags as a whole and
   // a member reached by a double click or by name stays the one selected.
   const object = groupLevelUnder(hit, objects, state.selectedObjectIds);
   // Shift over an edge of a path grabs that segment. Held anywhere else, it adds
-  // the object to the selection, as it always did.
+  // the object to the selection.
   const segment = additive && object === hit ? pathSegmentUnder(object, screenPoint, camera) : undefined;
-  const grabsSegment = segment !== undefined;
-  // A segment grab selects the path outright. Nothing can drag an object that
-  // the same press has just taken out of the selection.
-  const selectedObjectIds = additive && !grabsSegment ? toggleSelection(state.selectedObjectIds, object.id) : [object.id];
+  // A segment grab selects the path outright, so the drag moves the two ends
+  // of that edge and nothing else.
+  if (segment !== undefined) {
+    return {
+      ...INITIAL_INTERACTION_STATE,
+      selectedObjectIds: [object.id],
+      drag: { objectId: object.id, lastWorldPoint: worldPoint, emittedNotices: [], vertices: segment, carried: [], moved: false, click: undefined },
+    };
+  }
+  const already = state.selectedObjectIds.includes(object.id);
+  const selectedObjectIds = already ? state.selectedObjectIds : additive ? [...state.selectedObjectIds, object.id] : [object.id];
+  const click = !already ? undefined : additive ? "out" : selectedObjectIds.length > 1 ? "alone" : undefined;
+  // The drag moves units. The pressed object is one, unless a group around it
+  // is selected as well, and then that group moves it.
+  const units = movingUnits(objects, selectedObjectIds);
+  const lead = units.find((unit) => unit.id === object.id) ?? units.find((unit) => groupDescendants(unit.id, objects).some((member) => member.id === object.id)) ?? object;
   return {
     selectedObjectIds,
     drag: {
-      objectId: object.id,
-      lastWorldPoint: screenToWorld(camera, screenPoint),
+      objectId: lead.id,
+      lastWorldPoint: worldPoint,
       emittedNotices: [],
-      vertices: segment ?? everyVertexOfPath(object),
+      vertices: everyVertexOfPath(lead),
+      carried: units.filter((unit) => unit.id !== lead.id).map((unit) => unit.id),
+      moved: false,
+      click: click === undefined ? undefined : { objectId: object.id, selects: click },
     },
     resize: undefined,
     bend: undefined,
     // A press on the body of a path is about the whole path, so it drops the part.
     focus: undefined,
+    marquee: undefined,
   };
+}
+
+/**
+ * The objects that move when these are selected: each selected object, less
+ * any object with a selected group around it, which moves with that group,
+ * and less the variable holder and the layers, which have no place to move.
+ */
+export function movingUnits(objects: readonly GraphObject[], selectedObjectIds: readonly string[]): readonly GraphObject[] {
+  const selected = new Set(selectedObjectIds);
+  const byId = new Map(objects.map((object) => [object.id, object]));
+  return selectedObjectIds
+    .map((id) => byId.get(id))
+    .filter((object): object is GraphObject => object !== undefined && object.type !== "doc" && object.type !== "layer")
+    .filter((object) => !ancestorGroups(object, (id) => byId.get(id)).some((group) => selected.has(group.id)));
+}
+
+/**
+ * The writes that move the selection by a delta, as an arrow key does: every
+ * moving unit through planMove, under the rule a drag follows.
+ */
+export function planNudge(objects: readonly GraphObject[], selectedObjectIds: readonly string[], deltaX: number, deltaY: number): DragPlan {
+  return joinPlans(movingUnits(objects, selectedObjectIds).map((unit) => planMove(unit, objects, deltaX, deltaY)));
 }
 
 /**
@@ -222,6 +311,7 @@ function idle(state: InteractionState): InteractionState {
     resize: undefined,
     bend: undefined,
     focus: keptFocus(state.focus, state.selectedObjectIds),
+    marquee: undefined,
   };
 }
 
@@ -259,6 +349,7 @@ function gripGestureAt(
         resize: undefined,
         bend: { objectId: object.id, index: grip.index, emittedNotices: [] },
         focus,
+        marquee: undefined,
       };
     }
     return {
@@ -268,10 +359,14 @@ function gripGestureAt(
         lastWorldPoint: screenToWorld(camera, screenPoint),
         emittedNotices: [],
         vertices: [grip.index],
+        carried: [],
+        moved: false,
+        click: undefined,
       },
       resize: undefined,
       bend: undefined,
       focus,
+      marquee: undefined,
     };
   }
   return undefined;
@@ -289,6 +384,7 @@ export function focusPathPart(state: InteractionState, objectId: string, grip: P
     resize: undefined,
     bend: undefined,
     focus: { objectId, grip },
+    marquee: undefined,
   };
 }
 
@@ -351,13 +447,10 @@ function resizeGestureAt(
   return undefined;
 }
 
-function toggleSelection(selectedObjectIds: readonly string[], objectId: string): readonly string[] {
-  return selectedObjectIds.includes(objectId) ? selectedObjectIds.filter((id) => id !== objectId) : [...selectedObjectIds, objectId];
-}
-
 /**
- * Continues a drag or a resize. It writes each component on its own, and reports
- * the components a formula drives so the caller can tell the operator.
+ * Continues a drag, a resize, a bend or a selection box. A drag writes each
+ * component on its own, and reports the components a formula drives so the
+ * caller can tell the operator.
  */
 export function pointerMove(
   state: InteractionState,
@@ -372,6 +465,9 @@ export function pointerMove(
   }
   if (state.bend !== undefined) {
     return bendMove(state, state.bend, screenPoint, objects, journal, camera, context);
+  }
+  if (state.marquee !== undefined) {
+    return { state: marqueeMove(state, state.marquee, screenToWorld(camera, screenPoint), objects, camera), objects, journal, notices: [], rejection: undefined };
   }
 
   const drag = state.drag;
@@ -396,14 +492,23 @@ export function pointerMove(
   if (deltaX === 0 && deltaY === 0) {
     return { state, objects, journal, notices: [], rejection: undefined };
   }
+  // The last point stays at the press until the threshold passes, so this
+  // measures the whole travel from the press.
+  if (!drag.moved && Math.hypot(deltaX, deltaY) * camera.zoom < DRAG_THRESHOLD_SCREEN_PIXELS) {
+    return { state, objects, journal, notices: [], rejection: undefined };
+  }
 
-  const plan = object.type === "group"
-    ? planMove(object, objects, deltaX, deltaY)
-    : planDrag(object, objects, deltaX, deltaY, drag.vertices);
+  const carried = drag.carried
+    .map((id) => objects.find((candidate) => candidate.id === id))
+    .filter((each): each is GraphObject => each !== undefined);
+  const plan = joinPlans([
+    object.type === "group" ? planMove(object, objects, deltaX, deltaY) : planDrag(object, objects, deltaX, deltaY, drag.vertices),
+    ...carried.map((each) => planMove(each, objects, deltaX, deltaY)),
+  ]);
   const { fresh: freshNotices, widened: widenedEmittedNotices } = widenEmittedNotices(drag, plan.notices);
   const advanced: InteractionState = {
     ...idle(state),
-    drag: { objectId: drag.objectId, lastWorldPoint: worldPoint, emittedNotices: widenedEmittedNotices, vertices: drag.vertices },
+    drag: { ...drag, lastWorldPoint: worldPoint, emittedNotices: widenedEmittedNotices, moved: true },
   };
 
   if (plan.operations.length === 0) {
@@ -412,21 +517,33 @@ export function pointerMove(
 
   const result = mutate(objects, plan.operations, journal, context);
   if (!result.ok) {
+    // A refused step leaves the objects where they were, and the next step
+    // measures from the same point, so it tries the whole distance again.
     if (freshNotices.length === 0) {
       return { state, objects, journal, notices: freshNotices, rejection: result.message };
     }
-    const unmoved: InteractionState = {
-      ...idle(state),
-      drag: {
-        objectId: drag.objectId,
-        lastWorldPoint: drag.lastWorldPoint,
-        emittedNotices: widenedEmittedNotices,
-        vertices: drag.vertices,
-      },
-    };
+    const unmoved: InteractionState = { ...idle(state), drag: { ...drag, emittedNotices: widenedEmittedNotices } };
     return { state: unmoved, objects, journal, notices: freshNotices, rejection: result.message };
   }
   return { state: advanced, objects: result.objects, journal: result.journal, notices: freshNotices, rejection: undefined };
+}
+
+/**
+ * Continues a selection box. Once the pointer passes the threshold, the
+ * selection becomes the base the press started with plus every unit the box
+ * takes, so the operator sees what a release keeps before releasing.
+ */
+function marqueeMove(state: InteractionState, marquee: MarqueeState, end: WorldPoint, objects: readonly GraphObject[], camera: CameraState): InteractionState {
+  const drawn = marquee.drawn || Math.hypot(end.x - marquee.start.x, end.y - marquee.start.y) * camera.zoom >= DRAG_THRESHOLD_SCREEN_PIXELS;
+  const next: MarqueeState = { ...marquee, end, drawn };
+  if (!drawn) {
+    return { ...state, marquee: next };
+  }
+  const taken = marqueeUnits(objects, marqueeBox(marquee.start, end), marqueeMode(marquee.start, end));
+  const chosen = [...marquee.base, ...taken.filter((id) => !marquee.base.includes(id))];
+  const unchanged = chosen.length === state.selectedObjectIds.length && chosen.every((id, index) => state.selectedObjectIds[index] === id);
+  const selectedObjectIds = unchanged ? state.selectedObjectIds : chosen;
+  return { ...state, selectedObjectIds, focus: keptFocus(state.focus, selectedObjectIds), marquee: next };
 }
 
 /**
@@ -614,12 +731,21 @@ function widenEmittedNotices(
   return { fresh, widened: fresh.length === 0 ? drag.emittedNotices : [...drag.emittedNotices, ...fresh] };
 }
 
-/** Ends a drag or a resize. */
+/**
+ * Ends a drag, a resize, a bend or a selection box. A drag that never passed
+ * the threshold after a press on a selected object is a click, and the click
+ * lands here.
+ */
 export function pointerUp(state: InteractionState): InteractionState {
-  if (state.drag === undefined && state.resize === undefined && state.bend === undefined) {
+  if (state.drag === undefined && state.resize === undefined && state.bend === undefined && state.marquee === undefined) {
     return state;
   }
-  return idle(state);
+  const click = state.drag !== undefined && !state.drag.moved ? state.drag.click : undefined;
+  if (click === undefined) {
+    return idle(state);
+  }
+  const selectedObjectIds = click.selects === "alone" ? [click.objectId] : state.selectedObjectIds.filter((id) => id !== click.objectId);
+  return idle({ ...state, selectedObjectIds });
 }
 
 export function deselect(): InteractionState {

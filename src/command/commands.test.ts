@@ -8,6 +8,7 @@ import {
   createEmptyDocument,
   type Document,
   type EvalContext,
+  formatFormula,
   getSlot,
   type GraphObject,
   journalIsComplete,
@@ -819,6 +820,7 @@ describe("every registry command reaches a handler", () => {
     "redo",
     "group polygon_1,table_x",
     "ungroup group_1",
+    "duplicate rect_1",
     "upstream polygon_1",
     "downstream polygon_1 1",
     "orphans",
@@ -1572,6 +1574,99 @@ describe("delete, refs, props and list — the object commands that need no new 
       const before = sandbox();
       const outcome = run("props polygon_1", before);
       expect(outcome.ok && outcome.document).toBe(before);
+    });
+  });
+
+  describe("delete with a list of names, and duplicate", () => {
+    function grouped(): Document {
+      // group_1 holds rect_1 and rect_2, and group_2 holds group_1 and rect_3.
+      let document = createEmptyDocument();
+      for (const x of [0, 100, 200]) document = committed(`rect x=${x} y=0 w=20 h=20`, document);
+      return committed("group group_1,rect_3", committed("group rect_1,rect_2", document));
+    }
+
+    const membership = (document: Document, objectName: string): unknown => {
+      const object = named(document, objectName);
+      return object === undefined ? "gone" : literalValue(object, ["view", "group"]) ?? null;
+    };
+
+    it("deletes every named object in one batch and names them all", () => {
+      const before = committed("rect x=0 y=0 w=5 h=5", sandbox());
+      const outcome = run("delete polygon_1,table_1", before);
+      expect(outcome.ok && outcome.lines).toEqual(["deleted polygon_1, table_1"]);
+      const after = committed("delete polygon_1,table_1", before);
+      expect(after.objects.map((object) => object.name)).toEqual(["rect_1"]);
+      expect(after.journal).toHaveLength(before.journal.length + 1);
+      expect(after.journal.at(-1)?.operations.map((operation) => operation.kind)).toEqual(["deleteObject", "deleteObject"]);
+    });
+
+    it("lets the objects in the list read each other, and refuses a reader outside it by name", () => {
+      expect(named(committed("delete polygon_1,table_1", wired()), "table_1")).toBeUndefined();
+      const outside = committed("link circle_1.radius table_1.A1", committed("circle x=0 y=0 r=5", wired()));
+      const message = refused("delete table_1,polygon_1", outside);
+      expect(message).toContain("circle_1.radius");
+      expect(message).toContain('"delete table_1,polygon_1 force"');
+    });
+
+    it("rewrites an outside reader to #REF under force, and reports it", () => {
+      const outside = committed("link circle_1.radius table_1.A1", committed("circle x=0 y=0 r=5", wired()));
+      const outcome = run("delete table_1,polygon_1 force", outside);
+      expect(outcome.ok && outcome.lines).toEqual([
+        "deleted table_1, polygon_1",
+        "broke 1 formula: circle_1.radius — each now reads #REF where it read a deleted object",
+      ]);
+    });
+
+    it("dissolves a group in the list, and moves a member the list leaves out to the nearest group around it that stays", () => {
+      const document = grouped();
+      const groupTwo = named(document, "group_2")?.id;
+      const outcome = run("delete group_1,rect_1", document);
+      expect(outcome.ok && outcome.lines).toEqual(["deleted group_1, rect_1", "1 member of a deleted group stays where it was: rect_2"]);
+      const after = committed("delete group_1,rect_1", document);
+      expect(membership(after, "rect_2")).toBe(groupTwo);
+      expect(membership(after, "rect_3")).toBe(groupTwo);
+      const both = committed("delete group_2,group_1", document);
+      expect([membership(both, "rect_1"), membership(both, "rect_2"), membership(both, "rect_3")]).toEqual([null, null, null]);
+    });
+
+    it("refuses a name in the list that no object has, and leaves the document as it was", () => {
+      const before = sandbox();
+      const snapshot = JSON.stringify(before);
+      expect(refused("delete polygon_1,nosuch", before)).toContain('no object named "nosuch"');
+      expect(JSON.stringify(before)).toBe(snapshot);
+    });
+
+    it("duplicates an object a step down and right under the next free name, and selects the copy", () => {
+      const outcome = run("duplicate polygon_1", sandbox());
+      if (isCommandFailure(outcome)) throw new Error(outcome.message);
+      const copy = named(outcome.document, "polygon_2");
+      expect(outcome.lines).toEqual(["duplicated 1 object: polygon_2"]);
+      expect([copy && literalValue(copy, ["origin", "x"]), copy && literalValue(copy, ["origin", "y"])]).toEqual([30, 40]);
+      expect(outcome.effect).toEqual({ kind: "select", objectIds: [copy?.id] });
+      expect(outcome.document.journal).toHaveLength(sandbox().journal.length + 1);
+    });
+
+    it("points a formula among the copies at the copy, and a formula reading outside them at the original", () => {
+      const together = committed("duplicate polygon_1,table_1", wired());
+      const formulaOf = (document: Document): string | undefined => {
+        const slot = named(document, "polygon_2")?.slots["origin.x"];
+        return slot?.kind === "formula" ? formatFormula(slot.ast, document.objects) : undefined;
+      };
+      expect(formulaOf(together)).toBe("table_2.A1");
+      expect(formulaOf(committed("duplicate polygon_1", wired()))).toBe("table_1.A1");
+    });
+
+    it("carries a group with everything inside it, and selects the copy of the group alone", () => {
+      const outcome = run("duplicate group_1", grouped());
+      if (isCommandFailure(outcome)) throw new Error(outcome.message);
+      const copy = named(outcome.document, "group_3");
+      expect(outcome.effect).toEqual({ kind: "select", objectIds: [copy?.id] });
+      expect(membership(outcome.document, "rect_4")).toBe(copy?.id);
+      expect(membership(outcome.document, "rect_5")).toBe(copy?.id);
+    });
+
+    it("refuses a name no object has", () => {
+      expect(refused("duplicate nosuch", sandbox())).toContain('no object named "nosuch"');
     });
   });
 

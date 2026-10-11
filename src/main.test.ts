@@ -55,6 +55,10 @@ import {
   commitScriptSource,
   scriptStatusLines,
   groupSelection,
+  deleteSelection,
+  duplicateSelection,
+  nudgeSelection,
+  selectAll,
   hasUnsavedWork,
   undoLast,
   ungroupSelection,
@@ -539,13 +543,17 @@ describe("pointer and wheel", () => {
     const polygonId = objectNamed(state, "polygon_1").id;
     const circleId = objectNamed(state, "circle_1").id;
 
-    const first = pointerDownAt(state, { x: 50, y: 0 }, VIEWPORT).state;
+    const first = pointerUpNow(pointerDownAt(state, { x: 50, y: 0 }, VIEWPORT).state);
     expect(first.interaction.selectedObjectIds).toEqual([polygonId]);
 
-    const second = pointerDownAt(first, { x: 200, y: 20 }, VIEWPORT, true).state;
+    const second = pointerUpNow(pointerDownAt(first, { x: 200, y: 20 }, VIEWPORT, true).state);
     expect(second.interaction.selectedObjectIds).toEqual([polygonId, circleId]);
 
-    const third = pointerDownAt(second, { x: 200, y: 20 }, VIEWPORT, true).state;
+    // A shift press on a selected object keeps it until the release, so a
+    // shift drag can still move it with the rest.
+    const pressed = pointerDownAt(second, { x: 200, y: 20 }, VIEWPORT, true).state;
+    expect(pressed.interaction.selectedObjectIds).toEqual([polygonId, circleId]);
+    const third = pointerUpNow(pressed);
     expect(third.interaction.selectedObjectIds).toEqual([polygonId]);
   });
 
@@ -2596,5 +2604,117 @@ describe("picture export", () => {
     expect(submitLine(state, "export png 3", VIEWPORT).exportRequest?.scale).toBe(3);
     expect(submitLine(state, "export svg 2", VIEWPORT).refused).toBe(true);
     expect(submitLine(state, "export gif", VIEWPORT).refused).toBe(true);
+  });
+});
+
+describe("selecting many, and the keys of the canvas", () => {
+  function grouped(): AppState {
+    let state = typed(typed(opened(), "circle x=100 y=100 r=10"), "circle x=200 y=100 r=10");
+    state = typed(state, "rect x=400 y=100 w=20 h=20");
+    state = withSelection(state, [objectNamed(state, "circle_1").id, objectNamed(state, "circle_2").id]);
+    return groupSelection(state, VIEWPORT).state;
+  }
+
+  function pair(): AppState {
+    let state = typed(opened(), "circle x=0 y=0 r=10");
+    state = typed(state, "circle x=100 y=0 r=5");
+    return typed(state, "set circle_2.radius = circle_1.radius * 2");
+  }
+
+  const ids = (state: AppState, ...names: readonly string[]): readonly string[] => names.map((name) => objectNamed(state, name).id);
+
+  it("selects every unit on the canvas with Ctrl+A, a group standing for its members", () => {
+    const state = selectAll(withSelection(grouped(), []));
+    expect(state.interaction.selectedObjectIds).toEqual(ids(state, "group_1", "rect_1"));
+    expect(state.log.at(-1)).toBe("selected 2 objects");
+  });
+
+  it("moves the selection by an arrow's step, a group with everything in it, as one journal entry", () => {
+    const state = withSelection(grouped(), ids(grouped(), "group_1", "rect_1"));
+    const moved = nudgeSelection(state, 1, 0, false).state;
+    expect(numberAt(objectNamed(moved, "circle_2"), ["origin", "x"])).toBe(201);
+    expect(numberAt(objectNamed(moved, "rect_1"), ["origin", "x"])).toBe(401);
+    expect(moved.document.journal).toHaveLength(state.document.journal.length + 1);
+  });
+
+  it("folds the repeats of a held arrow into the entry of the fresh press, so one undo takes the run back", () => {
+    const state = withSelection(pair(), ids(pair(), "circle_1"));
+    let moved = nudgeSelection(state, 0, 10, false).state;
+    for (let repeat = 0; repeat < 3; repeat += 1) moved = nudgeSelection(moved, 0, 10, true).state;
+    expect(numberAt(objectNamed(moved, "circle_1"), ["origin", "y"])).toBe(40);
+    expect(moved.document.journal).toHaveLength(state.document.journal.length + 1);
+    expect(numberAt(objectNamed(typed(moved, "undo"), "circle_1"), ["origin", "y"])).toBe(0);
+    const fresh = nudgeSelection(moved, 0, 10, false).state;
+    expect(fresh.document.journal).toHaveLength(state.document.journal.length + 2);
+  });
+
+  it("holds a position a formula drives, and gives the notice with the fresh press alone", () => {
+    let state = typed(pair(), "set circle_2.origin.x = circle_1.origin.x + 100");
+    state = withSelection(state, ids(state, "circle_2"));
+    const pressed = nudgeSelection(state, 1, 1, false).state;
+    expect(numberAt(objectNamed(pressed, "circle_2"), ["origin", "x"])).toBe(100);
+    expect(numberAt(objectNamed(pressed, "circle_2"), ["origin", "y"])).toBe(1);
+    expect(newLines(state, pressed)).toEqual(["circle_2.origin.x did not move: it is driven by a formula reading circle_1.origin.x"]);
+    const repeated = nudgeSelection(pressed, 1, 1, true).state;
+    expect(newLines(pressed, repeated)).toEqual([]);
+  });
+
+  it("deletes a selected group with everything inside it through one delete line, and one undo brings all of it back", () => {
+    const state = withSelection(grouped(), ids(grouped(), "group_1"));
+    const deleted = deleteSelection(state, VIEWPORT).state;
+    expect(deleted.document.objects.map((object) => object.name)).toEqual(["rect_1"]);
+    expect(newLines(state, deleted)[0]).toBe("> delete circle_1,circle_2,group_1");
+    expect(deleted.interaction.selectedObjectIds).toEqual([]);
+    expect(typed(deleted, "undo").document.objects.map((object) => object.name).sort()).toEqual(["circle_1", "circle_2", "group_1", "rect_1"]);
+  });
+
+  it("refuses to delete what something outside the selection reads, and keeps the selection", () => {
+    const state = withSelection(pair(), ids(pair(), "circle_1"));
+    const refused = deleteSelection(state, VIEWPORT);
+    expect(refused.refused).toBe(true);
+    expect(refused.state.document.objects).toBe(state.document.objects);
+    expect(refused.state.interaction.selectedObjectIds).toEqual(ids(state, "circle_1"));
+    expect(refused.state.log.at(-1)).toContain("circle_2.radius");
+  });
+
+  it("duplicates the selection a step off with its wiring, selects the copies, and leaves the clipboard alone", () => {
+    const copied = submitLine(withSelection(pair(), ids(pair(), "circle_1")), "copy", VIEWPORT).state;
+    const state = withSelection(copied, ids(copied, "circle_1", "circle_2"));
+    const once = duplicateSelection(state, VIEWPORT).state;
+    expect(once.interaction.selectedObjectIds).toEqual(ids(once, "circle_3", "circle_4"));
+    expect(numberAt(objectNamed(once, "circle_3"), ["origin", "x"])).toBe(20);
+    expect(numberAt(objectNamed(once, "circle_4"), ["radius"])).toBe(20);
+    expect(once.clipboard).toBe(state.clipboard);
+    const twice = duplicateSelection(once, VIEWPORT).state;
+    expect(numberAt(objectNamed(twice, "circle_5"), ["origin", "x"])).toBe(40);
+    expect(duplicateSelection(withSelection(pair(), []), VIEWPORT).refused).toBe(true);
+  });
+
+  it("drags every selected object from a press on one of them, as one undo step, and a click on one picks it alone", () => {
+    const state = withSelection(pair(), ids(pair(), "circle_1", "circle_2"));
+    const onRing = worldToScreen(state.document.camera, { x: 10, y: 0 });
+    let dragged = pointerDownAt(state, onRing, VIEWPORT).state;
+    expect(dragged.interaction.selectedObjectIds).toEqual(ids(state, "circle_1", "circle_2"));
+    for (let step = 1; step <= 3; step += 1) dragged = pointerMoveTo(dragged, { x: onRing.x, y: onRing.y + step * 10 });
+    dragged = pointerUpNow(dragged);
+    const moved = 30 / state.document.camera.zoom;
+    expect(numberAt(objectNamed(dragged, "circle_1"), ["origin", "y"])).toBeCloseTo(moved, 9);
+    expect(numberAt(objectNamed(dragged, "circle_2"), ["origin", "y"])).toBeCloseTo(moved, 9);
+    expect(dragged.document.journal).toHaveLength(state.document.journal.length + 1);
+    const clicked = pointerUpNow(pointerDownAt(state, onRing, VIEWPORT).state);
+    expect(clicked.interaction.selectedObjectIds).toEqual(ids(state, "circle_1"));
+    expect(clicked.document.journal).toBe(state.document.journal);
+  });
+
+  it("selects with a box drawn over empty canvas, and writes nothing to the journal", () => {
+    const state = pair();
+    const camera = state.document.camera;
+    let boxed = pointerDownAt(state, worldToScreen(camera, { x: -50, y: -50 }), VIEWPORT).state;
+    boxed = pointerMoveTo(boxed, worldToScreen(camera, { x: 50, y: 50 }));
+    expect(boxed.interaction.selectedObjectIds).toEqual(ids(state, "circle_1"));
+    boxed = pointerUpNow(boxed);
+    expect(boxed.interaction.marquee).toBeUndefined();
+    expect(boxed.interaction.selectedObjectIds).toEqual(ids(state, "circle_1"));
+    expect(boxed.document.journal).toBe(state.document.journal);
   });
 });

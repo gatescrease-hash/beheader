@@ -15,10 +15,11 @@ register, and the measurements behind leaving that migration unscheduled.
 | --- | --- |
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
-| Tests | 2948 Vitest tests and 2 tooling tests pass, with 0 skipped. |
+| Tests | 3006 Vitest tests and 2 tooling tests pass, with 0 skipped. |
 | Spec | Built through section 22, except the parts section 17 postpones. |
 | Scripts | Python runs in a Pyodide worker. Groups are script nodes with members. |
 | Rule 5 | Met for every committed batch. A refusal and a list with no index still cost the whole document. |
+| Selection | A box selects by window or crossing, a drag moves the whole selection, and Ctrl+A, the arrows, Delete and Ctrl+D act on it. |
 | Workspace | Compact typography, a profile helmet, in-row style source controls, and full, compact and hidden sidebar modes with pointer and keyboard resizing. |
 
 ### How to run it
@@ -118,6 +119,7 @@ covers everything it calls.
 | `vite.config.ts` | Dev server, production build, the Pyodide assets, and the Vitest settings. |
 | `tools/direct-edit-check.cjs` | Browser checks for the layers, panels, tables and rich text of section 18. |
 | `tools/export-check.cjs` | Browser checks that an exported raster carries its notation, at its scale, and that the vector form parses. |
+| `tools/selection-check.cjs` | Browser checks for selection boxes, a drag of many, and the keys of the canvas. |
 | `tools/prose-check.mjs` | The prose checker that enforces `docs/STYLE.md`. |
 
 ### `src/engine/` - the pure core
@@ -180,7 +182,8 @@ covers everything it calls.
 | `renderer.ts` | The painter, the three passes it makes, and where notation inside text landed. |
 | `images.ts` | The decoded bitmap cache. |
 | `editor.ts` | Where the in place editor goes, and how it looks. |
-| `interaction.ts` | Pointer state to mutation calls: select, drag, resize and bend. |
+| `interaction.ts` | Pointer state to mutation calls: select, drag, resize, bend and the selection box. |
+| `marquee.ts` | What a selection box takes, window or crossing, and how it draws. |
 | `panel.ts` | Where a properties panel sits beside its object. |
 | `drawing.ts` | The part of Canvas2D the renderer draws through, which both drawing backends implement. |
 | `svg-context.ts` | The second drawing backend, which writes what the renderer draws as an SVG picture. |
@@ -386,7 +389,10 @@ the code it constrains.
    journal. A gesture that commits anything through another path between the
    press and the release keeps its frames, because the journal no longer
    continues from the press. An undo refuses while a gesture is under way for
-   the same reason.
+   the same reason. A held arrow key folds the same way through `foldGesture`,
+   against `nudgeBase`, on every repeat rather than on the release of the key,
+   because a release can go missing when the window loses focus, and a fold
+   that waits for one would leave an undo refused.
 
 24. **Every read across objects in edge derivation or the integrity checks is
    listed in `objectFacts` in `mutation.ts`.** The indexed path re-derives and

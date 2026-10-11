@@ -234,6 +234,11 @@ export interface GroupCommand {
   readonly members: readonly string[];
 }
 
+export interface DuplicateCommand {
+  readonly kind: "duplicate";
+  readonly targets: readonly string[];
+}
+
 export interface UngroupCommand {
   readonly kind: "ungroup";
   readonly target: string;
@@ -341,6 +346,7 @@ export type Command =
   | UndoCommand
   | RedoCommand
   | GroupCommand
+  | DuplicateCommand
   | UngroupCommand
   | GraphWalkCommand
   | OrphansCommand
@@ -756,7 +762,7 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
   },
   {
     name: "delete",
-    usage: "delete <object> [force]",
+    usage: "delete <object>[,<object>...] [force]",
     positional: [objectName("target")],
     named: [],
     flags: ["force"],
@@ -1007,6 +1013,14 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
     named: [],
     flags: [],
     build: (args) => ({ kind: "group", members: textArgument(args, "members").split(",").map((name) => name.trim()).filter((name) => name !== "") }),
+  },
+  {
+    name: "duplicate",
+    usage: "duplicate <object>[,<object>...]",
+    positional: [objectName("targets")],
+    named: [],
+    flags: [],
+    build: (args) => ({ kind: "duplicate", targets: textArgument(args, "targets").split(",").map((name) => name.trim()).filter((name) => name !== "") }),
   },
   {
     name: "ungroup",

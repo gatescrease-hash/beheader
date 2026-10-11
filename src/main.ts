@@ -62,6 +62,7 @@ import {
   IMAGE_SOURCE_PATH,
   IMAGE_TYPE,
   IMAGE_WIDTH_PATH,
+  groupDescendants,
   loadDocument,
   NULL_EVAL_CONTEXT,
   saveDocument,
@@ -91,6 +92,8 @@ import {
 import { documentExtent, objectExtent, type WorldExtent } from "./render/extent.ts";
 import {
   deselect,
+  movingUnits,
+  planNudge,
   pointerDown,
   pointerMove,
   pointerUp,
@@ -102,7 +105,8 @@ import {
   type InteractionState,
 } from "./render/interaction.ts";
 import { resizeCursor } from "./render/handles.ts";
-import { gridGeometry } from "./render/grid.ts";
+import { gridGeometry, gridWorldStep } from "./render/grid.ts";
+import { canvasUnits, drawMarquee } from "./render/marquee.ts";
 import { tableLayout, tableCellAt, cellStyle } from "./render/table-layout.ts";
 import { writeLayerTree } from "./render/layer-manager.ts";
 import { createRichText, insertVariable, type RichTextElement } from "./render/rich-text.ts";
@@ -176,6 +180,11 @@ export interface AppState {
   readonly clipboard: ClipboardPayload | undefined;
   /** How many times the clipboard has pasted objects since the copy, so each paste lands a step further off. */
   readonly pasteCount: number;
+  /**
+   * The document as it stood before the last fresh press of an arrow key. The
+   * repeats of a held key fold into one journal entry against it.
+   */
+  readonly nudgeBase: GestureBase | undefined;
 }
 
 export interface WiresState {
@@ -243,6 +252,7 @@ export function initialAppState(
     refusedCycle: undefined,
     clipboard: undefined,
     pasteCount: 0,
+    nudgeBase: undefined,
   };
 }
 
@@ -601,6 +611,14 @@ export function planExport(state: AppState, effect: Extract<CommandEffect, { kin
 /** How far each paste of objects lands from the one before it, in world units. */
 const PASTE_STEP = 20;
 
+/** The direction each arrow key moves the selection, with y growing down the screen. */
+const ARROW_DIRECTIONS: Readonly<Record<string, { readonly x: number; readonly y: number }>> = {
+  ArrowLeft: { x: -1, y: 0 },
+  ArrowRight: { x: 1, y: 0 },
+  ArrowUp: { x: 0, y: -1 },
+  ArrowDown: { x: 0, y: 1 },
+};
+
 /** Commits one batch, or logs the refusal with the cycle it names. */
 function commitBatch(state: AppState, operations: readonly Operation[], lines: readonly string[], context: EvalContext, extra: Partial<AppState> = {}): AppTransition {
   const result = mutate(state.document.objects, operations, state.document.journal, context);
@@ -948,9 +966,12 @@ export function pointerMoveTo(
  * meantime, or when the batch refuses.
  */
 export function pointerUpNow(state: AppState, context: EvalContext = NULL_EVAL_CONTEXT): AppState {
-  const ended: AppState = { ...state, interaction: pointerUp(state.interaction), gesture: undefined };
-  const base = state.gesture;
-  const journal = state.document.journal;
+  return foldGesture(withInteraction({ ...state, gesture: undefined }, pointerUp(state.interaction)), state.gesture, context);
+}
+
+/** Replaces the entries committed since a base with one batch that writes the same final values. */
+function foldGesture(ended: AppState, base: GestureBase | undefined, context: EvalContext): AppState {
+  const journal = ended.document.journal;
   if (base === undefined || journal.length <= base.journal.length + 1) {
     return ended;
   }
@@ -1368,6 +1389,65 @@ export function ungroupSelection(state: AppState, viewport: Viewport, context: E
   return current;
 }
 
+/** Selects every unit on the canvas, as Ctrl+A does. */
+export function selectAll(state: AppState): AppState {
+  const units = canvasUnits(state.document.objects).map((unit) => unit.id);
+  return withLog(withSelection(state, units), [units.length === 1 ? "selected 1 object" : `selected ${units.length} objects`]);
+}
+
+/**
+ * Moves the selection by a step, as an arrow key does, through the planner a
+ * drag uses, so a position a formula drives holds still and says so. A held key
+ * repeats, and each repeat folds the run so far into one journal entry against
+ * the document before the fresh press, so one undo takes back the whole run.
+ * The notices come with the fresh press alone, because a repeat would only say
+ * them again.
+ */
+export function nudgeSelection(state: AppState, deltaX: number, deltaY: number, repeat: boolean, context: EvalContext = NULL_EVAL_CONTEXT): AppTransition {
+  const plan = planNudge(state.document.objects, state.interaction.selectedObjectIds, deltaX, deltaY);
+  const notices = repeat ? [] : plan.notices;
+  if (plan.operations.length === 0) {
+    return transition(withLog(state, notices));
+  }
+  const result = mutate(state.document.objects, plan.operations, state.document.journal, context);
+  if (!result.ok) {
+    return transition(withLog({ ...state, refusedCycle: result.cycle }, [result.message]), true);
+  }
+  const base = repeat && state.nudgeBase !== undefined ? state.nudgeBase : { objects: state.document.objects, journal: state.document.journal };
+  const moved: AppState = { ...state, nudgeBase: base, refusedCycle: undefined, document: { ...state.document, objects: result.objects, journal: result.journal } };
+  return transition(withLog(foldGesture(moved, base, context), notices));
+}
+
+/**
+ * Deletes the selection by running the delete command line it stands for, so
+ * the log shows a line the operator could type and a refusal reads the same
+ * way. The key acts on what the operator sees selected, so a selected group
+ * goes with everything inside it, and the line names each of those objects.
+ */
+export function deleteSelection(state: AppState, viewport: Viewport, context: EvalContext = NULL_EVAL_CONTEXT): AppTransition {
+  const objects = state.document.objects;
+  const chosen = new Set<string>();
+  for (const unit of movingUnits(objects, state.interaction.selectedObjectIds)) {
+    chosen.add(unit.id);
+    for (const member of groupDescendants(unit.id, objects)) chosen.add(member.id);
+  }
+  const names = objects.filter((object) => chosen.has(object.id)).map((object) => object.name);
+  if (names.length === 0) {
+    return transition(state);
+  }
+  const done = submitLine(state, `delete ${names.join(",")}`, viewport, context);
+  return done.refused ? done : { ...done, state: withSelection(done.state, []) };
+}
+
+/** Duplicates the selection through the duplicate command line, which selects the copies. */
+export function duplicateSelection(state: AppState, viewport: Viewport, context: EvalContext = NULL_EVAL_CONTEXT): AppTransition {
+  const names = movingUnits(state.document.objects, state.interaction.selectedObjectIds).map((unit) => unit.name);
+  if (names.length === 0) {
+    return transition(logLine(state, "select the objects to duplicate first"), true);
+  }
+  return submitLine(state, `duplicate ${names.join(",")}`, viewport, context);
+}
+
 /**
  * One line for each output of a script node or a group, holding the value it
  * shows now: a number or a string, or the code and message of an error, which
@@ -1717,6 +1797,13 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   let state = initialAppState(createEmptyDocument(), ["Beheader. Type a command, or a command word alone to be prompted."]);
   let pan: PanGesture | undefined;
   let spaceHeld = false;
+  /**
+   * Whether the arrow keys move the selection or recall the history of the
+   * command line, which both want them. A press on the canvas or a pick in the
+   * list of objects gives them to the canvas, and typing into the command line
+   * or running a line from it gives them back.
+   */
+  let arrowsToCanvas = false;
   let openMenu: { readonly menu: PathMenu; readonly at: ScreenPoint } | undefined;
   let menuElement: HTMLElement | undefined;
   const panelElements = new Map<string, HTMLElement>();
@@ -1843,6 +1930,10 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
         ...(rewireDrag?.pointer === undefined ? {} : { rewire: { pointer: rewireDrag.pointer, to: rewireDrag.placed.to } }),
       },
     );
+    const marquee = state.interaction.marquee;
+    if (marquee?.drawn === true) {
+      drawMarquee(context, state.document.camera, marquee.start, marquee.end, ratio);
+    }
     updateWirePanel();
     wiresToggle?.setAttribute("aria-pressed", String(state.wires.visible));
     updatePanels(panelledIds);
@@ -2888,6 +2979,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       writeLayerTree(objectList, state.document.objects, selected, query, {
         select: (id, extend) => {
           commitInPlace();
+          arrowsToCanvas = true;
           const ids = extend ? selected.includes(id) ? selected.filter(item => item !== id) : [...selected, id] : [id];
           apply(withInteraction(state, { ...state.interaction, selectedObjectIds: ids }));
         },
@@ -3014,6 +3106,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   });
 
   input.addEventListener("input", () => {
+    arrowsToCanvas = false;
     paintCommandLine();
   });
 
@@ -3024,7 +3117,10 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   });
 
   input.addEventListener("keydown", (event: KeyboardEvent) => {
-    if ((event.key === "ArrowUp" || event.key === "ArrowDown") && history.length > 0 && state.pending === undefined) {
+    // An empty line passes the arrows to the canvas, which moves the selection
+    // or the active cell, while the canvas holds them and something is selected.
+    const canvasTakesArrows = arrowsToCanvas && input.value === "" && state.interaction.selectedObjectIds.length > 0;
+    if ((event.key === "ArrowUp" || event.key === "ArrowDown") && history.length > 0 && state.pending === undefined && !canvasTakesArrows) {
       event.preventDefault();
       if (historyIndex === history.length) historyDraft = input.value;
       historyIndex = Math.max(0, Math.min(history.length, historyIndex + (event.key === "ArrowUp" ? -1 : 1)));
@@ -3048,6 +3144,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     }
     const line = input.value;
     if (line.trim() === "" && state.pending === undefined) return;
+    arrowsToCanvas = false;
     if (state.pending === undefined && line.trim() !== "") {
       if (history[history.length - 1] !== line) history.push(line);
       historyIndex = history.length;
@@ -3160,11 +3257,43 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     if ((!editing || (target === input && input.value === "")) && (event.ctrlKey || event.metaKey) && ["b", "i"].includes(event.key.toLowerCase())) {
       event.preventDefault(); formatEmphasis(event.key.toLowerCase() === "b" ? "bold" : "italic"); return;
     }
-    if (activeCell && state.interaction.selectedObjectIds.includes(activeCell.objectId) && (!editing || (target === input && input.value === "")) && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "F2"].includes(event.key)) {
+    const arrowKey = ARROW_DIRECTIONS[event.key] !== undefined;
+    const arrowsFree = !arrowKey || !editing || arrowsToCanvas;
+    if (activeCell && arrowsFree && state.interaction.selectedObjectIds.includes(activeCell.objectId) && (!editing || (target === input && input.value === "")) && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "F2", "Delete", "Backspace"].includes(event.key)) {
       event.preventDefault();
-      if (event.key === "F2") { inPlaceEditor = { kind: "cell", ...activeCell }; paint(); }
+      const table = state.document.objects.find((object) => object.id === activeCell?.objectId);
+      if (event.key === "Delete" || event.key === "Backspace") {
+        if (!event.repeat && table !== undefined && state.pending === undefined) applyTransition(submitLine(state, `clear ${table.name}.${activeCell.cell}`, viewport(), evalContext));
+      } else if (event.key === "F2") { inPlaceEditor = { kind: "cell", ...activeCell }; paint(); }
       else navigateCell({ kind: "cell", ...activeCell }, ["ArrowLeft", "ArrowRight"].includes(event.key) ? "column" : "row", ["ArrowLeft", "ArrowUp"].includes(event.key) ? -1 : 1);
       return;
+    }
+    // The keys of the canvas reach it from outside any field, or from an
+    // empty command line, and wait while a press is still under way.
+    const pointerBusy = state.interaction.drag !== undefined || state.interaction.resize !== undefined || state.interaction.bend !== undefined || state.interaction.marquee !== undefined;
+    if ((!editing || (target === input && input.value === "")) && state.pending === undefined && !pointerBusy && !event.altKey) {
+      const command = event.ctrlKey || event.metaKey;
+      if (command && key === "a") {
+        event.preventDefault(); closeMenu(); arrowsToCanvas = true; apply(selectAll(state)); return;
+      }
+      if (command && key === "d") {
+        event.preventDefault(); closeMenu(); applyTransition(duplicateSelection(state, viewport(), evalContext)); return;
+      }
+      const arrow = ARROW_DIRECTIONS[event.key];
+      if (!command && arrow !== undefined && arrowsFree && state.interaction.selectedObjectIds.length > 0) {
+        event.preventDefault();
+        closeMenu();
+        const step = gridWorldStep(state.document.camera, window.devicePixelRatio > 0 ? window.devicePixelRatio : 1) / (event.shiftKey ? 1 : 10);
+        applyTransition(nudgeSelection(state, arrow.x * step, arrow.y * step, event.repeat, evalContext));
+        return;
+      }
+      if (!command && (event.key === "Delete" || event.key === "Backspace") && state.interaction.selectedObjectIds.length > 0) {
+        event.preventDefault();
+        // A repeat comes from a key held down, such as a Backspace held to
+        // clear the command line, and reaches no object.
+        if (!event.repeat) { closeMenu(); applyTransition(deleteSelection(state, viewport(), evalContext)); }
+        return;
+      }
     }
     if (event.key === " " && input.value === "" && (!editing || target === input)) {
       event.preventDefault();
@@ -3200,6 +3329,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   canvas.addEventListener("pointerdown", (event: PointerEvent) => {
     event.preventDefault();
     canvas.setPointerCapture(event.pointerId);
+    arrowsToCanvas = true;
     const point = screenPointOf(event);
     if (event.button === 1 || spaceHeld) {
       if (inPlaceEditor === undefined) {

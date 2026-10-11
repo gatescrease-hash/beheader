@@ -50,6 +50,8 @@ import {
   GROUP_TYPE,
   groupingOperations,
   ungroupingOperations,
+  GROUP_MEMBERSHIP_PATH,
+  groupOf,
   GEOMETRY_STYLE_DEFAULTS,
   getObjectSchema,
   getSlot,
@@ -120,6 +122,7 @@ import {
   vertexXPath,
   vertexYPath,
 } from "../engine/index.ts";
+import { copyObjects, pasteObjects } from "./clipboard.ts";
 import { buildSlotDescriptors, describeSlotValue, type SlotDescriptor } from "./props.ts";
 import { findBroken, findOrphans, findText, walkGraph } from "./queries.ts";
 import type {
@@ -137,6 +140,7 @@ import type {
   CreateTableCommand,
   CreateTextCommand,
   DeleteCommand,
+  DuplicateCommand,
   GroupCommand,
   DeleteVertexCommand,
   EdgeTypeCommand,
@@ -305,6 +309,8 @@ export function executeCommand(command: Command, document: Document, context: Ev
       return renameObject(command, document, context);
     case "delete":
       return deleteObject(command, document, context);
+    case "duplicate":
+      return duplicateObjects(command, document, context);
     case "addvertex":
       return addVertex(command, document, context);
     case "delvertex":
@@ -431,6 +437,7 @@ export const COMMANDS_WITH_HANDLERS: readonly string[] = [
   "redo",
   "group",
   "ungroup",
+  "duplicate",
   "upstream", "downstream", "orphans", "broken", "find", "wires", "arrange", "align", "distribute", "copy", "cut", "paste", "import", "export",
 ];
 
@@ -1006,9 +1013,14 @@ function ungroupObject(target: string, force: boolean, document: Document, conte
 }
 
 function deleteObject(command: DeleteCommand, document: Document, context: EvalContext): CommandOutcome {
-  const object = findGraphObjectByName(command.target, document.objects);
+  const names = command.target.split(",").map((name) => name.trim()).filter((name) => name !== "");
+  if (names.length > 1) {
+    return deleteObjects(names, command.force, document, context);
+  }
+  const target = names[0] ?? command.target;
+  const object = findGraphObjectByName(target, document.objects);
   if (object === undefined) {
-    return { ok: false, message: `no object named "${command.target}"${nameSuggestion(command.target, document.objects.map((object) => object.name))}` };
+    return { ok: false, message: `no object named "${target}"${nameSuggestion(target, document.objects.map((object) => object.name))}` };
   }
   // Removing a group's box never removes what was in it, so a delete of a
   // group is an ungroup.
@@ -1030,6 +1042,94 @@ function deleteObject(command: DeleteCommand, document: Document, context: EvalC
     lines.push(`broke ${countedNoun(broken.length, "formula")}: ${broken.join(", ")} — each now reads #REF where it read ${object.name}`);
   }
   return { ok: true, document: { ...document, objects: result.objects, journal: result.journal }, lines };
+}
+
+/**
+ * Deletes several objects in one batch, so one undo brings every one of them
+ * back. A group in the list dissolves, as a delete of one group does, and each
+ * of its members that the list leaves out moves to the nearest group around it
+ * that stays. A formula outside the list that reads any of them refuses the
+ * whole batch by name, unless force rewrites it to #REF.
+ */
+function deleteObjects(names: readonly string[], force: boolean, document: Document, context: EvalContext): CommandOutcome {
+  const targets: GraphObject[] = [];
+  for (const name of names) {
+    const object = findGraphObjectByName(name, document.objects);
+    if (object === undefined) {
+      return { ok: false, message: `no object named "${name}"${nameSuggestion(name, document.objects.map((object) => object.name))}` };
+    }
+    if (!targets.includes(object)) targets.push(object);
+  }
+  const leaving = new Set(targets.map((object) => object.id));
+  const byId = new Map(document.objects.map((object) => [object.id, object]));
+  const keptGroup = (object: GraphObject): string | null => {
+    let parent = groupOf(object);
+    while (parent !== undefined && leaving.has(parent)) {
+      const group = byId.get(parent);
+      parent = group === undefined ? undefined : groupOf(group);
+    }
+    return parent ?? null;
+  };
+  const released = document.objects.filter((object) => !leaving.has(object.id) && leaving.has(groupOf(object) ?? ""));
+  const operations: Operation[] = [
+    ...released.map((object): Operation => ({ kind: "setSlot", address: { objectId: object.id, path: GROUP_MEMBERSHIP_PATH }, slot: { kind: "literal", value: keptGroup(object) } })),
+    ...targets.map((object): Operation => ({ kind: "deleteObject", objectId: object.id, force })),
+  ];
+  const result = mutate(document.objects, operations, document.journal, context);
+  if (!result.ok) {
+    return {
+      ok: false,
+      message: force ? result.message : `${result.message} — unlink each, or "delete ${targets.map((object) => object.name).join(",")} force" to rewrite them to #REF instead`,
+    };
+  }
+  const lines = [`deleted ${targets.map((object) => object.name).join(", ")}`];
+  if (released.length > 0) {
+    lines.push(`${countedNoun(released.length, "member")} of a deleted group ${released.length === 1 ? "stays where it was" : "stay where they were"}: ${released.map((object) => object.name).join(", ")}`);
+  }
+  if (result.brokenSlots.length > 0) {
+    const broken = result.brokenSlots.map((address) => formatSlotAddress(address, result.objects));
+    lines.push(`broke ${countedNoun(broken.length, "formula")}: ${broken.join(", ")} — each now reads #REF where it read a deleted object`);
+  }
+  return { ok: true, document: { ...document, objects: result.objects, journal: result.journal }, lines };
+}
+
+/** The step down and right that a duplicate lands from its original, in world units, the same as the first paste. */
+export const DUPLICATE_STEP = 20;
+
+/**
+ * Copies objects a step down and right, through the copy the clipboard makes,
+ * so a formula among the copies that names another copied object reads the
+ * copy. A group carries everything inside it. The copies of the named objects
+ * become the selection, and the clipboard keeps what it held.
+ */
+function duplicateObjects(command: DuplicateCommand, document: Document, context: EvalContext): CommandOutcome {
+  const named: GraphObject[] = [];
+  for (const name of command.targets) {
+    const object = findGraphObjectByName(name, document.objects);
+    if (object === undefined) {
+      return { ok: false, message: `no object named "${name}"${nameSuggestion(name, document.objects.map((object) => object.name))}` };
+    }
+    if (object.type === DOC_TYPE || object.type === "layer") {
+      return { ok: false, message: `${object.name} has no place on the canvas to duplicate` };
+    }
+    if (!named.includes(object)) named.push(object);
+  }
+  if (named.length === 0) {
+    return { ok: false, message: "duplicate needs the objects to copy, such as duplicate rect_1,circle_1" };
+  }
+  const payload = copyObjects(document.objects, named.map((object) => object.id));
+  const plan = pasteObjects(document, payload, { x: DUPLICATE_STEP, y: DUPLICATE_STEP });
+  if ("ok" in plan) return plan;
+  const result = mutate(document.objects, plan.operations, document.journal, context);
+  if (!result.ok) return refusal(result);
+  const namedIds = new Set(named.map((object) => object.id));
+  const selected = payload.objects.flatMap((original, index) => (namedIds.has(original.id) ? [plan.createdIds[index]!] : []));
+  return {
+    ok: true,
+    document: { ...document, objects: result.objects, journal: result.journal, nextObjectId: plan.nextObjectId },
+    lines: [`duplicated ${countedNoun(plan.names.length, "object")}: ${plan.names.join(", ")}`],
+    effect: { kind: "select", objectIds: selected },
+  };
 }
 
 function addVertex(command: AddVertexCommand, document: Document, context: EvalContext): CommandOutcome {

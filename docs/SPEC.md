@@ -1450,6 +1450,99 @@ mutation. Do not work around the cost by a write outside the mutation API.
 **Feedback.** Show a selection highlight, and an error badge on an object that
 holds an error value. Show a small mark on a slot that a formula drives.
 
+### Selecting many, and the keys of the canvas
+
+**A press becomes a drag once the pointer travels three pixels.** Until then a
+press writes nothing, so a click that wobbles still lands as a click and moves
+nothing. Past that distance the drag moves the full way from the press, so the
+threshold costs no distance. The threshold holds for a drag of objects and of a
+vertex grip. A resize and a bend write absolute values from the pointer, so they
+start at once.
+
+**A press on an object already selected leaves the selection alone.** The drag
+that follows moves every selected object, each under the per component rule
+above, as one batch for each frame and one journal entry for the gesture. An
+object inside a selected group moves with the group, and once. The click itself
+lands on the release, when nothing moved: a plain click selects the object
+alone, and a shift click takes it out of the selection. So a click still picks
+one object out of many, and a shift drag on a selected object drags the
+selection rather than dropping the object from it. A press on an object outside
+the selection picks it at once, alone or added with shift, and drags what is
+then selected.
+
+**A press on empty canvas draws a selection box.** The direction of the drag
+picks the rule, the way AutoCAD picks it, because the command line already
+follows AutoCAD and an operator who knows one knows the other.
+
+| Drawn | Called | Selects | Draws |
+| --- | --- | --- | --- |
+| Left to right | A window | What lies wholly inside it | A solid outline over a blue fill |
+| Right to left | A crossing | Anything it touches | A dashed outline over a green fill |
+
+Touching follows the hit test, so a crossing takes a filled shape anywhere over
+its inside, and a hollow outline only where the box crosses its stroke. The
+selection follows the box while it is drawn, so the operator sees what a
+release keeps before releasing. A plain box replaces the selection, and a shift
+box adds to it. A press that never travels three pixels is a click on empty
+canvas, which clears the selection, or keeps it with shift.
+
+The box selects units, the same units an arrangement moves. An object inside a
+group stands for its outermost group. A window takes a group when it encloses
+everything inside the group, because the outline is padding around the members
+rather than part of the drawing. A crossing takes a group when it touches
+anything inside it, or the outline and tab a press would hit. The variable
+holder and the layers have no place on the canvas, and an object on a hidden
+layer draws nothing, so the box reaches none of them.
+
+**The keys reach the canvas while the command line is empty.** The command line
+holds focus, so a key that also means something inside a text field reaches the
+canvas only when the line holds no text. The moment the line holds text, every
+key below is the field's again.
+
+| Key | What it does |
+| --- | --- |
+| Ctrl+A | Selects every unit on the canvas |
+| An arrow | Moves the selection a tenth of a grid step, or a whole step with Shift |
+| Delete or Backspace | Deletes the selection |
+| Ctrl+D | Duplicates the selection |
+
+Cmd stands in for Ctrl on a Mac, as it does for undo.
+
+**The arrows go where the operator last worked.** The command line recalls
+its history with Up and Down, and the canvas moves the selection with all four
+arrows, so the two share the keys. A press on the canvas, a pick in the list of
+objects or Ctrl+A gives the arrows to the canvas. Typing into the command line,
+or running a line from it, gives them back, so an operator who has just run a
+command and presses Up gets the command back rather than a moved object. With
+nothing selected the arrows always belong to the command line.
+
+An arrow moves the selection through the planner a drag uses, so a position a
+formula drives holds still and gives the same notice. The step follows the grid
+the canvas shows, so a press moves the selection a few pixels on screen at any
+zoom: at a zoom of 1 the grid step is 10, so an arrow moves 1 unit and Shift
+moves 10. Each fresh press is one batch and one journal entry. A held key
+repeats, and the repeats fold into the entry of the fresh press, so one undo
+takes back the whole run. The active cell of a selected table takes the arrows
+before the selection does, because a table with an active cell is a
+table the operator is working inside. For the same reason Delete and Backspace
+clear the active cell through the `clear` command, as a spreadsheet does, and
+leave the table where it is.
+
+Delete removes everything the selection holds, a group with everything inside
+it, in one batch, the same as a cut. The `delete` command on a group dissolves
+it and keeps the members, which is the gesture for taking a group apart. The
+key acts on what the operator sees selected, and a selected group looks like
+one object. A delete of an object that something outside the selection reads
+refuses by name, the way the command does. Only a fresh press deletes. A
+Backspace held to clear the command line repeats, and a repeat reaches no
+object, so the drawing survives the line running empty under a held key.
+
+Ctrl+D copies the selection a step down and right, through the copy that the
+clipboard of section 22 makes, so a formula among the copies that names
+another copy reads that copy. The copies become the selection, so a second
+Ctrl+D steps on again. The clipboard keeps what it held, because a duplicate is
+not a copy the operator asked to keep.
+
 ---
 
 ## 15. The command line
@@ -1489,13 +1582,14 @@ script x=0 y=0
 image x=0 y=0
 group circle_1,rect_1
 ungroup group_1 [force]
+duplicate circle_1,rect_1
 
 link polygon_1.origin.x table_x.A1
 unlink polygon_1.origin.x
 set polygon_1.radius 42
 clear table_x.A1
 rename polygon_1 intersection_a
-delete intersection_a [force]
+delete intersection_a [force]            # or several, as delete a,b,c
 explode polygon_1 [force]
 addvertex polyline_1 100,100
 delvertex polyline_1 2
