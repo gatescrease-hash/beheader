@@ -5,11 +5,11 @@
  * and a list of operations, and returns a new set of objects or a refusal.
  * No other code in the repository writes document state.
  *
- * A call takes one of two paths. A batch of slot writes, table cell clears,
- * creates, renames and deletes without force, against a list this file
- * committed, takes the indexed path in commitIndexedBatch, which reads
- * graph/graph-index.ts and costs what the batch affects. Every other call runs
- * the same seven steps in order, over the whole document:
+ * A call takes one of two paths. A batch against a list this file committed
+ * takes the indexed path in commitIndexedBatch, which reads
+ * graph/graph-index.ts and costs what the batch affects. A refusal, the
+ * creation of the document variable object, and a list that came from
+ * anywhere else run the same seven steps in order, over the whole document:
  *
  *   1. Stage.     Apply the operations to a new object list.
  *   2. Derive.    Rebuild the whole edge set from stored ASTs and the schema.
@@ -1031,34 +1031,14 @@ function resolveSlotPathForKey(object: GraphObject, key: string): readonly strin
 }
 
 /**
- * A table's extent and an object's layer or group membership are read by
- * other objects: by the edges of every formula that names a cell, by the
- * integrity check of every layer member, and by the check that no group sits
- * inside itself, which walks up through other groups. A write to any of them
- * takes the whole-document path. So
- * does a direct write to a math source, which that path refuses with a reason,
- * and a write that creates a document variable, whose name the name checks of
- * every object read. A write that creates any other slot stays on the indexed
- * path, because the objects that name the object it lands on are the only
- * ones whose edges read its slot set.
+ * Whether a write can take the indexed path at all. Every slot can, as long as
+ * its payload holds legal numbers: a table extent, a layer or group
+ * membership, a math source, a new document variable and a derived slot each
+ * reach the objects that read them through the index, and the checks that
+ * would refuse them run again on the objects the batch revisits. A refusal
+ * sends the batch down the whole-document path, which words it.
  */
-function isIndexedWrite(object: GraphObject, path: readonly string[], existing: Slot | undefined, slot: Slot): boolean {
-  if (existing?.kind === "derived" || slot.kind === "derived") {
-    return false;
-  }
-  if (existing === undefined && object.type === "doc") {
-    return false;
-  }
-  const key = slotKey(path);
-  if (key === "view.layer" || key === slotKey(GROUP_MEMBERSHIP_PATH)) {
-    return false;
-  }
-  if (object.type === TABLE_TYPE && (key === slotKey(TABLE_ROWS_PATH) || key === slotKey(TABLE_COLS_PATH))) {
-    return false;
-  }
-  if (object.type === MATH_TYPE && key === slotKey(MATH_SOURCE_PATH)) {
-    return false;
-  }
+function isIndexedWrite(slot: Slot): boolean {
   return isLegalSlotPayload(slot);
 }
 
@@ -1138,10 +1118,10 @@ function objectFacts(object: GraphObject, ownEdges: readonly Edge[], scope: Name
 /**
  * The integrity checks that read other objects, for one object: its layer and
  * group memberships, its copy target, and the name reserved for the document
- * variable object. A group loop goes unchecked here, because only a write to a
- * membership can close one, and those take the whole-document path. validateIntegrity runs the same rules over every object,
- * with the messages an operator reads, and the indexed path only needs to
- * know whether any of them fails.
+ * variable object. A group loop is checked apart from this, by walking up from
+ * each group the batch revisits. validateIntegrity runs the same rules over
+ * every object, with the messages an operator reads, and the indexed path only
+ * needs to know whether any of them fails.
  */
 function crossObjectProblem(object: GraphObject, objectById: (id: string) => GraphObject | undefined, doc: GraphObject | undefined): boolean {
   const membership = object.slots["view.layer"];
@@ -1165,25 +1145,62 @@ function crossObjectProblem(object: GraphObject, objectById: (id: string) => Gra
   return object.target !== undefined;
 }
 
-const INDEXED_OPERATION_KINDS: ReadonlySet<Operation["kind"]> = new Set(["setSlot", "clearSlot", "createObject", "deleteObject", "renameObject"]);
+/** The groups above a group, walked up through its memberships, reach the group itself. */
+function groupLoopFrom(group: GraphObject, objectById: (id: string) => GraphObject | undefined): boolean {
+  const seen = new Set([group.id]);
+  for (let parent = groupOf(group); parent !== undefined; parent = groupOf(objectById(parent) ?? group)) {
+    if (seen.has(parent)) {
+      return true;
+    }
+    seen.add(parent);
+    if (objectById(parent) === undefined) {
+      return false;
+    }
+  }
+  return false;
+}
+
+/**
+ * The operations that can drop a slot or an edge another object read. Their
+ * former readers stay in the region evaluation covers, the way the incremental
+ * strategy on the whole-document path keeps the edges of the list before the
+ * batch for the same operations.
+ */
+const DROPPING_OPERATION_KINDS: ReadonlySet<Operation["kind"]> = new Set([
+  "clearSlot", "deleteObject", "renameObject", "deleteTableLine", "deleteVertex", "explode", "removePort", "setMathSource", "renameVariable",
+]);
 
 /**
  * Commits a batch through the index of the committed state rather than the
  * whole document, or returns undefined to send it down the whole-document
- * path. It takes writes to slots, clears of table cells, creates, renames and
- * deletes without force, and sends everything else down that path.
+ * path. Every kind of operation can take it.
  *
- * The batch first stages each operation against its own versions of the
- * objects it touches, checking each one the way the preflight checks of
- * mutate() would, with names answered by the index. It then works out which
- * objects need their edges derived and their checks run again: every object
- * it changed, every object that names one of those by ID, and, when a name
- * appears or goes, every text whose content holds that name as a word. As
- * graph-index.ts describes, nothing else can read what the batch changed. The
- * checks that span every object at once are the singleton document variable
- * object and its variable names, which the batch never creates, deletes,
- * renames or adds to, and name uniqueness, which the staging checks against
- * the index.
+ * Writes, clears of table cells, creates, renames and deletes without force
+ * stage against the batch's own versions of the objects they touch, with names
+ * answered by the index. Every other operation runs applyOperation itself, the
+ * same function the whole-document path folds, over a list that holds only the
+ * objects it can reach: its target, every object that names the target, which
+ * the index holds as referrers, and every object the batch has already
+ * touched, which may name the target through an operation earlier in the
+ * batch. An object outside that list names nothing the operation rewrites, so
+ * applyOperation would hand its record back unchanged. A rename of a variable
+ * also rewrites the formulas inside text content, and a text parses those
+ * against the objects its words name, so those join the list as well.
+ *
+ * Before staging, the preflight checks mutate() runs read the committed
+ * versions of the targets, of the objects that name a vertex a delete would
+ * remove, and of the objects a math source names. A new or renamed document
+ * variable is checked against the objects the index holds under its name.
+ *
+ * The batch then works out which objects need their edges derived and their
+ * checks run again: every object it changed, every object that names one of
+ * those by ID, and, when an object name or a variable name appears or goes,
+ * every text whose content holds that name as a word. As graph-index.ts
+ * describes, nothing else can read what the batch changed. Group loops are
+ * walked up from each group revisited. The checks that span every object at
+ * once are the singleton document variable object and its variable names,
+ * which the batch checks for the names it adds, and name uniqueness, which
+ * the staging checks against the index.
  *
  * A new cycle has to pass through a slot whose sources changed, so the cycle
  * search starts from those slots alone, and evaluation covers the region
@@ -1193,8 +1210,15 @@ const INDEXED_OPERATION_KINDS: ReadonlySet<Operation["kind"]> = new Set(["setSlo
  * Any problem sends the batch down the whole-document path as well, which
  * finds the same problem and words the refusal. A refusal names every slot
  * involved in the order a whole-document pass meets them, and reproducing that
- * order here would need the whole document anyway. A delete with force does
- * the same, because the slots it reports broken come out in that order too.
+ * order here would need the whole document anyway. Creating the document
+ * variable object, and clearing a variable inside a batch that does anything
+ * else, take that path too: the first happens once in a document, and the
+ * readers a clear refuses for are the ones the batch has reached by then,
+ * which only the committed index knows for a batch of one.
+ *
+ * A forced delete reports the slots it broke in the order of the object list,
+ * which one pass over the list by ID gives, the same pass that orders the
+ * next list.
  *
  * The slots that read the evaluation context are evaluated again only when the
  * context differs from the one the index last saw. A host that changes what
@@ -1208,7 +1232,7 @@ function commitIndexedBatch(
   context: EvalContext,
 ): MutationResult | undefined {
   const index = graphIndexOf(objects);
-  if (index === undefined || !operations.every((operation) => INDEXED_OPERATION_KINDS.has(operation.kind))) {
+  if (index === undefined) {
     return undefined;
   }
   const staged = new Map<string, GraphObject | null>();
@@ -1220,42 +1244,132 @@ function commitIndexedBatch(
     }
     return ids;
   };
+  const named = (name: string): readonly GraphObject[] => {
+    const word = name.toLowerCase();
+    return [...holders(word)].map((id) => current(id)).filter((object): object is GraphObject => object !== undefined && object.name.toLowerCase() === word);
+  };
   const scope = nameScope(holders, current);
-  const doc = scope([]).find((object) => object.type === "doc");
+  const docId = scope([]).find((object) => object.type === "doc")?.id;
+  const currentDoc = (): GraphObject | undefined => (docId === undefined ? undefined : current(docId));
   const isTaken = (excludeId: string | undefined) => (name: string): boolean => {
     const word = name.toLowerCase();
     const holder = [...holders(word)].some((id) => id !== excludeId && current(id)?.name.toLowerCase() === word);
-    return holder || Object.keys(doc?.slots ?? {}).some((key) => key.toLowerCase() === word);
+    return holder || Object.keys(currentDoc()?.slots ?? {}).some((key) => key.toLowerCase() === word);
   };
   const created: string[] = [];
   const nameChanges = new Set<string>();
+  const broken: Address[][] = [];
+
+  // The preflight checks of mutate(), against the committed versions of the
+  // objects each one reads.
+  const preflightIds = new Set<string>();
+  for (const operation of operations) {
+    const id = operationTargetId(operation);
+    preflightIds.add(id);
+    if (operation.kind === "deleteVertex") {
+      for (const referrer of index.referrers.get(id) ?? []) preflightIds.add(referrer);
+    }
+    if (operation.kind === "setMathSource") {
+      const reading = readMathNames(operation.source);
+      if (!isMathSourceError(reading)) {
+        for (const address of reading.names.references) preflightIds.add(address.objectId);
+      }
+    }
+  }
+  const preflight = [...preflightIds].map((id) => index.byId.get(id)).filter((object): object is GraphObject => object !== undefined);
+  const preflightProblem = findIllegalOperationPayloads(operations, preflight).length > 0
+    || findInvalidTableResizes(operations, preflight).length > 0
+    || findIllegalSlotClears(operations, preflight).length > 0
+    || findInvalidDimensionWrites(operations, preflight).length > 0
+    || findInvalidPortOperations(operations, preflight).length > 0
+    || findInvalidMathSources(operations, preflight).length > 0
+    || findInvalidVertexOperations(operations, preflight).length > 0
+    || findInvalidExplodeOperations(operations, preflight).length > 0
+    || findInvalidSplitOperations(operations, preflight).length > 0;
+  if (preflightProblem) {
+    return undefined;
+  }
+
+  /**
+   * Runs one operation through applyOperation over the objects it can reach,
+   * and stages each record it changed or dropped.
+   */
+  const applyScoped = (operation: Operation, targetId: string): void => {
+    const list: GraphObject[] = [];
+    const listed = new Set<string>();
+    const add = (id: string): void => {
+      if (listed.has(id)) return;
+      listed.add(id);
+      const object = current(id);
+      if (object !== undefined) list.push(object);
+    };
+    add(targetId);
+    for (const referrer of index.referrers.get(targetId) ?? []) add(referrer);
+    for (const id of staged.keys()) add(id);
+    if (operation.kind === "renameVariable") {
+      for (const object of [...list]) {
+        if (object.type === TEXT_TYPE) {
+          for (const word of scope(textContentWords(object))) add(word.id);
+        }
+      }
+    }
+    const applied = applyOperation(list, operation);
+    const after = new Map(applied.objects.map((object) => [object.id, object]));
+    for (const before of list) {
+      const next = after.get(before.id);
+      if (next === undefined) staged.set(before.id, null);
+      else if (next !== before) staged.set(before.id, next);
+    }
+    broken.push([...applied.brokenSlots]);
+  };
 
   for (const operation of operations) {
-    if (operation.kind === "setSlot" || operation.kind === "clearSlot") {
+    if (operation.kind === "setSlot") {
+      const object = current(operation.address.objectId);
+      if (object === undefined || !isIndexedWrite(operation.slot)) {
+        return undefined;
+      }
+      const key = slotKey(operation.address.path);
+      const next = { ...object, slots: { ...object.slots, [key]: deepClone(operation.slot) } };
+      if (object.type === "doc" && object.slots[key] === undefined) {
+        if (operation.address.path.length !== 1 || documentVariableNameProblem(key, [next, ...named(key)], key) !== undefined) {
+          return undefined;
+        }
+        nameChanges.add(key.toLowerCase());
+      }
+      staged.set(object.id, next);
+      continue;
+    }
+    if (operation.kind === "clearSlot") {
       const object = current(operation.address.objectId);
       if (object === undefined) {
         return undefined;
       }
-      const key = slotKey(operation.address.path);
-      if (operation.kind === "setSlot") {
-        if (!isIndexedWrite(object, operation.address.path, object.slots[key], operation.slot)) {
-          return undefined;
-        }
-        staged.set(object.id, { ...object, slots: { ...object.slots, [key]: deepClone(operation.slot) } });
+      const path = operation.address.path;
+      if (object.type === TABLE_TYPE && path.length === 2 && path[0] === TABLE_CELL_PATH_PREFIX) {
+        const { [slotKey(path)]: _cleared, ...slots } = object.slots;
+        staged.set(object.id, { ...object, slots });
         continue;
       }
-      const path = operation.address.path;
-      if (object.type !== TABLE_TYPE || path.length !== 2 || path[0] !== TABLE_CELL_PATH_PREFIX) {
+      if (object.type !== "doc" || path.length !== 1 || object.slots[path[0]!] === undefined || operations.length !== 1) {
         return undefined;
       }
-      const { [key]: _cleared, ...slots } = object.slots;
-      staged.set(object.id, { ...object, slots });
+      // A variable that something reads is refused with the reader named. A
+      // copy draws the variable and goes with it, so it is no reader.
+      const key = addressKey(operation.address);
+      const readers = (index.dependents.get(key) ?? []).filter((dependent) =>
+        addressKey(dependent) !== key && index.byId.get(dependent.objectId)?.type !== "docref");
+      if (readers.length > 0) {
+        return undefined;
+      }
+      applyScoped(operation, object.id);
+      nameChanges.add(path[0]!.toLowerCase());
       continue;
     }
     if (operation.kind === "createObject") {
       const object = operation.object;
       const malformed = Object.values(object.slots).some((slot) => slot === undefined || !isLegalSlotPayload(slot));
-      if (current(object.id) !== undefined || index.byId.has(object.id) || object.type === "doc" || object.type === "docref" || groupOf(object) !== undefined || malformed) {
+      if (current(object.id) !== undefined || index.byId.has(object.id) || object.type === "doc" || malformed) {
         return undefined;
       }
       if (!checkNameAvailableBy(object.name, isTaken(undefined)).ok) {
@@ -1266,27 +1380,47 @@ function commitIndexedBatch(
       nameChanges.add(object.name.toLowerCase());
       continue;
     }
-    if (operation.kind !== "renameObject" && operation.kind !== "deleteObject") {
-      return undefined;
-    }
-    const object = current(operation.objectId);
-    if (object === undefined || object.type === "doc") {
-      return undefined;
-    }
-    if (operation.kind === "renameObject") {
-      if (!checkNameAvailableBy(operation.name, isTaken(object.id)).ok) {
+    if (operation.kind === "renameVariable") {
+      const doc = currentDoc();
+      const path = operation.address.path;
+      if (doc === undefined || operation.address.objectId !== doc.id || path.length !== 1 || doc.slots[path[0]!] === undefined) {
         return undefined;
       }
-      staged.set(object.id, { ...object, name: operation.name });
-      nameChanges.add(object.name.toLowerCase());
+      if (documentVariableNameProblem(operation.name, [doc, ...named(operation.name)], path[0]) !== undefined) {
+        return undefined;
+      }
+      applyScoped(operation, doc.id);
+      nameChanges.add(path[0]!.toLowerCase());
       nameChanges.add(operation.name.toLowerCase());
       continue;
     }
-    if (operation.force === true) {
+    if (operation.kind === "renameObject" || operation.kind === "deleteObject") {
+      const object = current(operation.objectId);
+      if (object === undefined || object.type === "doc") {
+        return undefined;
+      }
+      if (operation.kind === "renameObject") {
+        if (!checkNameAvailableBy(operation.name, isTaken(object.id)).ok) {
+          return undefined;
+        }
+        staged.set(object.id, { ...object, name: operation.name });
+        nameChanges.add(object.name.toLowerCase());
+        nameChanges.add(operation.name.toLowerCase());
+        continue;
+      }
+      if (operation.force === true) {
+        applyScoped(operation, object.id);
+      } else {
+        staged.set(object.id, null);
+      }
+      nameChanges.add(object.name.toLowerCase());
+      continue;
+    }
+    const target = current(operation.objectId);
+    if (target === undefined) {
       return undefined;
     }
-    staged.set(object.id, null);
-    nameChanges.add(object.name.toLowerCase());
+    applyScoped(operation, target.id);
   }
 
   const revisit = new Set<string>();
@@ -1298,6 +1432,7 @@ function commitIndexedBatch(
     for (const reader of index.readersOfWord.get(word) ?? []) revisit.add(reader);
   }
 
+  const doc = currentDoc();
   const ownEdges = new Map<string, readonly Edge[]>();
   const facts = new Map<string, ObjectFacts>();
   for (const id of revisit) {
@@ -1311,6 +1446,7 @@ function commitIndexedBatch(
       || findSchemaSlotKindMismatches([object]).length > 0
       || findIllegalSlotValues([object]).length > 0
       || crossObjectProblem(object, current, doc)
+      || (object.type === "group" && groupLoopFrom(object, current))
       || edges.some((edge) => current(edge.sourceSlot.objectId)?.slots[slotKey(edge.sourceSlot.path)] === undefined);
     if (failed) {
       return undefined;
@@ -1347,6 +1483,18 @@ function commitIndexedBatch(
     if (object !== null && object !== undefined) next.push(object);
   }
 
+  // Broken slots come out in the order of the list each operation folded
+  // over: committed objects where they stood, then the objects the batch
+  // created, each with its slots in the order applyOperation visited them.
+  let positions: Map<string, number> | undefined;
+  const positionOf = (id: string): number => {
+    positions ??= new Map(objects.map((object, position) => [object.id, position]));
+    return positions.get(id) ?? objects.length + created.indexOf(id);
+  };
+  const brokenSlots = dedupeAddresses(broken.flatMap((addresses) =>
+    [...addresses].sort((left, right) => positionOf(left.objectId) - positionOf(right.objectId)))).filter((address) =>
+    current(address.objectId)?.slots[slotKey(address.path)] !== undefined);
+
   const roots: Address[] = [];
   for (const operation of operations) {
     if (operation.kind === "setSlot" || operation.kind === "clearSlot") {
@@ -1369,7 +1517,7 @@ function commitIndexedBatch(
       if (staged.has(id)) roots.push(...objectFacts.contextSlots);
     }
   }
-  const removes = operations.some((operation) => operation.kind === "clearSlot" || operation.kind === "deleteObject" || operation.kind === "renameObject");
+  const removes = operations.some((operation) => DROPPING_OPERATION_KINDS.has(operation.kind));
   const committed = stagedLookup(index);
   const dependents = removes ? (key: string) => [...committed.dependents(key), ...lookup.dependents(key)] : lookup.dependents;
   const evaluated = evaluateAffected(next, lookup, closeAffectedRegion(roots, dependents, lookup), context);
@@ -1383,7 +1531,7 @@ function commitIndexedBatch(
     ok: true,
     objects: evaluated,
     journal: [...journal, { operations: deepClone([...operations]) }],
-    brokenSlots: [],
+    brokenSlots,
   };
 }
 

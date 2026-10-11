@@ -36,8 +36,9 @@ These six rules make the design work. Do not break one for convenience.
    slot.
 5. An edit costs what it changes. One mutation takes time proportional to the
    part of the graph it affects, not to the size of the document. Within that
-   bound, write the simplest correct code. The engine does not meet this yet,
-   and `docs/SPEC.md` holds what it takes to get there.
+   bound, write the simplest correct code. The engine meets this for every batch
+   it commits, and `docs/SPEC.md` says which calls still cost the whole
+   document and why.
 6. Never weaken, skip or delete a test to get a green run.
 
 ## How to work

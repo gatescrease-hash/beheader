@@ -313,6 +313,119 @@ function structuralBatches(random: SeededRandom, objectCount: number): Operation
   ];
 }
 
+/** The object with every derived slot its schema declares, holding no value yet. */
+function withDerivedSlots(object: GraphObject): GraphObject {
+  const slots: Record<string, Slot> = { ...object.slots };
+  for (const entry of resolveDerivedSlots(object, getObjectSchema(object.type)?.derivedSlots ?? [])) {
+    slots[slotKey(entry.path)] = { kind: "derived", value: null };
+  }
+  return { ...object, slots };
+}
+
+function at(objectId: string, ...path: string[]): Address {
+  return { objectId, path };
+}
+
+function readerOf(id: string, name: string, read: Address): Operation {
+  return { kind: "createObject", object: { id, name, type: "value", slots: { value: formulaSlot({ type: "reference", address: read }) } } };
+}
+
+/**
+ * Every structural operation the indexed path takes, each with readers whose
+ * addresses shift or break: a table resized by line and by extent, a path
+ * that gains, loses and splits vertices, an explode with and without force,
+ * ports added and removed, a math source rewritten under a reader of its
+ * export, document variables created, copied, renamed and cleared, a layer
+ * membership, and a forced delete of a table that something reads. Some of
+ * them refuse, so a refusal through each operation reaches the comparison as
+ * well.
+ */
+function everyStructuralOperation(random: SeededRandom, objectCount: number): Operation[][] {
+  const sheet = "obj_sheet";
+  const path = "obj_path";
+  const runner = "obj_runner";
+  const equation = "obj_eq";
+  const docId = "obj_doc";
+  const valueRead = address(1 + random.integer(objectCount - 1));
+  const valueWrite = address(1 + random.integer(objectCount - 1));
+  const point = (x: number, y: number): { x: number; y: number } => ({ x, y });
+  const pathPoints = [point(0, 0), point(40, 0), point(40, 30), point(0, 30)];
+  const pathSlots: Record<string, Slot> = { closed: { kind: "literal", value: false } };
+  pathPoints.forEach((vertex, index) => {
+    pathSlots[`vertex.${index}.x`] = literalSlot(vertex.x);
+    pathSlots[`vertex.${index}.y`] = literalSlot(vertex.y);
+  });
+  const rect = (id: string, name: string): GraphObject => withDerivedSlots({
+    id,
+    name,
+    type: "rect",
+    slots: { "origin.x": literalSlot(0), "origin.y": literalSlot(0), width: literalSlot(10 + random.integer(10)), height: literalSlot(5) },
+  });
+  return [
+    [
+      { kind: "createObject", object: { id: sheet, name: "sheet", type: "table", slots: { rows: literalSlot(3), cols: literalSlot(3) } } },
+      { kind: "setSlot", address: at(sheet, "cells", "A1"), slot: literalSlot(random.integer(9) + 1) },
+      { kind: "setSlot", address: at(sheet, "cells", "B2"), slot: formulaSlot({ type: "binaryOp", operator: "*", left: { type: "reference", address: at(sheet, "cells", "A1") }, right: { type: "literal", value: 2 } }) },
+      { kind: "setSlot", address: at(sheet, "cells", "C3"), slot: formulaSlot({ type: "functionCall", name: "SUM", args: [{ type: "range", start: at(sheet, "cells", "A1"), end: at(sheet, "cells", "B2") }] }) },
+    ],
+    [readerOf("obj_sheet_reader", "sheet_reader", at(sheet, "cells", "B2"))],
+    [{ kind: "insertTableLine", objectId: sheet, axis: "row", index: 1 + random.integer(2) }],
+    [{ kind: "insertTableLine", objectId: sheet, axis: "column", index: 1 }],
+    [{ kind: "deleteTableLine", objectId: sheet, axis: "row", index: 1 }],
+    [{ kind: "deleteTableLine", objectId: sheet, axis: "column", index: 1 + random.integer(2) }],
+    [{ kind: "setSlot", address: at(sheet, "rows"), slot: literalSlot(2 + random.integer(4)) }],
+    [{ kind: "setSlot", address: at(sheet, "cols"), slot: literalSlot(1) }],
+    [{ kind: "setSlot", address: at(sheet, "cols"), slot: literalSlot(4) }],
+    [{ kind: "setSlot", address: at(sheet, "cols"), slot: literalSlot(2.5) }],
+    [{ kind: "createObject", object: withDerivedSlots({ id: path, name: "path", type: "polyline", vertexCount: pathPoints.length, slots: pathSlots }) }],
+    [readerOf("obj_path_reader", "path_reader", at(path, "vertex", "2", "x"))],
+    [{ kind: "addVertex", objectId: path, point: point(random.integer(50), 60) }],
+    [{ kind: "splitEdge", objectId: path, index: random.integer(2), point: point(20, 0) }],
+    [{ kind: "deleteVertex", objectId: path, index: 0 }],
+    [{ kind: "deleteVertex", objectId: path, index: 1 + random.integer(2) }],
+    [{ kind: "deleteVertex", objectId: path, index: 1 + random.integer(2), force: true }],
+    [{ kind: "createObject", object: rect("obj_box", "box") }],
+    [{ kind: "explode", objectId: "obj_box" }],
+    [{ kind: "createObject", object: rect("obj_box_two", "box_two") }, readerOf("obj_box_reader", "box_reader", at("obj_box_two", "width"))],
+    [{ kind: "explode", objectId: "obj_box_two" }],
+    [{ kind: "explode", objectId: "obj_box_two", force: true }],
+    [{ kind: "createObject", object: withDerivedSlots({ id: runner, name: "runner", type: "script", slots: { "origin.x": literalSlot(0), "origin.y": literalSlot(0), language: { kind: "literal", value: "python" }, source: { kind: "literal", value: "" } } }) }],
+    [{ kind: "addPort", objectId: runner, family: "in", name: "gain" }, { kind: "setSlot", address: at(runner, "in", "gain"), slot: formulaSlot({ type: "reference", address: valueRead }) }],
+    [
+      { kind: "addPort", objectId: runner, family: "out", name: "result" },
+      { kind: "setSlot", address: at(runner, "placeholder", "result"), slot: literalSlot(random.integer(9)) },
+      { kind: "setSlot", address: at(runner, "out", "result"), slot: { kind: "derived", value: null } },
+    ],
+    [readerOf("obj_runner_reader", "runner_reader", at(runner, "out", "result"))],
+    [{ kind: "removePort", objectId: runner, family: "out", name: "result" }],
+    [{ kind: "removePort", objectId: runner, family: "in", name: "gain" }],
+    [{ kind: "addPort", objectId: runner, family: "in", name: "not a name" }],
+    [{ kind: "createObject", object: withDerivedSlots({ id: equation, name: "eq", type: "math", slots: { "origin.x": literalSlot(0), "origin.y": literalSlot(0), source: { kind: "literal", value: "" }, display: { kind: "literal", value: "source" } } }) }],
+    [{ kind: "setMathSource", objectId: equation, source: "y=x*2" }],
+    [{ kind: "setSlot", address: at(equation, "in", "x"), slot: formulaSlot({ type: "reference", address: valueRead }) }],
+    [readerOf("obj_eq_reader", "eq_reader", at(equation, "out", "y"))],
+    [{ kind: "setMathSource", objectId: equation, source: `y=x*${2 + random.integer(3)}+w` }],
+    [{ kind: "setMathSource", objectId: equation, source: "z=x" }],
+    [{ kind: "setMathSource", objectId: equation, source: "y=(" }],
+    [{ kind: "createObject", object: { id: docId, name: "doc", type: "doc", slots: { rate: literalSlot(random.integer(9)) } } }],
+    [{ kind: "setSlot", address: at(docId, "speed"), slot: literalSlot(5) }],
+    [{ kind: "createObject", object: withDerivedSlots({ id: "obj_speed_copy", name: "speed_copy", type: "docref", target: at(docId, "speed"), slots: { "origin.x": literalSlot(0), "origin.y": literalSlot(0) } }) }],
+    [{ kind: "setSlot", address: valueWrite, slot: formulaSlot({ type: "binaryOp", operator: "+", left: { type: "reference", address: at(docId, "speed") }, right: { type: "reference", address: at(docId, "rate") } }) }],
+    [{ kind: "renameVariable", address: at(docId, "speed"), name: "pace" }],
+    [{ kind: "renameVariable", address: at(docId, "pace"), name: "rate" }],
+    [{ kind: "clearSlot", address: at(docId, "pace") }],
+    [{ kind: "setSlot", address: valueWrite, slot: literalSlot(1) }],
+    [{ kind: "clearSlot", address: at(docId, "pace") }],
+    [{ kind: "setSlot", address: at(docId, "value_1"), slot: literalSlot(1) }],
+    [{ kind: "createObject", object: { id: "obj_layer", name: "tier", type: "layer", slots: { "view.visible": { kind: "literal", value: true }, "view.order": literalSlot(0) } } }],
+    [{ kind: "setSlot", address: at(valueRead.objectId, "view", "layer"), slot: { kind: "literal", value: "obj_layer" } }],
+    [{ kind: "deleteObject", objectId: "obj_layer" }],
+    [{ kind: "setSlot", address: at(valueRead.objectId, "view", "layer"), slot: { kind: "literal", value: null } }],
+    [{ kind: "deleteObject", objectId: "obj_layer" }],
+    [{ kind: "deleteObject", objectId: sheet, force: true }],
+  ];
+}
+
 /** Builds a repeatable acyclic graph, valid edits, refusals, cycle attempts, structural changes and a forced repair. */
 export function generateMutationScenario(
   seed: number,
@@ -366,6 +479,7 @@ export function generateMutationScenario(
   batches.push([setValue(1, formulaSlot({ type: "reference", address: address(objectCount - 1) }))]);
   batches.push([setValue(objectCount, literalSlot(1))]);
   batches.push(...structuralBatches(random, objectCount));
+  batches.push(...everyStructuralOperation(random, objectCount));
   batches.push([setValue(1, formulaSlot({ type: "reference", address: address(0) }))]);
   batches.push([{ kind: "deleteObject", objectId: address(0).objectId, force: true }]);
 

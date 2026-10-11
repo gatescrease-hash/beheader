@@ -185,31 +185,35 @@ data. The pass costs about 0.2 milliseconds at 16000 objects, against the 150
 milliseconds the whole-document phases below cost there, so this rule leaves it
 in place.
 
-The engine meets this rule for a batch made of slot writes, table cell clears,
-creates, renames and deletes without force. That covers every frame of a drag,
-every edit of a value, a formula or a cell, and the commands that make, name and
-remove objects. Such a batch reads an index of the state before it. It
-re-derives and checks the objects it changed and the objects that name them,
-searches for a cycle from the slots whose sources changed, and evaluates the
-region downstream of what it touched. Over a value chain of 16000 objects an
-edit takes about a millisecond and a create, a rename or a delete about two and
-a half, where the whole-document path takes 150 to 250.
+The engine meets this rule for every batch it commits. Such a batch reads an
+index of the state before it. It re-derives and checks the objects it changed
+and the objects that name them, searches for a cycle from the slots whose
+sources changed, and evaluates the region downstream of what it touched. An
+operation that rewrites the formulas of other objects, such as a table resize, a
+vertex change, a variable rename or a delete with force, finds those objects
+through the index rather than through the list. Over a value chain of 16000
+objects an edit takes about a millisecond, a create, a rename or a delete about
+two and a half, and a structural operation two to five, where the
+whole-document path takes 150 to 450.
 
-The engine does not meet this rule for the rest. Three choices in it once
-cost time proportional to the whole document on every mutation:
+A batch that ends in a refusal still derives, checks and searches the whole
+document, because a refusal names every slot involved in the order a
+whole-document pass meets them. Creating the document variable object takes the
+same path, once in a document. So does a list that did not come from a commit,
+such as a document loaded from a file or a state an undo replays, and that
+commit leaves the index the next batch reads.
+
+Three choices in the engine once cost time proportional to the whole document
+on every mutation:
 
 - Cycle detection runs a full depth first search.
 - Evaluation recomputes the whole graph in topological order.
 - A transaction deep clones the document, applies to the clone, and swaps the
   clone in on success.
 
-Evaluation now covers the part of the graph a batch dirties, and staging shares
-every object a batch leaves alone rather than cloning it. A batch that resizes a
-table, adds or removes a vertex or a port, writes a math source, explodes or
-splits a path, renames, creates or clears a document variable, writes a table
-extent or a layer membership, deletes with force, or ends in a refusal still
-derives, checks and searches the whole document, and it then builds the index
-the next batch reads.
+Evaluation now covers the part of the graph a batch dirties, staging shares
+every object a batch leaves alone rather than cloning it, and the index stands
+in for the whole-document search and derivation on every batch that commits.
 
 Each was chosen for simplicity while the plan was to restructure the engine
 after a port to Rust. `RUST_PORT.md` records the measured cost of the three and

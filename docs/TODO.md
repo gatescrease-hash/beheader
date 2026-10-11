@@ -20,26 +20,6 @@ the file it is about.
 
 ## Open
 
-The item below finishes Rule 5 of `SPEC.md`. Slot writes, cell clears,
-creates, renames and deletes without force read the index in
-`graph/graph-index.ts` and cost what they affect. The operations below still
-derive, check and search the whole document, which over a value chain of 16000
-objects costs 150 to 250 milliseconds.
-
-- Carry the indexed path in `mutation.ts` to the remaining structural
-  operations: resizing a table and writing its extent, adding, deleting and
-  splitting vertices, exploding a path, adding and removing ports, writing a
-  math source, creating, clearing and renaming a document variable, writing a
-  layer membership, and deleting with force. Each rewrites the formulas of the
-  objects that name its target, which the index can now find through its
-  referrers, or changes a name that text and the name checks read, which the
-  word and name maps cover. A forced delete also reports broken slots in list
-  order, which an identity pass over the list can give. A refusal can keep the
-  whole-document path. A reader will know it is finished when each of those
-  operations reads the same number of object records at three document sizes,
-  in the way `mutation.test.ts` measures a create, and the differential
-  generator produces each of them.
-
 The item below is the rest of the baseline that section 22 of `SPEC.md` opens.
 Unsaved work, the clipboard and `import csv` are built.
 

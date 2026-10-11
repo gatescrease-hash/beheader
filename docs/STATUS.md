@@ -15,10 +15,10 @@ register, and the measurements behind leaving that migration unscheduled.
 | --- | --- |
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
-| Tests | 2922 Vitest tests and 2 tooling tests pass, with 0 skipped. |
+| Tests | 2926 Vitest tests and 2 tooling tests pass, with 0 skipped. |
 | Spec | Built through section 21, except the parts section 17 postpones. Section 22 lacks only the picture export. |
 | Scripts | Python runs in a Pyodide worker. Groups are script nodes with members. |
-| Rule 5 | Met for slot writes, cell clears, creates, renames and plain deletes. Other structural batches and refusals still cost the whole document. |
+| Rule 5 | Met for every committed batch. A refusal and a list with no index still cost the whole document. |
 | Workspace | Compact typography, a profile helmet, in-row style source controls, and full, compact and hidden sidebar modes with pointer and keyboard resizing. |
 
 ### How to run it

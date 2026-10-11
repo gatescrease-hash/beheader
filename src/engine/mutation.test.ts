@@ -4943,3 +4943,167 @@ describe("mutate — creates, renames, deletes and cell clears commit through th
     expect(forced.ok && forced.brokenSlots).toEqual([addr("obj_2", "value")]);
   });
 });
+
+describe("mutate — the structural operations commit through the index of the committed state", () => {
+  /**
+   * Runs a batch both ways from the same committed state and expects the same
+   * result. A commit through the index hands the index on to the list it
+   * commits, and the whole-document path leaves the earlier list holding its
+   * own, so a successful batch also shows which path it took.
+   */
+  function expectIndexedAndSame(
+    state: { readonly objects: readonly GraphObject[]; readonly journal: readonly MutationJournalEntry[] },
+    batch: readonly Operation[],
+  ): MutationResult {
+    const whole = mutate(state.objects, batch, state.journal, stagingContext, FULL_EVALUATION_STRATEGY);
+    const indexed = mutate(state.objects, batch, state.journal, stagingContext);
+    expect(indexed, JSON.stringify(batch)).toEqual(whole);
+    if (indexed.ok) {
+      expect(graphIndexOf(state.objects), `took the whole-document path: ${JSON.stringify(batch)}`).toBeUndefined();
+    }
+    return indexed;
+  }
+
+  function group(id: string, name: string): GraphObject {
+    return { id, name, type: "group", slots: { "origin.x": { kind: "literal", value: 0 }, "origin.y": { kind: "literal", value: 0 }, language: { kind: "literal", value: "python" }, source: { kind: "literal", value: "" } } };
+  }
+
+  it("resizes tables, edits paths and ports, writes math sources, variables and memberships, and deletes with force, all through the index", () => {
+    let state = stagingFixture();
+    const doc = idOf(state.objects, "doc");
+    const table = idOf(state.objects, "table_1");
+    const text = idOf(state.objects, "text_1");
+    const math = idOf(state.objects, "math_1");
+    const rect = idOf(state.objects, "rect_1");
+    const reader = (id: string, name: string, address: Address): Operation =>
+      ({ kind: "createObject", object: { id, name, type: "value", slots: { value: { kind: "formula", ast: { type: "reference", address }, value: null } } } });
+    const steps: readonly { readonly batch: readonly Operation[]; readonly ok: boolean }[] = [
+      { batch: [{ kind: "insertTableLine", objectId: table, axis: "row", index: 1 }], ok: true },
+      { batch: [{ kind: "insertTableLine", objectId: table, axis: "column", index: 1 }], ok: true },
+      { batch: [{ kind: "deleteTableLine", objectId: table, axis: "column", index: 1 }], ok: true },
+      { batch: [{ kind: "deleteTableLine", objectId: table, axis: "row", index: 1 }], ok: true },
+      { batch: [write(table, { kind: "literal", value: 12 }, ["rows"])], ok: true },
+      { batch: [write(table, { kind: "literal", value: 3 }, ["cols"])], ok: true },
+      { batch: [write(table, { kind: "literal", value: 2.5 }, ["cols"])], ok: false },
+      { batch: [reader("cell_reader", "cell_reader", addr(table, "cells", "B1"))], ok: true },
+      { batch: [{ kind: "deleteTableLine", objectId: table, axis: "column", index: 2 }], ok: true },
+      { batch: [{ kind: "addVertex", objectId: "staging_poly", point: { x: 20, y: 20 } }], ok: true },
+      { batch: [{ kind: "splitEdge", objectId: "staging_poly", index: 0, point: { x: 5, y: 0 } }], ok: true },
+      { batch: [{ kind: "deleteVertex", objectId: "staging_poly", index: 0 }], ok: true },
+      { batch: [{ kind: "deleteVertex", objectId: "staging_poly", index: 2 }], ok: false },
+      { batch: [{ kind: "deleteVertex", objectId: "staging_poly", index: 2, force: true }], ok: true },
+      { batch: [{ kind: "explode", objectId: rect }], ok: true },
+      { batch: [{ kind: "addPort", objectId: "staging_script", family: "in", name: "gain" }, write("staging_script", { kind: "literal", value: 2 }, ["in", "gain"])], ok: true },
+      { batch: [{ kind: "addPort", objectId: "staging_script", family: "in", name: "gain" }], ok: false },
+      { batch: [{ kind: "removePort", objectId: "staging_script", family: "in", name: "gain" }], ok: true },
+      { batch: [{ kind: "setMathSource", objectId: math, source: "y=x*3" }], ok: true },
+      { batch: [{ kind: "setMathSource", objectId: math, source: "y=x*z" }], ok: true },
+      { batch: [write(math, { kind: "literal", value: "y=x" }, ["source"])], ok: false },
+      { batch: [write(doc, { kind: "literal", value: 3 }, ["rate"])], ok: true },
+      { batch: [write(doc, { kind: "literal", value: 3 }, ["table_1"])], ok: false },
+      { batch: [{ kind: "createObject", object: { id: "rate_copy", name: "rate_copy", type: "docref", target: addr(doc, "rate"), slots: { "origin.x": { kind: "literal", value: 0 }, "origin.y": { kind: "literal", value: 0 }, value: { kind: "derived", value: null }, measuredWidth: { kind: "derived", value: null }, measuredHeight: { kind: "derived", value: null } } } }], ok: true },
+      { batch: [{ kind: "renameVariable", address: addr(doc, "speed"), name: "velocity" }], ok: true },
+      { batch: [{ kind: "renameVariable", address: addr(doc, "velocity"), name: "rate" }], ok: false },
+      { batch: [{ kind: "clearSlot", address: addr(doc, "rate") }], ok: true },
+      { batch: [{ kind: "clearSlot", address: addr(doc, "velocity") }], ok: false },
+      { batch: [{ kind: "createObject", object: createLayer("layer_a", "layer_a") }], ok: true },
+      { batch: [write(text, { kind: "literal", value: "layer_a" }, ["view", "layer"])], ok: true },
+      { batch: [write(text, { kind: "literal", value: "nowhere" }, ["view", "layer"])], ok: false },
+      { batch: [write(text, { kind: "literal", value: null }, ["view", "layer"])], ok: true },
+      { batch: [{ kind: "createObject", object: group("group_a", "group_a") }, write("staging_reader", { kind: "literal", value: "group_a" }, ["view", "group"])], ok: true },
+      { batch: [{ kind: "createObject", object: group("group_b", "group_b") }, write("group_a", { kind: "literal", value: "group_b" }, ["view", "group"])], ok: true },
+      { batch: [write("group_b", { kind: "literal", value: "group_a" }, ["view", "group"])], ok: false },
+      { batch: [{ kind: "createObject", object: { ...valueObject("grouped", "grouped", 1), slots: { value: { kind: "literal", value: 1 }, "view.group": { kind: "literal", value: "group_b" } } } }], ok: true },
+      { batch: [reader("late_reader", "late_reader", addr(table, "cells", "A1"))], ok: true },
+      { batch: [{ kind: "deleteObject", objectId: table, force: true }], ok: true },
+    ];
+    for (const step of steps) {
+      const result = expectIndexedAndSame(state, step.batch);
+      expect(result.ok, `${JSON.stringify(step.batch)}: ${result.ok ? "" : result.message}`).toBe(step.ok);
+      if (result.ok) state = result;
+    }
+    const forced = state.journal.at(-1);
+    expect(forced?.operations[0]?.kind).toBe("deleteObject");
+    expect(state.objects.find((object) => object.id === "late_reader")?.slots.value?.value).toMatchObject({ error: "#REF" });
+  });
+
+  it("renames a variable inside a text formula that also names another object, through the index", () => {
+    const state = stagingFixture();
+    const doc = idOf(state.objects, "doc");
+    const text = idOf(state.objects, "text_1");
+    const written = expectIndexedAndSame(state, [write(text, { kind: "literal", value: "both {= speed + rect_1.width }" }, ["content"])]);
+    if (!written.ok) throw new Error(written.message);
+    const renamed = expectIndexedAndSame(written, [{ kind: "renameVariable", address: addr(doc, "speed"), name: "velocity" }]);
+    expect(renamed.ok && renamed.objects.find((object) => object.id === text)?.slots.content?.value).toBe("both {= doc.velocity + rect_1.width }");
+  });
+
+  it("reports the slots a forced delete broke in the order of the object list, readers created in the batch last", () => {
+    const state = stagingFixture();
+    const table = idOf(state.objects, "table_1");
+    const reader = (id: string, address: Address): Operation =>
+      ({ kind: "createObject", object: { id, name: id, type: "value", slots: { value: { kind: "formula", ast: { type: "reference", address }, value: null } } } });
+    const withReaders = expectIndexedAndSame(state, [reader("reader_z", addr(table, "cells", "B1")), reader("reader_a", addr(table, "cells", "A1"))]);
+    if (!withReaders.ok) throw new Error(withReaders.message);
+    const forced = expectIndexedAndSame(withReaders, [reader("reader_m", addr(table, "cells", "A2")), { kind: "deleteObject", objectId: table, force: true }]);
+    expect(forced.ok && forced.brokenSlots).toEqual([addr("reader_z", "value"), addr("reader_a", "value"), addr("reader_m", "value")]);
+  });
+
+  it("reads the same number of object records for each structural operation at any document size", () => {
+    const reads = [250, 1000, 4000].map((size) => {
+      const fixture = stagingFixture();
+      const chain = Array.from({ length: size }, (_, index): GraphObject => ({
+        id: `chain_${index}`,
+        name: `chain_${index}`,
+        type: "value",
+        slots: { value: index === 0 ? { kind: "literal", value: 0 } : { kind: "formula", ast: { type: "reference", address: addr(`chain_${index - 1}`, "value") }, value: null } },
+      }));
+      const combined = mutate(fixture.objects, chain.map((object): Operation => ({ kind: "createObject", object })), fixture.journal, stagingContext);
+      if (!combined.ok) throw new Error(combined.message);
+      let slotReads = 0;
+      const wrapped = combined.objects.map((object) => new Proxy(object, {
+        get(target, property, receiver) {
+          if (property === "slots") slotReads += 1;
+          return Reflect.get(target, property, receiver);
+        },
+      }));
+      // The wrapped list has no index, so this first write takes the
+      // whole-document path and leaves an index on the list it commits.
+      const first = mutate(wrapped, [write(`chain_${size - 1}`, { kind: "formula", ast: { type: "reference", address: addr(`chain_${size - 2}`, "value") }, value: null })], combined.journal, stagingContext);
+      if (!first.ok) throw new Error(first.message);
+      const doc = idOf(first.objects, "doc");
+      const table = idOf(first.objects, "table_1");
+      const math = idOf(first.objects, "math_1");
+      const text = idOf(first.objects, "text_1");
+      const rect = idOf(first.objects, "rect_1");
+      slotReads = 0;
+      const batches: readonly (readonly Operation[])[] = [
+        [{ kind: "insertTableLine", objectId: table, axis: "row", index: 1 }],
+        [{ kind: "deleteTableLine", objectId: table, axis: "row", index: 1 }],
+        [write(table, { kind: "literal", value: 10 }, ["rows"])],
+        [{ kind: "addVertex", objectId: "staging_poly", point: { x: 20, y: 20 } }],
+        [{ kind: "splitEdge", objectId: "staging_poly", index: 0, point: { x: 5, y: 0 } }],
+        [{ kind: "deleteVertex", objectId: "staging_poly", index: 0 }],
+        [{ kind: "explode", objectId: rect }],
+        [{ kind: "addPort", objectId: "staging_script", family: "in", name: "gain" }, write("staging_script", { kind: "literal", value: 2 }, ["in", "gain"])],
+        [{ kind: "removePort", objectId: "staging_script", family: "in", name: "gain" }],
+        [{ kind: "setMathSource", objectId: math, source: "y=x*3" }],
+        [write(doc, { kind: "literal", value: 3 }, ["rate"])],
+        [{ kind: "renameVariable", address: addr(doc, "rate"), name: "pace" }],
+        [{ kind: "clearSlot", address: addr(doc, "pace") }],
+        [{ kind: "createObject", object: createLayer("layer_a", "layer_a") }],
+        [write(text, { kind: "literal", value: "layer_a" }, ["view", "layer"])],
+        [{ kind: "deleteObject", objectId: "staging_poly", force: true }],
+      ];
+      let state: { readonly objects: readonly GraphObject[]; readonly journal: readonly MutationJournalEntry[] } = first;
+      for (const batch of batches) {
+        const result = mutate(state.objects, batch, state.journal, stagingContext);
+        if (!result.ok) throw new Error(`${JSON.stringify(batch)}: ${result.message}`);
+        expect(graphIndexOf(state.objects), JSON.stringify(batch)).toBeUndefined();
+        state = result;
+      }
+      return slotReads;
+    });
+    expect(new Set(reads).size).toBe(1);
+    expect(reads[0]).toBeLessThan(400);
+  });
+});
