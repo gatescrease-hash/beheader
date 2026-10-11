@@ -27,6 +27,7 @@
  */
 import { displayObjects, groupOf, type CameraState, type GraphObject, type Operation } from "./engine/index.ts";
 import { groupBoundary, objectExtent, type WorldExtent } from "./render/extent.ts";
+import { gridWorldStep } from "./render/grid.ts";
 import { planMove } from "./render/interaction.ts";
 import { objectWires } from "./render/wires.ts";
 
@@ -118,7 +119,7 @@ function planTargets(objects: readonly GraphObject[], placed: readonly { readonl
   return { operations, moved, held };
 }
 
-export function planArrange(objects: readonly GraphObject[], selectedIds: readonly string[], mode: ArrangeMode, camera: CameraState): ArrangePlan {
+export function planArrange(objects: readonly GraphObject[], selectedIds: readonly string[], mode: ArrangeMode, camera: CameraState, pixelRatio: number = 1): ArrangePlan {
   const units = arrangeUnits(objects, selectedIds);
   if (units.length === 0) return { operations: [], moved: [], held: [] };
   switch (mode) {
@@ -129,7 +130,7 @@ export function planArrange(objects: readonly GraphObject[], selectedIds: readon
       return planTargets(objects, gridLayout(units, columns));
     }
     case "tidy": {
-      const step = 10 ** Math.floor(Math.log10(80 / camera.zoom));
+      const step = gridWorldStep(camera, pixelRatio);
       const snap = (value: number): number => Math.round(value / step) * step;
       return planTargets(objects, units.map((unit) => ({ unit, x: snap(unit.box.minX), y: snap(unit.box.minY) })));
     }

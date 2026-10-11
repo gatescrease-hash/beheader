@@ -15,7 +15,7 @@ register, and the measurements behind leaving that migration unscheduled.
 | --- | --- |
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
-| Tests | 3070 Vitest tests and 2 tooling tests pass, with 0 skipped. |
+| Tests | 3071 Vitest tests and 2 tooling tests pass, with 0 skipped. |
 | Spec | Built through section 24, except the parts section 17 postpones. |
 | Scripts | Python runs in a Pyodide worker. Groups are script nodes with members. |
 | Rule 5 | Met for every committed batch. A refusal and a list with no index still cost the whole document. |

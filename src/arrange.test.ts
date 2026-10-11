@@ -11,6 +11,7 @@ import { describe, expect, it } from "vitest";
 import { createEmptyDocument, type GraphObject } from "./engine/index.ts";
 import { objectExtent } from "./render/extent.ts";
 import { initialAppState, submitLine, withSelection, type AppState, type Viewport } from "./main.ts";
+import { planArrange } from "./arrange.ts";
 
 const VIEWPORT: Viewport = { width: 800, height: 600 };
 
@@ -79,6 +80,13 @@ describe("arrange grid and tidy", () => {
     const arranged = typed(initialAppState(createEmptyDocument()), "circle x=13 y=27 r=10", "arrange tidy");
     expect(box(arranged, "circle_1").minX % 10).toBe(0);
     expect(box(arranged, "circle_1").minY % 10).toBe(0);
+  });
+
+  it("snaps to the grid a screen of twice the density shows, where a zoom of 1 gives a step of 100", () => {
+    const state = typed(initialAppState(createEmptyDocument()), "circle x=130 y=270 r=10");
+    const plan = planArrange(state.document.objects, [], "tidy", state.document.camera, 2);
+    const writes = Object.fromEntries(plan.operations.flatMap((operation) => (operation.kind === "setSlot" ? [[operation.address.path.join("."), operation.slot.kind === "literal" ? operation.slot.value : undefined]] : [])));
+    expect(writes).toEqual({ "origin.x": 110, "origin.y": 310 });
   });
 });
 

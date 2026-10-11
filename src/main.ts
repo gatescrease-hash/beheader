@@ -150,6 +150,12 @@ import {
 export interface Viewport {
   readonly width: number;
   readonly height: number;
+  /**
+   * Device pixels for each CSS pixel. The camera counts device pixels, so the
+   * grid the canvas shows, which `arrange tidy` snaps to, depends on it. A
+   * caller with no screen leaves it out, and it reads as 1.
+   */
+  readonly pixelRatio?: number;
 }
 
 export interface PanelUiState {
@@ -477,7 +483,7 @@ export function performEffect(effect: CommandEffect, state: AppState, viewport: 
     case "arrange":
     case "align":
     case "distribute":
-      return applyArrangement(state, effect, context);
+      return applyArrangement(state, effect, context, viewport.pixelRatio ?? 1);
     case "copy":
     case "cut":
       return copyToClipboard(state, effect.cells, effect.kind === "cut", context);
@@ -828,6 +834,7 @@ function applyArrangement(
   state: AppState,
   effect: Extract<CommandEffect, { kind: "arrange" | "align" | "distribute" }>,
   context: EvalContext,
+  pixelRatio: number,
 ): AppTransition {
   const { objects } = state.document;
   const selected = state.interaction.selectedObjectIds;
@@ -837,7 +844,7 @@ function applyArrangement(
     return transition(logLine(state, `${label} works on a selection of ${needed} or more objects — ${selected.length} selected`), true);
   }
   const plan = effect.kind === "arrange"
-    ? planArrange(objects, selected, effect.mode, state.document.camera)
+    ? planArrange(objects, selected, effect.mode, state.document.camera, pixelRatio)
     : effect.kind === "align" ? planAlign(objects, selected, effect.edge) : planDistribute(objects, selected, effect.axis);
   const heldLine = plan.held.length === 0 ? [] : [`left ${plan.held.length === 1 ? "1 where a formula holds it" : `${plan.held.length} where formulas hold them`}: ${plan.held.join(", ")}`];
   if (plan.operations.length === 0) {
@@ -1992,7 +1999,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   let mathField: HTMLElement & { value: string } | undefined;
   const imageBitmaps = createImageBitmapCache(() => paint());
 
-  const viewport = (): Viewport => ({ width: canvas.width, height: canvas.height });
+  const viewport = (): Viewport => ({ width: canvas.width, height: canvas.height, pixelRatio: window.devicePixelRatio > 0 ? window.devicePixelRatio : 1 });
 
   const screenPointOf = (event: MouseEvent): ScreenPoint => {
     const bounds = canvas.getBoundingClientRect();
