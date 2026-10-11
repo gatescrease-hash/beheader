@@ -520,6 +520,17 @@ because `#REF` is what a spreadsheet operator expects.
 **Drawing.** Resizable columns and rows with grid lines. Numbers align right. Strings align
 left. The selected cell edits in place.
 
+**A number fits its cell.** A number too wide for its column shows fewer
+decimals, rounding the last one kept, for as long as the text still says how
+large the number is: every digit before the point for a number of 1 or more, and
+two significant digits for a smaller one. Past that it shows in exponent form
+with fewer digits, and as a last resort the cell fills with # marks. A cell in a
+fixed format, two decimals or a percentage, goes straight to the marks, because
+dropping its digits would change the format the operator chose. The stored value
+keeps every digit, and the editor and the panel show all of them. A spreadsheet
+fits a number the same way in its General format, and a number clipped at the
+left edge of its cell reads as a different number.
+
 ---
 
 ## 8. The geometry primitive
@@ -1014,7 +1025,7 @@ and a series has no algebra to call on.
 **What this does not cover.** Desmos draws `x^2 + y^2 = 9` as a curve by
 sampling the plane, and it fits parameters to data with a regression. A math
 object gives numbers and draws notation, and it does neither of those. Section
-16 holds the reason a curve waits.
+17 holds the reason a curve waits.
 
 ### Display
 

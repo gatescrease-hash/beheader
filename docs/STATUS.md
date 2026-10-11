@@ -15,7 +15,7 @@ register, and the measurements behind leaving that migration unscheduled.
 | --- | --- |
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
-| Tests | 3006 Vitest tests and 2 tooling tests pass, with 0 skipped. |
+| Tests | 3009 Vitest tests and 2 tooling tests pass, with 0 skipped. |
 | Spec | Built through section 22, except the parts section 17 postpones. |
 | Scripts | Python runs in a Pyodide worker. Groups are script nodes with members. |
 | Rule 5 | Met for every committed batch. A refusal and a list with no index still cost the whole document. |
@@ -182,6 +182,10 @@ covers everything it calls.
 | `renderer.ts` | The painter, the three passes it makes, and where notation inside text landed. |
 | `images.ts` | The decoded bitmap cache. |
 | `editor.ts` | Where the in place editor goes, and how it looks. |
+| `table-layout.ts` | Table geometry, cell styles, and the text a number takes to fit its cell. |
+| `grid.ts` | The grid the canvas shows at each zoom, and its step in world units. |
+| `layer-manager.ts` | The layer tree in the sidebar, and the edits it routes to the mutation channel. |
+| `rich-text.ts` | The text editor that shows emphasis and keeps embedded expressions whole. |
 | `interaction.ts` | Pointer state to mutation calls: select, drag, resize, bend and the selection box. |
 | `marquee.ts` | What a selection box takes, window or crossing, and how it draws. |
 | `panel.ts` | Where a properties panel sits beside its object. |

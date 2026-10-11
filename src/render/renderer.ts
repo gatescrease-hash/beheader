@@ -99,7 +99,7 @@ import { handlePoint, hasResizeHandles, RESIZE_HANDLES, RESIZE_HANDLE_SIZE_SCREE
 import { EDGE_GRIP_SIZE_SCREEN, hasPathGrips, pathGrips, sameGrip, VERTEX_GRIP_SIZE_SCREEN, type PathGrip } from "./grips.ts";
 import { layOutText } from "./measure.ts";
 import { asPointArray, readBoolean, readNumber, readShapeStyle, readText, SCRIPT_HEADER_HEIGHT, SCRIPT_PORT_ROW_HEIGHT, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";
-import { tableLayout, cellStyle, formattedCell } from "./table-layout.ts";
+import { tableLayout, cellStyle, fittedCellNumber } from "./table-layout.ts";
 import { displayObjects } from "../engine/index.ts";
 import { textBoxSize } from "./textbox.ts";
 import { GROUP_TAB_HEIGHT, groupBoundary, groupTabWidth, objectExtent } from "./extent.ts";
@@ -839,7 +839,12 @@ function drawCellText(ctx: DrawingContext, value: Value | undefined, cellLeft: n
   if (value === undefined) {
     return;
   }
-  const formatted = formattedCell(value, style.format) ?? formatCellValue(value);
+  // A number fits the room between the two paddings, so it never shows its
+  // tail clipped from the left. The font is already the cell's own.
+  const room = width - 2 * TABLE_CELL_TEXT_PADDING;
+  const formatted = typeof value === "number"
+    ? fittedCellNumber(value, style.format, (text) => ctx.measureText(text).width <= room)
+    : formatCellValue(value);
   if (formatted === null) {
     return;
   }
