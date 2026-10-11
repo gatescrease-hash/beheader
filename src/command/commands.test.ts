@@ -821,6 +821,7 @@ describe("every registry command reaches a handler", () => {
     "group polygon_1,table_x",
     "ungroup group_1",
     "duplicate rect_1",
+    "snap on",
     "upstream polygon_1",
     "downstream polygon_1 1",
     "orphans",

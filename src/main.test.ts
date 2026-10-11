@@ -2718,3 +2718,31 @@ describe("selecting many, and the keys of the canvas", () => {
     expect(boxed.document.journal).toBe(state.document.journal);
   });
 });
+
+describe("snapping a drag", () => {
+  function pair(): AppState {
+    let state = typed(opened(), "rect x=0 y=0 w=20 h=20");
+    return typed(state, "rect x=100 y=200 w=20 h=20");
+  }
+
+  it("snaps a drag onto a neighbour's edge when the DOM half passes snap settings, and draws guides from the drag", () => {
+    const state = pair();
+    const camera = state.document.camera;
+    let dragged = pointerDownAt(state, worldToScreen(camera, { x: 10, y: 0 }), VIEWPORT).state;
+    dragged = pointerMoveTo(dragged, worldToScreen(camera, { x: 88, y: 50 }), undefined, { gridStep: 0 });
+    expect(numberAt(objectNamed(dragged, "rect_1"), ["origin", "x"])).toBeCloseTo(80, 9);
+    expect(dragged.interaction.drag?.guides.map((guide) => guide.at)).toEqual([100]);
+    dragged = pointerUpNow(dragged);
+    expect(numberAt(objectNamed(dragged, "rect_1"), ["origin", "x"])).toBeCloseTo(80, 9);
+    expect(dragged.interaction.drag).toBeUndefined();
+  });
+
+  it("turns snapping off and on with the snap command, as view state that a load keeps", () => {
+    const off = typed(pair(), "snap off");
+    expect(off.snap).toBe(false);
+    expect(off.log.at(-1)).toBe("a drag moves freely");
+    expect(typed(off, "snap on").snap).toBe(true);
+    expect(submitLine(off, "snap sideways", VIEWPORT).refused).toBe(true);
+    expect(replaceDocument(off, createEmptyDocument(), "opened").snap).toBe(false);
+  });
+});

@@ -234,6 +234,11 @@ export interface GroupCommand {
   readonly members: readonly string[];
 }
 
+export interface SnapCommand {
+  readonly kind: "snap";
+  readonly state: string;
+}
+
 export interface DuplicateCommand {
   readonly kind: "duplicate";
   readonly targets: readonly string[];
@@ -347,6 +352,7 @@ export type Command =
   | RedoCommand
   | GroupCommand
   | DuplicateCommand
+  | SnapCommand
   | UngroupCommand
   | GraphWalkCommand
   | OrphansCommand
@@ -878,6 +884,14 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
     named: [],
     flags: [],
     build: (args) => ({ kind: "wires", state: textArgument(args, "state") }),
+  },
+  {
+    name: "snap",
+    usage: "snap on|off",
+    positional: [text("state")],
+    named: [],
+    flags: [],
+    build: (args) => ({ kind: "snap", state: textArgument(args, "state") }),
   },
   {
     name: "arrange",

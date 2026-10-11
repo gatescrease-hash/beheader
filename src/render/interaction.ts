@@ -50,6 +50,7 @@
 import {
   type Address,
   ancestorGroups,
+  displayObjects,
   groupDescendants,
   type CameraState,
   type DerivedSlot,
@@ -79,12 +80,13 @@ import {
   TEXT_WIDTH_PATH,
 } from "../engine/index.ts";
 import { screenToWorld, type ScreenPoint, type WorldPoint } from "./camera.ts";
-import { objectExtent, type WorldExtent } from "./extent.ts";
+import { groupBoundary, objectExtent, type WorldExtent } from "./extent.ts";
 import { constrainBoxToRatio, handleEdges, hasResizeHandles, resizeBox, resizeHandleAt, type ResizeHandle } from "./handles.ts";
 import { bulgeForGrabbedMidpoint, gripAt, hasPathGrips, sameGrip, type PathGrip } from "./grips.ts";
 import { hitTest, pathSegmentUnder } from "./hittest.ts";
 import { marqueeBox, marqueeMode, marqueeUnits } from "./marquee.ts";
-import { readBoolean } from "./slots.ts";
+import { readBoolean, readNumber } from "./slots.ts";
+import { SNAP_TOLERANCE_SCREEN_PIXELS, snapTargets, snapTravel, type Guide, type SnapTargets } from "./snap.ts";
 
 /**
  * How far a press travels, in screen pixels, before it drags or draws a box.
@@ -111,6 +113,19 @@ export interface DragState {
    * selects that object by itself, and "out" takes it out of the selection.
    */
   readonly click: { readonly objectId: string; readonly selects: "alone" | "out" } | undefined;
+  /** The world point of the press, which the travel of the pointer counts from. */
+  readonly pressWorldPoint: WorldPoint;
+  /** The travel the drag has written so far, which a snap makes differ from the travel of the pointer. */
+  readonly applied: { readonly x: number; readonly y: number };
+  /** What the drag snaps against, worked out once at the press. */
+  readonly snap: SnapTargets | undefined;
+  /** The lines the moved box sits on now, which the canvas draws as guides. */
+  readonly guides: readonly Guide[];
+}
+
+/** How a move snaps, when it snaps at all: the step of the grid the canvas shows, in world units. */
+export interface SnapSettings {
+  readonly gridStep: number;
 }
 
 /** A selection box on its way, in world units. */
@@ -219,7 +234,7 @@ export function pointerDown(
     return {
       ...INITIAL_INTERACTION_STATE,
       selectedObjectIds: [object.id],
-      drag: { objectId: object.id, lastWorldPoint: worldPoint, emittedNotices: [], vertices: segment, carried: [], moved: false, click: undefined },
+      drag: { ...pressAt(worldPoint, pointSnapTargets(object, segment, objects)), objectId: object.id, vertices: segment, carried: [], click: undefined },
     };
   }
   const already = state.selectedObjectIds.includes(object.id);
@@ -229,15 +244,14 @@ export function pointerDown(
   // is selected as well, and then that group moves it.
   const units = movingUnits(objects, selectedObjectIds);
   const lead = units.find((unit) => unit.id === object.id) ?? units.find((unit) => groupDescendants(unit.id, objects).some((member) => member.id === object.id)) ?? object;
+  const moving = units.length === 0 ? [lead] : units;
   return {
     selectedObjectIds,
     drag: {
+      ...pressAt(worldPoint, unitSnapTargets(moving, objects)),
       objectId: lead.id,
-      lastWorldPoint: worldPoint,
-      emittedNotices: [],
       vertices: everyVertexOfPath(lead),
       carried: units.filter((unit) => unit.id !== lead.id).map((unit) => unit.id),
-      moved: false,
       click: click === undefined ? undefined : { objectId: object.id, selects: click },
     },
     resize: undefined,
@@ -246,6 +260,85 @@ export function pointerDown(
     focus: undefined,
     marquee: undefined,
   };
+}
+
+/** The parts of a drag that every press starts the same way. */
+function pressAt(worldPoint: WorldPoint, snap: SnapTargets | undefined): Pick<DragState, "lastWorldPoint" | "emittedNotices" | "moved" | "pressWorldPoint" | "applied" | "snap" | "guides"> {
+  return { lastWorldPoint: worldPoint, emittedNotices: [], moved: false, pressWorldPoint: worldPoint, applied: { x: 0, y: 0 }, snap, guides: [] };
+}
+
+function unionOf(boxes: readonly (WorldExtent | undefined)[]): WorldExtent | undefined {
+  let union: WorldExtent | undefined;
+  for (const box of boxes) {
+    if (box === undefined) continue;
+    union = union === undefined
+      ? box
+      : { minX: Math.min(union.minX, box.minX), minY: Math.min(union.minY, box.minY), maxX: Math.max(union.maxX, box.maxX), maxY: Math.max(union.maxY, box.maxY) };
+  }
+  return union;
+}
+
+/**
+ * The boxes a drag lines up with: every object on show that the drag leaves
+ * where it is, a group by the outline it draws. A group around a moving object
+ * offers nothing, because its outline stretches with the object.
+ */
+function standingBoxes(objects: readonly GraphObject[], moving: ReadonlySet<string>): readonly WorldExtent[] {
+  const byId = new Map(objects.map((object) => [object.id, object]));
+  const stretching = new Set<string>();
+  for (const id of moving) {
+    const object = byId.get(id);
+    if (object !== undefined) for (const group of ancestorGroups(object, (groupId) => byId.get(groupId))) stretching.add(group.id);
+  }
+  return displayObjects(objects)
+    .filter((object) => !moving.has(object.id) && !stretching.has(object.id))
+    .map((object) => (object.type === "group" ? groupBoundary(object, objects) : objectExtent(object)))
+    .filter((box): box is WorldExtent => box !== undefined);
+}
+
+/**
+ * What a drag of whole objects snaps against. A moving group counts by the box
+ * its members fill, because its outline is padding around them.
+ */
+function unitSnapTargets(units: readonly GraphObject[], objects: readonly GraphObject[]): SnapTargets | undefined {
+  const moving = new Set<string>();
+  const boxes: (WorldExtent | undefined)[] = [];
+  for (const unit of units) {
+    moving.add(unit.id);
+    const members = groupDescendants(unit.id, objects);
+    for (const member of members) moving.add(member.id);
+    const content = unionOf(members.filter((member) => member.type !== "group").map(objectExtent));
+    boxes.push(unit.type === "group" ? content ?? objectExtent(unit) : objectExtent(unit));
+  }
+  const box = unionOf(boxes);
+  if (box === undefined) {
+    return undefined;
+  }
+  const writes = (deltaX: number, deltaY: number): boolean => units.some((unit) => planMove(unit, objects, deltaX, deltaY).operations.length > 0);
+  return snapTargets(box, standingBoxes(objects, moving), writes(1, 0), writes(0, 1));
+}
+
+/**
+ * What a drag of some vertices of a path snaps against: the box of those
+ * points, against everything else on show and the other vertices of the same
+ * path, so a path can square up against itself.
+ */
+function pointSnapTargets(object: GraphObject, vertices: readonly number[], objects: readonly GraphObject[]): SnapTargets | undefined {
+  const pointAt = (index: number): WorldExtent | undefined => {
+    const x = readNumber(object, vertexXPath(index));
+    const y = readNumber(object, vertexYPath(index));
+    return x === undefined || y === undefined ? undefined : { minX: x, minY: y, maxX: x, maxY: y };
+  };
+  const box = unionOf(vertices.map(pointAt));
+  if (box === undefined) {
+    return undefined;
+  }
+  const others = Array.from({ length: object.vertexCount ?? 0 }, (_unused, index) => index)
+    .filter((index) => !vertices.includes(index))
+    .map(pointAt)
+    .filter((point): point is WorldExtent => point !== undefined);
+  const writes = (deltaX: number, deltaY: number): boolean => planDrag(object, objects, deltaX, deltaY, vertices).operations.length > 0;
+  return snapTargets(box, [...standingBoxes(objects, new Set([object.id])), ...others], writes(1, 0), writes(0, 1));
 }
 
 /**
@@ -355,12 +448,10 @@ function gripGestureAt(
     return {
       selectedObjectIds: state.selectedObjectIds,
       drag: {
+        ...pressAt(screenToWorld(camera, screenPoint), pointSnapTargets(object, [grip.index], objects)),
         objectId: object.id,
-        lastWorldPoint: screenToWorld(camera, screenPoint),
-        emittedNotices: [],
         vertices: [grip.index],
         carried: [],
-        moved: false,
         click: undefined,
       },
       resize: undefined,
@@ -459,6 +550,7 @@ export function pointerMove(
   journal: readonly MutationJournalEntry[],
   camera: CameraState,
   context: EvalContext = NULL_EVAL_CONTEXT,
+  snapping?: SnapSettings,
 ): PointerMoveOutcome {
   if (state.resize !== undefined) {
     return resizeMove(state, state.resize, screenPoint, objects, journal, camera, context);
@@ -487,15 +579,23 @@ export function pointerMove(
   }
 
   const worldPoint = screenToWorld(camera, screenPoint);
-  const deltaX = worldPoint.x - drag.lastWorldPoint.x;
-  const deltaY = worldPoint.y - drag.lastWorldPoint.y;
-  if (deltaX === 0 && deltaY === 0) {
+  if (worldPoint.x === drag.lastWorldPoint.x && worldPoint.y === drag.lastWorldPoint.y) {
     return { state, objects, journal, notices: [], rejection: undefined };
   }
-  // The last point stays at the press until the threshold passes, so this
-  // measures the whole travel from the press.
-  if (!drag.moved && Math.hypot(deltaX, deltaY) * camera.zoom < DRAG_THRESHOLD_SCREEN_PIXELS) {
+  const travel = { x: worldPoint.x - drag.pressWorldPoint.x, y: worldPoint.y - drag.pressWorldPoint.y };
+  if (!drag.moved && Math.hypot(travel.x, travel.y) * camera.zoom < DRAG_THRESHOLD_SCREEN_PIXELS) {
     return { state, objects, journal, notices: [], rejection: undefined };
+  }
+  // The snap works from the whole travel since the press, and the frame writes
+  // only the difference from what the drag has written already.
+  const landed = snapping !== undefined && drag.snap !== undefined
+    ? snapTravel(drag.snap, travel, SNAP_TOLERANCE_SCREEN_PIXELS / camera.zoom, snapping.gridStep)
+    : { travel, guides: [] };
+  const deltaX = landed.travel.x - drag.applied.x;
+  const deltaY = landed.travel.y - drag.applied.y;
+  const following: DragState = { ...drag, lastWorldPoint: worldPoint, moved: true, guides: landed.guides };
+  if (deltaX === 0 && deltaY === 0) {
+    return { state: { ...idle(state), drag: following }, objects, journal, notices: [], rejection: undefined };
   }
 
   const carried = drag.carried
@@ -508,7 +608,7 @@ export function pointerMove(
   const { fresh: freshNotices, widened: widenedEmittedNotices } = widenEmittedNotices(drag, plan.notices);
   const advanced: InteractionState = {
     ...idle(state),
-    drag: { ...drag, lastWorldPoint: worldPoint, emittedNotices: widenedEmittedNotices, moved: true },
+    drag: { ...following, applied: landed.travel, emittedNotices: widenedEmittedNotices },
   };
 
   if (plan.operations.length === 0) {

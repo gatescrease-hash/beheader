@@ -106,7 +106,7 @@ function tableObject(cols: number, values: readonly number[]): GraphObject {
 }
 
 function dragFromOrigin(objectId: string): InteractionState {
-  return { selectedObjectIds: [objectId], drag: { objectId, lastWorldPoint: { x: 0, y: 0 }, emittedNotices: [], vertices: undefined, carried: [], moved: false, click: undefined }, resize: undefined, bend: undefined, focus: undefined, marquee: undefined };
+  return { selectedObjectIds: [objectId], drag: { objectId, lastWorldPoint: { x: 0, y: 0 }, emittedNotices: [], vertices: undefined, carried: [], moved: false, click: undefined, pressWorldPoint: { x: 0, y: 0 }, applied: { x: 0, y: 0 }, snap: undefined, guides: [] }, resize: undefined, bend: undefined, focus: undefined, marquee: undefined };
 }
 
 describe("pointerDown — click to select, over a list of objects", () => {
@@ -114,13 +114,24 @@ describe("pointerDown — click to select, over a list of objects", () => {
     const { objects } = commit([rectObject(0, 0)]);
     const state = pointerDown(INITIAL_INTERACTION_STATE, { x: 10, y: 0 }, objects, CAMERA_IDENTITY);
     expect(state.selectedObjectIds).toEqual(["obj_1"]);
-    expect(state.drag).toEqual({ objectId: "obj_1", lastWorldPoint: { x: 10, y: 0 }, emittedNotices: [], carried: [], moved: false, click: undefined });
+    expect(state.drag).toEqual({
+      objectId: "obj_1",
+      lastWorldPoint: { x: 10, y: 0 },
+      emittedNotices: [],
+      carried: [],
+      moved: false,
+      click: undefined,
+      pressWorldPoint: { x: 10, y: 0 },
+      applied: { x: 0, y: 0 },
+      snap: { box: { minX: 0, minY: 0, maxX: 20, maxY: 20 }, xs: [], ys: [], freeX: true, freeY: true },
+      guides: [],
+    });
   });
 
   it("holds the object's id, not the GraphObject the hit test returned", () => {
     const { objects } = commit([rectObject(0, 0)]);
     const state = pointerDown(INITIAL_INTERACTION_STATE, { x: 10, y: 0 }, objects, CAMERA_IDENTITY);
-    expect(Object.keys(state.drag ?? {}).sort()).toEqual(["carried", "click", "emittedNotices", "lastWorldPoint", "moved", "objectId", "vertices"]);
+    expect(Object.keys(state.drag ?? {}).sort()).toEqual(["applied", "carried", "click", "emittedNotices", "guides", "lastWorldPoint", "moved", "objectId", "pressWorldPoint", "snap", "vertices"]);
     expect(state.drag?.objectId).toBe(objects[0]?.id);
   });
 
@@ -200,7 +211,7 @@ describe("pointerUp and deselect", () => {
   });
 
   it("pointerUp keeps a MULTI-object selection untouched, ending only the drag", () => {
-    const state: InteractionState = { selectedObjectIds: ["obj_1", "obj_2"], drag: { objectId: "obj_1", lastWorldPoint: { x: 0, y: 0 }, emittedNotices: [], vertices: undefined, carried: [], moved: false, click: undefined }, resize: undefined, bend: undefined, focus: undefined, marquee: undefined };
+    const state: InteractionState = { selectedObjectIds: ["obj_1", "obj_2"], drag: { objectId: "obj_1", lastWorldPoint: { x: 0, y: 0 }, emittedNotices: [], vertices: undefined, carried: [], moved: false, click: undefined, pressWorldPoint: { x: 0, y: 0 }, applied: { x: 0, y: 0 }, snap: undefined, guides: [] }, resize: undefined, bend: undefined, focus: undefined, marquee: undefined };
     expect(pointerUp(state)).toEqual({ selectedObjectIds: ["obj_1", "obj_2"], drag: undefined, resize: undefined, bend: undefined, focus: undefined, marquee: undefined });
   });
 
@@ -390,7 +401,7 @@ describe("a drag works per component, never all or nothing", () => {
     // everyVertexOfPath gives when the object has no origin and no vertices.
     const state: InteractionState = {
       selectedObjectIds: ["obj_2"],
-      drag: { objectId: "obj_2", lastWorldPoint: { x: 0, y: 0 }, emittedNotices: [], vertices: [], carried: [], moved: false, click: undefined },
+      drag: { objectId: "obj_2", lastWorldPoint: { x: 0, y: 0 }, emittedNotices: [], vertices: [], carried: [], moved: false, click: undefined, pressWorldPoint: { x: 0, y: 0 }, applied: { x: 0, y: 0 }, snap: undefined, guides: [] },
       resize: undefined, bend: undefined, focus: undefined, marquee: undefined,
     };
     const outcome = pointerMove(state, { x: 5, y: 5 }, objects, journal, CAMERA_IDENTITY);
@@ -1262,5 +1273,71 @@ describe("planNudge and movingUnits, the units an arrow key and a drag move", ()
   it("leaves out the variable holder and the layers, which have no place to move", () => {
     const { objects } = commit([rectNamed("obj_1", "rect_1", 0, 0), { id: "obj_l", name: "layer_1", type: "layer", slots: {} }]);
     expect(movingUnits(objects, ["obj_l", "obj_1"]).map((unit) => unit.id)).toEqual(["obj_1"]);
+  });
+});
+
+describe("a drag snaps to the lines around it when snap settings are given", () => {
+  // rect_1 spans 0..20 on both axes, and rect_2 spans x 100..120 and y 200..220.
+  const pair = () => commit([rectNamed("obj_1", "rect_1", 0, 0), rectNamed("obj_3", "rect_2", 100, 200)]);
+  const NO_GRID = { gridStep: 0 };
+
+  it("moves the rest of the way onto a neighbour's edge, and reports the guide", () => {
+    const { objects, journal } = pair();
+    const pressed = pointerDown(INITIAL_INTERACTION_STATE, { x: 10, y: 0 }, objects, CAMERA_IDENTITY);
+    const moved = pointerMove(pressed, { x: 88, y: 50 }, objects, journal, CAMERA_IDENTITY, undefined, NO_GRID);
+    expect(slotValue(moved.objects, "obj_1", "origin.x")).toBe(80);
+    expect(slotValue(moved.objects, "obj_1", "origin.y")).toBe(50);
+    expect(moved.state.drag?.guides).toEqual([{ axis: "x", at: 100, from: 50, to: 220 }]);
+  });
+
+  it("follows the pointer exactly with no snap settings", () => {
+    const { objects, journal } = pair();
+    const pressed = pointerDown(INITIAL_INTERACTION_STATE, { x: 10, y: 0 }, objects, CAMERA_IDENTITY);
+    expect(slotValue(pointerMove(pressed, { x: 88, y: 50 }, objects, journal, CAMERA_IDENTITY).objects, "obj_1", "origin.x")).toBe(78);
+  });
+
+  it("lets go of the line once the pointer moves out of reach, because it measures from the press", () => {
+    const { objects, journal } = pair();
+    const pressed = pointerDown(INITIAL_INTERACTION_STATE, { x: 10, y: 0 }, objects, CAMERA_IDENTITY);
+    const held = pointerMove(pressed, { x: 88, y: 50 }, objects, journal, CAMERA_IDENTITY, undefined, NO_GRID);
+    const released = pointerMove(held.state, { x: 80, y: 50 }, held.objects, held.journal, CAMERA_IDENTITY, undefined, NO_GRID);
+    expect(slotValue(released.objects, "obj_1", "origin.x")).toBe(70);
+    expect(released.state.drag?.guides).toEqual([]);
+  });
+
+  it("snaps the top left corner to the grid when no object is in reach", () => {
+    const { objects, journal } = pair();
+    const pressed = pointerDown(INITIAL_INTERACTION_STATE, { x: 10, y: 0 }, objects, CAMERA_IDENTITY);
+    const moved = pointerMove(pressed, { x: 42, y: 33 }, objects, journal, CAMERA_IDENTITY, undefined, { gridStep: 10 });
+    expect([slotValue(moved.objects, "obj_1", "origin.x"), slotValue(moved.objects, "obj_1", "origin.y")]).toEqual([30, 30]);
+  });
+
+  it("leaves an axis a formula holds where it is, with no snap and no guide along it", () => {
+    const { objects, journal } = commit([
+      rectNamed("obj_1", "rect_1", 0, 0, { "origin.x": { kind: "formula", ast: { type: "literal", value: 0 }, value: null } }),
+      rectNamed("obj_3", "rect_2", 100, 200),
+    ]);
+    const pressed = pointerDown(INITIAL_INTERACTION_STATE, { x: 10, y: 0 }, objects, CAMERA_IDENTITY);
+    const moved = pointerMove(pressed, { x: 88, y: 178 }, objects, journal, CAMERA_IDENTITY, undefined, NO_GRID);
+    expect(slotValue(moved.objects, "obj_1", "origin.y")).toBe(180);
+    expect(moved.state.drag?.guides.map((guide) => guide.axis)).toEqual(["y"]);
+  });
+
+  it("snaps a vertex by its grip to another vertex of the same path, so a path squares up against itself", () => {
+    const { objects, journal } = commit([polylineObject()]);
+    const state: InteractionState = { ...INITIAL_INTERACTION_STATE, selectedObjectIds: ["obj_1"] };
+    const grabbed = pointerDown(state, { x: 100, y: 100 }, objects, CAMERA_IDENTITY);
+    expect(grabbed.drag?.vertices).toEqual([2]);
+    const moved = pointerMove(grabbed, { x: 4, y: 97 }, objects, journal, CAMERA_IDENTITY, undefined, NO_GRID);
+    expect(vertexAt(moved.objects, 2)).toEqual({ x: 0, y: 97 });
+  });
+
+  it("lines up a drag of several objects by the box they fill together", () => {
+    const { objects, journal } = commit([rectNamed("obj_1", "rect_1", 0, 0), rectNamed("obj_2", "rect_3", 40, 0), rectNamed("obj_3", "rect_2", 100, 200)]);
+    const pressed = pointerDown(selecting(["obj_1", "obj_2"]), { x: 10, y: 0 }, objects, CAMERA_IDENTITY);
+    // The pair spans 0..60, so a travel of 41 puts its right edge at 101, one past rect_2's left edge.
+    const moved = pointerMove(pressed, { x: 51, y: 100 }, objects, journal, CAMERA_IDENTITY, undefined, NO_GRID);
+    expect(slotValue(moved.objects, "obj_1", "origin.x")).toBe(40);
+    expect(slotValue(moved.objects, "obj_2", "origin.x")).toBe(80);
   });
 });

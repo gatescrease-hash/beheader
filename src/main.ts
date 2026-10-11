@@ -103,10 +103,12 @@ import {
   resizeHandleUnder,
   INITIAL_INTERACTION_STATE,
   type InteractionState,
+  type SnapSettings,
 } from "./render/interaction.ts";
 import { resizeCursor } from "./render/handles.ts";
 import { gridGeometry, gridWorldStep } from "./render/grid.ts";
 import { canvasUnits, drawMarquee } from "./render/marquee.ts";
+import { drawGuides } from "./render/snap.ts";
 import { tableLayout, tableCellAt, cellStyle } from "./render/table-layout.ts";
 import { writeLayerTree } from "./render/layer-manager.ts";
 import { createRichText, insertVariable, type RichTextElement } from "./render/rich-text.ts";
@@ -185,6 +187,8 @@ export interface AppState {
    * repeats of a held key fold into one journal entry against it.
    */
   readonly nudgeBase: GestureBase | undefined;
+  /** Whether a drag snaps to the lines around it, which `snap on|off` sets. View state, which no save carries. */
+  readonly snap: boolean;
 }
 
 export interface WiresState {
@@ -253,6 +257,7 @@ export function initialAppState(
     clipboard: undefined,
     pasteCount: 0,
     nudgeBase: undefined,
+    snap: true,
   };
 }
 
@@ -464,6 +469,8 @@ export function performEffect(effect: CommandEffect, state: AppState, viewport: 
       return planExport(state, effect);
     case "wires":
       return transition({ ...state, wires: { visible: effect.visible, selected: effect.visible ? state.wires.selected : undefined } });
+    case "snap":
+      return transition({ ...state, snap: effect.enabled });
     case "save":
       return { state: { ...state, savedJournal: state.document.journal }, fileRequest: "save", refused: false };
     case "load":
@@ -934,6 +941,7 @@ export function pointerMoveTo(
   state: AppState,
   screenPoint: ScreenPoint,
   context: EvalContext = NULL_EVAL_CONTEXT,
+  snapping?: SnapSettings,
 ): AppState {
   const outcome = pointerMove(
     state.interaction,
@@ -942,6 +950,7 @@ export function pointerMoveTo(
     state.document.journal,
     state.document.camera,
     context,
+    snapping,
   );
   const moved: AppState = {
     ...state,
@@ -1014,7 +1023,7 @@ export function replaceDocument(
   savedJournal: readonly MutationJournalEntry[] | null = document.journal,
 ): AppState {
   const opened = initialAppState(document, state.log, context, savedJournal);
-  return withLog({ ...opened, wires: { visible: state.wires.visible, selected: undefined }, clipboard: state.clipboard }, [line]);
+  return withLog({ ...opened, wires: { visible: state.wires.visible, selected: undefined }, clipboard: state.clipboard, snap: state.snap }, [line]);
 }
 
 /** True when the document holds a change made since the last save or load. */
@@ -1934,6 +1943,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     if (marquee?.drawn === true) {
       drawMarquee(context, state.document.camera, marquee.start, marquee.end, ratio);
     }
+    drawGuides(context, state.document.camera, state.interaction.drag?.guides ?? [], ratio);
     updateWirePanel();
     wiresToggle?.setAttribute("aria-pressed", String(state.wires.visible));
     updatePanels(panelledIds);
@@ -3470,7 +3480,9 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     // button is held, so a drag keeps the overlay as it was at the press.
     hoveredObjectId = state.wires.visible && event.buttons === 0 ? hitTest(point, state.document.objects, state.document.camera)?.id : undefined;
     if (event.buttons === 0 && beginRewire(state, point) !== undefined) canvas.style.cursor = "grab";
-    apply(pointerMoveTo(state, point, evalContext));
+    // Alt drags freely, and snapping follows the grid the canvas shows now.
+    const snapping = state.snap && !event.altKey ? { gridStep: gridWorldStep(state.document.camera, window.devicePixelRatio > 0 ? window.devicePixelRatio : 1) } : undefined;
+    apply(pointerMoveTo(state, point, evalContext, snapping));
   });
 
   canvas.addEventListener("pointerleave", () => {

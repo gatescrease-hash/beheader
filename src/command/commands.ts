@@ -193,6 +193,7 @@ export type CommandEffect =
   | { readonly kind: "save" }
   | { readonly kind: "load" }
   | { readonly kind: "wires"; readonly visible: boolean }
+  | { readonly kind: "snap"; readonly enabled: boolean }
   | { readonly kind: "arrange"; readonly mode: "flow" | "grid" | "tidy" }
   | { readonly kind: "align"; readonly edge: "left" | "right" | "top" | "bottom" | "centerx" | "centery" }
   | { readonly kind: "distribute"; readonly axis: "x" | "y" }
@@ -388,6 +389,13 @@ export function executeCommand(command: Command, document: Document, context: Ev
       }
       return { ok: true, document, lines: [state === "on" ? "the dependency overlay is on" : "the dependency overlay is off"], effect: { kind: "wires", visible: state === "on" } };
     }
+    case "snap": {
+      const state = command.state.toLowerCase();
+      if (state !== "on" && state !== "off") {
+        return { ok: false, message: `snap takes on or off, got "${command.state}" — usage: snap on|off` };
+      }
+      return { ok: true, document, lines: [state === "on" ? "a drag snaps to the lines around it" : "a drag moves freely"], effect: { kind: "snap", enabled: state === "on" } };
+    }
     case "undo":
       return { ok: true, document, lines: [], effect: { kind: "undo" } };
     case "redo":
@@ -438,7 +446,7 @@ export const COMMANDS_WITH_HANDLERS: readonly string[] = [
   "group",
   "ungroup",
   "duplicate",
-  "upstream", "downstream", "orphans", "broken", "find", "wires", "arrange", "align", "distribute", "copy", "cut", "paste", "import", "export",
+  "upstream", "downstream", "orphans", "broken", "find", "wires", "snap", "arrange", "align", "distribute", "copy", "cut", "paste", "import", "export",
 ];
 
 interface LiteralSlotDeclaration {

@@ -1554,6 +1554,39 @@ another copy reads that copy. The copies become the selection, so a second
 Ctrl+D steps on again. The clipboard keeps what it held, because a duplicate is
 not a copy the operator asked to keep.
 
+### Snapping
+
+**A drag snaps to the lines around it.** What moves has a box, and the box
+offers three lines across each axis: its two edges and its centre. Every other
+object on show offers the same lines of its own box, and a group offers the
+outline it draws. When a line of the moving box comes within six screen pixels
+of one of those, the drag goes the rest of the way, so the objects land exactly
+on the line, and a guide draws along the line across both boxes while it holds.
+
+**With no object in reach, the corner snaps to the grid.** The top left corner
+of the moving box snaps to the grid the canvas shows, the grid `arrange tidy`
+snaps to, within the same distance. An object wins over the grid, because lining
+up with a neighbour says more than a round number does. The grid draws no guide,
+because it is on screen already.
+
+**A snap holds only while the pointer is near.** The drag works out where the
+box would stand from the box at the press plus the whole travel of the pointer,
+and snaps that. So a pointer that moves out of reach leaves the line. A snap of
+where the last frame left the box would hold it on the line for good, because
+every small step after it lands back within reach.
+
+**What snaps.** A drag of objects, one or many. A drag of a vertex by its grip,
+or of a segment by shift, snaps the box of the points it moves, and the other
+vertices of the same path offer their positions as lines, so a path can square
+up against itself. A resize, a bend and an arrow key move by amounts the
+operator gives them, and do not snap. An axis along which a formula holds every
+moving position neither snaps nor shows a guide, because the drag writes nothing
+along it.
+
+**Alt drags freely.** Holding Alt turns snapping off for as long as it is held.
+`snap off` turns it off until `snap on`. The setting is view state, like the
+grid toggle, so no save carries it and no undo steps through it.
+
 ---
 
 ## 15. The command line
@@ -1594,6 +1627,7 @@ image x=0 y=0
 group circle_1,rect_1
 ungroup group_1 [force]
 duplicate circle_1,rect_1
+snap on|off
 
 link polygon_1.origin.x table_x.A1
 unlink polygon_1.origin.x

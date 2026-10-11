@@ -15,11 +15,11 @@ register, and the measurements behind leaving that migration unscheduled.
 | --- | --- |
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
-| Tests | 3009 Vitest tests and 2 tooling tests pass, with 0 skipped. |
+| Tests | 3027 Vitest tests and 2 tooling tests pass, with 0 skipped. |
 | Spec | Built through section 22, except the parts section 17 postpones. |
 | Scripts | Python runs in a Pyodide worker. Groups are script nodes with members. |
 | Rule 5 | Met for every committed batch. A refusal and a list with no index still cost the whole document. |
-| Selection | A box selects by window or crossing, a drag moves the whole selection, and Ctrl+A, the arrows, Delete and Ctrl+D act on it. |
+| Selection | A box selects by window or crossing, a drag moves the whole selection and snaps, and Ctrl+A, the arrows, Delete and Ctrl+D act on it. |
 | Workspace | Compact typography, a profile helmet, in-row style source controls, and full, compact and hidden sidebar modes with pointer and keyboard resizing. |
 
 ### How to run it
@@ -119,7 +119,7 @@ covers everything it calls.
 | `vite.config.ts` | Dev server, production build, the Pyodide assets, and the Vitest settings. |
 | `tools/direct-edit-check.cjs` | Browser checks for the layers, panels, tables and rich text of section 18. |
 | `tools/export-check.cjs` | Browser checks that an exported raster carries its notation, at its scale, and that the vector form parses. |
-| `tools/selection-check.cjs` | Browser checks for selection boxes, a drag of many, and the keys of the canvas. |
+| `tools/selection-check.cjs` | Browser checks for selection boxes, a drag of many, snapping, and the keys of the canvas. |
 | `tools/prose-check.mjs` | The prose checker that enforces `docs/STYLE.md`. |
 
 ### `src/engine/` - the pure core
@@ -188,6 +188,7 @@ covers everything it calls.
 | `rich-text.ts` | The text editor that shows emphasis and keeps embedded expressions whole. |
 | `interaction.ts` | Pointer state to mutation calls: select, drag, resize, bend and the selection box. |
 | `marquee.ts` | What a selection box takes, window or crossing, and how it draws. |
+| `snap.ts` | Where a drag lands near the lines of other objects and the grid, and the guides it draws. |
 | `panel.ts` | Where a properties panel sits beside its object. |
 | `drawing.ts` | The part of Canvas2D the renderer draws through, which both drawing backends implement. |
 | `svg-context.ts` | The second drawing backend, which writes what the renderer draws as an SVG picture. |

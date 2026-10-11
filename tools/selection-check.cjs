@@ -172,8 +172,28 @@ const fs = require('node:fs');
       assert.equal(await page.evaluate(() => document.querySelectorAll('.object-item').length), 1, 'and leaves the table');
     }
 
+    // Snapping: rect_1 spans 100..180 and rect_2 spans 300..380. A travel of 197
+    // puts the left edge of rect_1 at 297, within reach of rect_2's left edge.
+    {
+      const { page, run, at, drag, slot } = await fresh();
+      await run('rect x=100 y=100 w=80 h=60');
+      await run('rect x=300 y=300 w=80 h=60');
+      await drag(at(140, 100), at(337, 153), { pause: () => page.screenshot({ path: 'dist/selection-snap.png' }) });
+      assert.equal(await slot('rect_1', 'origin.x'), '300', 'a drag snaps onto a neighbour edge');
+      assert.equal(await slot('rect_1', 'origin.y'), '150', 'and onto the grid along the other axis');
+      await page.keyboard.down('Alt');
+      await drag(at(340, 150), at(343, 157));
+      await page.keyboard.up('Alt');
+      assert.equal(await slot('rect_1', 'origin.x'), '303', 'Alt drags freely');
+      assert.equal(await slot('rect_1', 'origin.y'), '157');
+      await run('snap off');
+      await drag(at(343, 157), at(340, 151));
+      assert.equal(await slot('rect_1', 'origin.x'), '300');
+      assert.equal(await slot('rect_1', 'origin.y'), '151', 'snap off drags freely');
+    }
+
     assert.deepEqual(errors, []);
-    console.log('Selection checks passed: window and crossing boxes, a drag of two, click to pick, Ctrl+A, arrows, a held arrow as one undo, Ctrl+D, Delete, a held Backspace, and Delete over a cell.');
+    console.log('Selection checks passed: window and crossing boxes, a drag of two, click to pick, Ctrl+A, arrows, a held arrow as one undo, Ctrl+D, Delete, a held Backspace, Delete over a cell, and snapping.');
   } finally {
     await browser.close();
   }
