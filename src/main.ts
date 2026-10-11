@@ -113,6 +113,7 @@ import { edgeShape, type EdgeShape, type PathGrip } from "./render/grips.ts";
 import { createImageBitmapCache, decodeBitmap } from "./render/images.ts";
 import { readNumber } from "./render/slots.ts";
 import "mathlive";
+import { convertLatexToMathMl } from "mathlive";
 import type { MathfieldElement } from "mathlive";
 import "mathlive/static.css";
 import "mathlive/fonts.css";
@@ -121,6 +122,7 @@ import { createCanvas2dTextMeasurer, createSourceTextMeasurer } from "./render/m
 import { createScriptRunner, createWorkerBackend, type WorkerLike } from "./python/runner.ts";
 import { clearRecovery, isDirty, readRecovery, writeRecovery } from "./recovery.ts";
 import { planAlign, planArrange, planDistribute } from "./arrange.ts";
+import { EXPORT_BACKGROUND, exportCamera, exportedObjects, exportFrame, exportSvg, expandMathMacros, MAX_EXPORT_PIXELS, notationItems, notationPicture } from "./render/export.ts";
 import { copyCells, copyObjects, parseDelimited, pasteCells, pasteObjects, pasteText, type ClipboardPayload } from "./command/clipboard.ts";
 import { createMathMeasurer, MATH_MACROS, mathMarkup, mathOverlayPlacement, readMathDrawnLatex, readMathLatex } from "./render/math.ts";
 import { hitTest } from "./render/hittest.ts";
@@ -193,6 +195,13 @@ export interface GestureBase {
 
 export type FileRequest = "save" | "load" | "csv";
 
+export interface ExportRequest {
+  readonly format: "png" | "svg";
+  readonly scale: number;
+  /** The objects the picture holds, already widened to the members of a selected group. */
+  readonly objectIds: readonly string[] | undefined;
+}
+
 export interface AppTransition {
   readonly state: AppState;
   readonly fileRequest: FileRequest | undefined;
@@ -204,6 +213,8 @@ export interface AppTransition {
   readonly clipboardText?: string;
   /** The corner a picked comma separated file goes to, or a new table when absent. */
   readonly importCell?: CellCorner;
+  /** A picture to draw and download, which only the DOM half can do. */
+  readonly exportRequest?: ExportRequest;
 }
 
 /**
@@ -439,6 +450,8 @@ export function performEffect(effect: CommandEffect, state: AppState, viewport: 
       return pasteFromClipboard(state, state.clipboard === undefined ? {} : { payload: state.clipboard }, effect.cell, viewport, context);
     case "import":
       return { state, fileRequest: "csv", refused: false, ...(effect.cell === undefined ? {} : { importCell: effect.cell }) };
+    case "export":
+      return planExport(state, effect);
     case "wires":
       return transition({ ...state, wires: { visible: effect.visible, selected: effect.visible ? state.wires.selected : undefined } });
     case "save":
@@ -558,6 +571,31 @@ function describeEntry(entry: MutationJournalEntry, ...states: readonly (readonl
   const shown = names.length > 3 ? `${names.slice(0, 3).join(", ")} and ${names.length - 3} more` : names.join(", ");
   const count = entry.operations.length === 1 ? "one change" : `${entry.operations.length} changes`;
   return `${count} to ${shown}`;
+}
+
+/**
+ * Checks a picture before the DOM half draws it: a selection picture needs a
+ * selection, a picture needs something with a box, and a raster picture has to
+ * fit the largest side a browser can allocate at the scale asked for.
+ */
+export function planExport(state: AppState, effect: Extract<CommandEffect, { kind: "export" }>): AppTransition {
+  const selected = state.interaction.selectedObjectIds;
+  if (effect.selection && selected.length === 0) {
+    return transition(logLine(state, "export selection needs a selection — select the objects to draw first"), true);
+  }
+  const objects = exportedObjects(state.document.objects, effect.selection ? selected : undefined);
+  const frame = exportFrame(objects);
+  if (frame === undefined) {
+    return transition(logLine(state, effect.selection ? "nothing in the selection has a place on the canvas to draw" : "the document holds nothing to draw yet"), true);
+  }
+  const width = Math.ceil((frame.maxX - frame.minX) * (effect.format === "png" ? effect.scale : 1));
+  const height = Math.ceil((frame.maxY - frame.minY) * (effect.format === "png" ? effect.scale : 1));
+  if (effect.format === "png" && Math.max(width, height) > MAX_EXPORT_PIXELS) {
+    const fits = Math.floor((MAX_EXPORT_PIXELS / Math.max(frame.maxX - frame.minX, frame.maxY - frame.minY)) * 100) / 100;
+    return transition(logLine(state, `a picture of ${width}×${height} pixels is past the limit of ${MAX_EXPORT_PIXELS} on a side — a scale of ${fits} or less fits`), true);
+  }
+  const objectIds = effect.selection ? objects.map((object) => object.id) : undefined;
+  return { ...transition(state), exportRequest: { format: effect.format, scale: effect.scale, objectIds } };
 }
 
 /** How far each paste of objects lands from the one before it, in world units. */
@@ -2497,6 +2535,53 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   };
   offerRecovery();
 
+  /** A canvas kept for measuring text in a font, which the vector picture needs and cannot do itself. */
+  const textMeasureContext = document.createElement("canvas").getContext("2d");
+  const measureTextInFont = (font: string, text: string): number => {
+    if (textMeasureContext === null) return text.length * 8;
+    textMeasureContext.font = font;
+    return textMeasureContext.measureText(text).width;
+  };
+  const mathml = (latex: string): string => convertLatexToMathMl(expandMathMacros(latex));
+
+  /**
+   * Draws a picture and downloads it. The vector form comes from the SVG
+   * backend. The raster form draws the same objects through the canvas
+   * renderer at the scale, then lays each run of notation over it as a small
+   * picture of its MathML, loaded from a data URL, which a browser draws into a
+   * canvas without locking the canvas against export.
+   */
+  const exportPicture = async (request: ExportRequest): Promise<string> => {
+    const objects = request.objectIds === undefined ? state.document.objects : exportedObjects(state.document.objects, request.objectIds);
+    if (request.format === "svg") {
+      const svg = exportSvg(objects, { measureText: measureTextInFont, mathml, images: imageBitmaps, measureMath: measureMathForLayout });
+      if (svg === undefined) return "nothing to draw";
+      downloadBlob(new Blob([svg], { type: "image/svg+xml" }), "beheader.svg");
+      return `exported a vector picture to beheader.svg`;
+    }
+    const frame = exportFrame(objects);
+    if (frame === undefined) return "nothing to draw";
+    const scale = request.scale;
+    const picture = document.createElement("canvas");
+    picture.width = Math.ceil((frame.maxX - frame.minX) * scale);
+    picture.height = Math.ceil((frame.maxY - frame.minY) * scale);
+    const context = picture.getContext("2d");
+    if (context === null) throw new Error("the browser gave no canvas to draw on");
+    const report = renderDocument(context, picture.width, picture.height, objects, exportCamera(frame, scale), [], [], undefined, imageBitmaps, undefined, undefined, measureMathForLayout, undefined, false);
+    context.setTransform(1, 0, 0, 1, 0, 0);
+    for (const item of notationItems(objects, report.mathRuns)) {
+      const image = await loadImage(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(notationPicture(item, mathml(item.latex), scale))}`);
+      context.drawImage(image, (item.x - frame.minX) * scale, (item.y - frame.minY) * scale, image.width, image.height);
+    }
+    context.globalCompositeOperation = "destination-over";
+    context.fillStyle = EXPORT_BACKGROUND;
+    context.fillRect(0, 0, picture.width, picture.height);
+    const blob = await new Promise<Blob | null>((resolve) => picture.toBlob(resolve, "image/png"));
+    if (blob === null) throw new Error("the browser could not encode the picture");
+    downloadBlob(blob, "beheader.png");
+    return `exported a ${picture.width}×${picture.height} picture at ${scale}× to beheader.png`;
+  };
+
   /** True while a copy or cut event writes the clipboard itself, so the transition leaves the browser call out. */
   let writingClipboardEvent = false;
 
@@ -2574,6 +2659,13 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     } else if (next.fileRequest === "csv") {
       const cell = next.importCell;
       pickTextFile(".csv,text/csv,text/plain", (text) => applyTransition(importCsv(state, text, cell, viewport(), evalContext)), (message) => apply(logLine(state, message)));
+    }
+    if (next.exportRequest !== undefined) {
+      const request = next.exportRequest;
+      void exportPicture(request).then(
+        (line) => apply(logLine(state, line)),
+        (error: unknown) => apply(logLine(state, `the picture did not export: ${error instanceof Error ? error.message : String(error)}`)),
+      );
     }
     if (next.clipboardText !== undefined && !writingClipboardEvent) {
       // A typed copy has no clipboard event to write into, so it asks the
@@ -3742,6 +3834,28 @@ function downloadDocument(state: Document): void {
   anchor.click();
   anchor.remove();
   window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+/** Hands the browser a file to save under a name. */
+function downloadBlob(blob: Blob, name: string): void {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = name;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+/** An image loaded from a URL, once it has decoded. */
+function loadImage(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("an image in the picture did not load"));
+    image.src = url;
+  });
 }
 
 /** The type under which a copy carries the clipboard of the program, beside its plain text. */

@@ -2571,3 +2571,30 @@ describe("the clipboard", () => {
     expect(submitLine(state, "import csv", VIEWPORT).fileRequest).toBe("csv");
   });
 });
+
+describe("picture export", () => {
+  it("asks the DOM half for a picture of the document, or of a selection widened to its group members", () => {
+    let state = typed(opened(), "circle x=0 y=0 r=10");
+    state = typed(state, "circle x=100 y=0 r=10");
+    state = typed(state, "rect x=300 y=0 w=20 h=20");
+    state = typed(state, "group circle_1,circle_2");
+    const whole = submitLine(state, "export png", VIEWPORT);
+    expect(whole.exportRequest).toEqual({ format: "png", scale: 2, objectIds: undefined });
+    const grouped = withSelection(state, [objectNamed(state, "group_1").id]);
+    const picked = submitLine(grouped, "export svg selection", VIEWPORT);
+    expect(picked.exportRequest?.format).toBe("svg");
+    expect(new Set(picked.exportRequest?.objectIds)).toEqual(new Set(["circle_1", "circle_2", "group_1"].map((name) => objectNamed(state, name).id)));
+  });
+
+  it("refuses a selection picture with nothing selected, a picture of nothing, and a raster too large, naming a scale that fits", () => {
+    const state = typed(opened(), "rect x=0 y=0 w=2000 h=100");
+    expect(submitLine(state, "export png selection", VIEWPORT).refused).toBe(true);
+    expect(submitLine(opened(), "export svg", VIEWPORT).state.log.at(-1)).toContain("nothing to draw");
+    const large = submitLine(state, "export png 8", VIEWPORT);
+    expect(large.refused).toBe(true);
+    expect(large.state.log.at(-1)).toMatch(/past the limit of 8192 on a side — a scale of 4\.03 or less fits/);
+    expect(submitLine(state, "export png 3", VIEWPORT).exportRequest?.scale).toBe(3);
+    expect(submitLine(state, "export svg 2", VIEWPORT).refused).toBe(true);
+    expect(submitLine(state, "export gif", VIEWPORT).refused).toBe(true);
+  });
+});

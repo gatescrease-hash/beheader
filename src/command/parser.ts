@@ -279,6 +279,14 @@ export interface ClipboardCommand {
   readonly target?: string;
 }
 
+/** `export png` or `export svg`, a picture of the document or of the selection. */
+export interface ExportCommand {
+  readonly kind: "export";
+  readonly format: string;
+  readonly scale?: number;
+  readonly selection: boolean;
+}
+
 /** `import csv`, into a new table or at a corner cell of a table. */
 export interface ImportCommand {
   readonly kind: "import";
@@ -341,7 +349,8 @@ export type Command =
   | WiresCommand
   | ArrangeCommand
   | ClipboardCommand
-  | ImportCommand;
+  | ImportCommand
+  | ExportCommand;
 
 export interface CommandParseSuccess {
   readonly ok: true;
@@ -913,6 +922,18 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
     build: (args) => clipboardCommand("paste", args),
   },
   {
+    name: "export",
+    usage: "export png|svg [scale] [selection]",
+    positional: [text("format"), { name: "scale", kind: "number", optional: true }],
+    named: [],
+    flags: ["selection"],
+    build: (args) => {
+      const scale = findArgument(args, "scale")?.value;
+      const base = { kind: "export" as const, format: textArgument(args, "format"), selection: hasFlag(args, "selection") };
+      return typeof scale === "number" ? { ...base, scale } : base;
+    },
+  },
+  {
     name: "import",
     usage: "import csv [corner]",
     positional: [text("format"), { name: "corner", kind: "text", optional: true }],
@@ -1209,7 +1230,10 @@ function matchArguments(
     const flag = token.quoted ? undefined : spec.flags.find((candidate) => candidate === token.text.toLowerCase());
     // A points list takes every token after it. A flag name is the one exception.
     const takesMorePoints = lastPositional?.kind === "points" && !token.quoted && flag === undefined;
-    if (positionalTokens.length < spec.positional.length || takesMorePoints) {
+    // A flag word reads as the flag where the next positional is optional, so
+    // `export png selection` names no scale rather than a scale of "selection".
+    const flagSkipsOptional = flag !== undefined && spec.positional[positionalTokens.length]?.optional === true;
+    if (!flagSkipsOptional && (positionalTokens.length < spec.positional.length || takesMorePoints)) {
       positionalTokens.push(token);
       continue;
     }

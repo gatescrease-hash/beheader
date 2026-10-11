@@ -832,6 +832,7 @@ describe("every registry command reaches a handler", () => {
     "cut",
     "paste",
     "import csv",
+    "export png",
   ];
 
   it("never throws for any command in the registry, run against an empty document — every word, not a sample of them", () => {

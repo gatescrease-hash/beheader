@@ -37,10 +37,17 @@
  * because one layout function with two readers is the only reason the drawn
  * text and the measured height agree.
  *
+ * The painter draws through DrawingContext, the part of Canvas2D that two
+ * backends share: the canvas on screen, and svg-context.ts, which a picture
+ * export draws into. An export passes chrome as false, which leaves out the
+ * furniture of the third pass and the outlines of groups, so the picture holds
+ * the objects alone.
+ *
  * Render-layer code: it reads engine state and calls mutations, and crosses
  * that line for nothing else. Nothing in the engine imports this file, so a
  * GPU renderer can replace the whole layer later.
  */
+import type { DrawingContext } from "./drawing.ts";
 import { drawWiresOver, drawWiresUnder, type WireOverlay } from "./overlay.ts";
 import {
   docrefLabel,
@@ -162,7 +169,7 @@ const IMAGE_FRAME_STROKE_STYLE = "#999999";
 
 const DEFAULT_IMAGE_OPACITY = 1;
 
-function drawImage(ctx: CanvasRenderingContext2D, object: GraphObject, images: ImageBitmaps | undefined): void {
+function drawImage(ctx: DrawingContext, object: GraphObject, images: ImageBitmaps | undefined): void {
   const box = objectExtent(object);
   if (box === undefined) {
     return;
@@ -198,7 +205,7 @@ function drawImage(ctx: CanvasRenderingContext2D, object: GraphObject, images: I
  * MathLive returns is not something a canvas draws. This pass leaves the room
  * for it and marks a source that failed to measure.
  */
-function drawMath(ctx: CanvasRenderingContext2D, object: GraphObject): void {
+function drawMath(ctx: DrawingContext, object: GraphObject): void {
   const box = objectExtent(object);
   if (box === undefined) {
     return;
@@ -216,7 +223,7 @@ function drawMath(ctx: CanvasRenderingContext2D, object: GraphObject): void {
   ctx.strokeRect(box.minX, box.minY, width, height);
 }
 
-function drawScript(ctx: CanvasRenderingContext2D, object: GraphObject): void {
+function drawScript(ctx: DrawingContext, object: GraphObject): void {
   const box = objectExtent(object);
   if (box === undefined) {
     return;
@@ -280,7 +287,7 @@ const GROUP_CORNER = 10;
  * the state of its last run. It clips nothing, and a member past the edge
  * stretches the box instead.
  */
-function drawGroup(ctx: CanvasRenderingContext2D, group: GraphObject, objects: readonly GraphObject[], selected: boolean): void {
+function drawGroup(ctx: DrawingContext, group: GraphObject, objects: readonly GraphObject[], selected: boolean): void {
   const box = groupBoundary(group, objects);
   if (box === undefined) {
     return;
@@ -374,7 +381,7 @@ function chromeTopReservedScreen(object: GraphObject): number {
 
 const CHROME_FONT_SIZE_SCREEN = 12;
 
-function clearScreen(ctx: CanvasRenderingContext2D, viewportWidth: number, viewportHeight: number): void {
+function clearScreen(ctx: DrawingContext, viewportWidth: number, viewportHeight: number): void {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, viewportWidth, viewportHeight);
 }
@@ -425,7 +432,7 @@ export interface RenderReport {
 export type MathRunMeasurer = (latex: string, fontSize: number) => { readonly width: number; readonly height: number };
 
 export function renderDocument(
-  ctx: CanvasRenderingContext2D,
+  ctx: DrawingContext,
   viewportWidth: number,
   viewportHeight: number,
   objects: readonly GraphObject[],
@@ -438,6 +445,7 @@ export function renderDocument(
   focusedGrip: PathGrip | undefined = undefined,
   measureMath: MathRunMeasurer | undefined = undefined,
   wires: WireOverlay | undefined = undefined,
+  chrome = true,
 ): RenderReport {
   const documentObjects = objects;
   objects = displayObjects(objects);
@@ -456,11 +464,12 @@ export function renderDocument(
   // An outer group draws before the groups inside it, so an inner boundary
   // and its tab sit on top of the outer one's wash.
   const depth = (group: GraphObject): number => ancestorGroups(group, (id) => objects.find((object) => object.id === id)).length;
-  for (const group of objects.filter((object) => object.type === "group").sort((a, b) => depth(a) - depth(b))) {
+  const groups = chrome ? objects.filter((object) => object.type === "group") : [];
+  for (const group of groups.sort((a, b) => depth(a) - depth(b))) {
     drawGroup(ctx, group, objects, selectedIds.has(group.id));
   }
 
-  drawWiresUnder(ctx, camera, documentObjects, wires);
+  drawWiresUnder(ctx, camera, documentObjects, wires, viewportWidth, viewportHeight);
 
   for (const object of objects) {
     if (object.id === editingTextId) {
@@ -483,7 +492,7 @@ export function renderDocument(
 
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   const panelledIds = new Set(panelledObjectIds);
-  for (const object of objects) {
+  for (const object of chrome ? objects : []) {
     drawObjectChrome(ctx, camera, object, panelledIds.has(object.id));
     drawTableHeaders(ctx, camera, object);
   }
@@ -506,7 +515,7 @@ export function renderDocument(
  * still before a drag refuses to move them. The focused grip fills solid.
  */
 function drawPathGrips(
-  ctx: CanvasRenderingContext2D,
+  ctx: DrawingContext,
   camera: CameraState,
   object: GraphObject,
   focusedGrip: PathGrip | undefined,
@@ -547,7 +556,7 @@ function drawPathGrips(
  *
  * A dash pattern outlives the call that sets it, so this clears it again.
  */
-function drawPathPreview(ctx: CanvasRenderingContext2D, camera: CameraState, preview: PathPreview): void {
+function drawPathPreview(ctx: DrawingContext, camera: CameraState, preview: PathPreview): void {
   ctx.strokeStyle = DEFAULT_SHAPE_STROKE_STYLE;
   ctx.strokeStyle = PREVIEW_STROKE_STYLE;
   ctx.lineWidth = PREVIEW_LINE_WIDTH_SCREEN / camera.zoom;
@@ -586,7 +595,7 @@ function drawPathPreview(ctx: CanvasRenderingContext2D, camera: CameraState, pre
   }
 }
 
-function drawResizeHandles(ctx: CanvasRenderingContext2D, camera: CameraState, object: GraphObject): void {
+function drawResizeHandles(ctx: DrawingContext, camera: CameraState, object: GraphObject): void {
   if (!hasResizeHandles(object)) {
     return;
   }
@@ -606,7 +615,7 @@ function drawResizeHandles(ctx: CanvasRenderingContext2D, camera: CameraState, o
 }
 
 function drawObject(
-  ctx: CanvasRenderingContext2D,
+  ctx: DrawingContext,
   object: GraphObject,
   editingCell: string | undefined,
   images: ImageBitmaps | undefined,
@@ -668,7 +677,7 @@ function drawObject(
   }
 }
 
-function buildCirclePath(ctx: CanvasRenderingContext2D, object: GraphObject): boolean {
+function buildCirclePath(ctx: DrawingContext, object: GraphObject): boolean {
   const originX = readNumber(object, ORIGIN_X_PATH);
   const originY = readNumber(object, ORIGIN_Y_PATH);
   const radius = readNumber(object, RADIUS_PATH);
@@ -680,11 +689,11 @@ function buildCirclePath(ctx: CanvasRenderingContext2D, object: GraphObject): bo
   return true;
 }
 
-function drawCircle(ctx: CanvasRenderingContext2D, object: GraphObject): void {
+function drawCircle(ctx: DrawingContext, object: GraphObject): void {
   paintShape(ctx, object, buildCirclePath(ctx, object), true);
 }
 
-function buildVerticesPath(ctx: CanvasRenderingContext2D, object: GraphObject): boolean {
+function buildVerticesPath(ctx: DrawingContext, object: GraphObject): boolean {
   const vertices = asPointArray(getSlot(object, VERTICES_PATH)?.value);
   const first = vertices?.[0];
   if (vertices === undefined || first === undefined) {
@@ -703,7 +712,7 @@ function buildVerticesPath(ctx: CanvasRenderingContext2D, object: GraphObject): 
   return true;
 }
 
-function drawVerticesShape(ctx: CanvasRenderingContext2D, object: GraphObject): void {
+function drawVerticesShape(ctx: DrawingContext, object: GraphObject): void {
   paintShape(ctx, object, buildVerticesPath(ctx, object), true);
 }
 
@@ -714,7 +723,7 @@ function drawVerticesShape(ctx: CanvasRenderingContext2D, object: GraphObject): 
  * write is what an unreadable second write falls back to. With one write only,
  * the shape takes the colour of whatever drew before it.
  */
-function paintShape(ctx: CanvasRenderingContext2D, object: GraphObject, built: boolean, closed: boolean): void {
+function paintShape(ctx: DrawingContext, object: GraphObject, built: boolean, closed: boolean): void {
   if (!built) {
     return;
   }
@@ -731,7 +740,7 @@ function paintShape(ctx: CanvasRenderingContext2D, object: GraphObject, built: b
 }
 
 /** An open path, unlike buildVerticesPath. It never closes the last gap. */
-function buildOpenVerticesPath(ctx: CanvasRenderingContext2D, object: GraphObject): boolean {
+function buildOpenVerticesPath(ctx: DrawingContext, object: GraphObject): boolean {
   const vertices = asPointArray(getSlot(object, VERTICES_PATH)?.value);
   const first = vertices?.[0];
   if (vertices === undefined || first === undefined) {
@@ -754,7 +763,7 @@ function buildOpenVerticesPath(ctx: CanvasRenderingContext2D, object: GraphObjec
  * ctx.arc, the same call a circle uses. Nothing here reads a sample point,
  * because a curved edge never becomes one.
  */
-function buildEdgePath(ctx: CanvasRenderingContext2D, edges: readonly PathEdge[], closed: boolean): boolean {
+function buildEdgePath(ctx: DrawingContext, edges: readonly PathEdge[], closed: boolean): boolean {
   const first = edges[0];
   if (first === undefined) {
     return false;
@@ -780,15 +789,15 @@ function buildEdgePath(ctx: CanvasRenderingContext2D, edges: readonly PathEdge[]
   return true;
 }
 
-function buildPolylinePath(ctx: CanvasRenderingContext2D, object: GraphObject): boolean {
+function buildPolylinePath(ctx: DrawingContext, object: GraphObject): boolean {
   return buildEdgePath(ctx, pathEdgesOfObject(object), readBoolean(object, CLOSED_PATH) === true);
 }
 
-function drawPolyline(ctx: CanvasRenderingContext2D, object: GraphObject): void {
+function drawPolyline(ctx: DrawingContext, object: GraphObject): void {
   paintShape(ctx, object, buildPolylinePath(ctx, object), readBoolean(object, CLOSED_PATH) === true);
 }
 
-function drawTable(ctx: CanvasRenderingContext2D, object: GraphObject, editingCell: string | undefined): void {
+function drawTable(ctx: DrawingContext, object: GraphObject, editingCell: string | undefined): void {
   const originX = readNumber(object, ORIGIN_X_PATH) ?? 0;
   const originY = readNumber(object, ORIGIN_Y_PATH) ?? 0;
   const { rows, cols } = getTableDimensions(object);
@@ -826,7 +835,7 @@ function drawTable(ctx: CanvasRenderingContext2D, object: GraphObject, editingCe
   }
 }
 
-function drawCellText(ctx: CanvasRenderingContext2D, value: Value | undefined, cellLeft: number, cellTop: number, width: number, height: number, style: ReturnType<typeof cellStyle>): void {
+function drawCellText(ctx: DrawingContext, value: Value | undefined, cellLeft: number, cellTop: number, width: number, height: number, style: ReturnType<typeof cellStyle>): void {
   if (value === undefined) {
     return;
   }
@@ -904,7 +913,7 @@ function alignmentOffset(align: "left" | "center" | "right", boxWidth: number, l
 }
 
 function drawText(
-  ctx: CanvasRenderingContext2D,
+  ctx: DrawingContext,
   object: GraphObject,
   measureMath: MathRunMeasurer | undefined,
   mathRuns: TextMathRun[],
@@ -971,7 +980,7 @@ function drawText(
   }
 }
 
-function drawSelectionHighlight(ctx: CanvasRenderingContext2D, object: GraphObject): void {
+function drawSelectionHighlight(ctx: DrawingContext, object: GraphObject): void {
   switch (object.type) {
     // The doc object has no box to outline. `vars` names it in the panel
     // header instead, which is the whole of what selecting it shows.
@@ -1036,7 +1045,7 @@ function drawSelectionHighlight(ctx: CanvasRenderingContext2D, object: GraphObje
   }
 }
 
-function strokeHighlight(ctx: CanvasRenderingContext2D): void {
+function strokeHighlight(ctx: DrawingContext): void {
   ctx.strokeStyle = SELECTION_HIGHLIGHT_STYLE;
   ctx.lineWidth = SELECTION_HIGHLIGHT_WIDTH;
   ctx.stroke();
@@ -1054,7 +1063,7 @@ function objectHasError(object: GraphObject): boolean {
   return Object.values(object.slots).some((slot) => isErrorValue(slot.value));
 }
 
-function drawObjectChrome(ctx: CanvasRenderingContext2D, camera: CameraState, object: GraphObject, suppressName: boolean): void {
+function drawObjectChrome(ctx: DrawingContext, camera: CameraState, object: GraphObject, suppressName: boolean): void {
   // A group draws its name on its own tab.
   if (object.type === "group") {
     return;
@@ -1097,7 +1106,7 @@ function drawObjectChrome(ctx: CanvasRenderingContext2D, camera: CameraState, ob
   }
 }
 
-function drawTableHeaders(ctx: CanvasRenderingContext2D, camera: CameraState, object: GraphObject): void {
+function drawTableHeaders(ctx: DrawingContext, camera: CameraState, object: GraphObject): void {
   if (object.type !== TABLE_TYPE) {
     return;
   }

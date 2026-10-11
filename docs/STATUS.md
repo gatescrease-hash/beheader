@@ -15,8 +15,8 @@ register, and the measurements behind leaving that migration unscheduled.
 | --- | --- |
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
-| Tests | 2926 Vitest tests and 2 tooling tests pass, with 0 skipped. |
-| Spec | Built through section 21, except the parts section 17 postpones. Section 22 lacks only the picture export. |
+| Tests | 2948 Vitest tests and 2 tooling tests pass, with 0 skipped. |
+| Spec | Built through section 22, except the parts section 17 postpones. |
 | Scripts | Python runs in a Pyodide worker. Groups are script nodes with members. |
 | Rule 5 | Met for every committed batch. A refusal and a list with no index still cost the whole document. |
 | Workspace | Compact typography, a profile helmet, in-row style source controls, and full, compact and hidden sidebar modes with pointer and keyboard resizing. |
@@ -117,6 +117,7 @@ covers everything it calls.
 | `tsconfig.engine.json` | The narrower config over `src/engine/` alone, which fails when the engine reaches the DOM. |
 | `vite.config.ts` | Dev server, production build, the Pyodide assets, and the Vitest settings. |
 | `tools/direct-edit-check.cjs` | Browser checks for the layers, panels, tables and rich text of section 18. |
+| `tools/export-check.cjs` | Browser checks that an exported raster carries its notation, at its scale, and that the vector form parses. |
 | `tools/prose-check.mjs` | The prose checker that enforces `docs/STYLE.md`. |
 
 ### `src/engine/` - the pure core
@@ -181,6 +182,9 @@ covers everything it calls.
 | `editor.ts` | Where the in place editor goes, and how it looks. |
 | `interaction.ts` | Pointer state to mutation calls: select, drag, resize and bend. |
 | `panel.ts` | Where a properties panel sits beside its object. |
+| `drawing.ts` | The part of Canvas2D the renderer draws through, which both drawing backends implement. |
+| `svg-context.ts` | The second drawing backend, which writes what the renderer draws as an SVG picture. |
+| `export.ts` | The frame, the objects and the notation of an exported picture, and the vector form of it. |
 | `wires.ts` | The curves of the dependency overlay, where each runs, and which one a press picks. |
 | `overlay.ts` | The two passes that draw the overlay around the objects, and the ring of a refused cycle. |
 

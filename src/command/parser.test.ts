@@ -89,6 +89,7 @@ const DOCUMENTED_EXAMPLES: readonly { readonly line: string; readonly command: C
   { line: "cut", command: { kind: "cut" } },
   { line: "paste table_1.C1", command: { kind: "paste", target: "table_1.C1" } },
   { line: "import csv table_1.A1", command: { kind: "import", format: "csv", corner: "table_1.A1" } },
+  { line: "export png 3 selection", command: { kind: "export", format: "png", scale: 3, selection: true } },
   { line: "broken", command: { kind: "broken" } },
   { line: "find \"table_1.A1\"", command: { kind: "find", text: "table_1.A1" } },
 ];

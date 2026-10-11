@@ -18,6 +18,7 @@
  * Render-layer code: it reads engine state, and touches no DOM.
  */
 import { displayObjects, type Address, type CameraState, type GraphObject, type Point } from "../engine/index.ts";
+import type { DrawingContext } from "./drawing.ts";
 import { groupBoundary, objectExtent, type WorldExtent } from "./extent.ts";
 import { cycleRing, objectWires, placeWires, wireKey, wirePoint, type PlacedWire, type Wire } from "./wires.ts";
 
@@ -67,10 +68,10 @@ export function placedWires(objects: readonly GraphObject[]): readonly PlacedWir
 }
 
 /** The ordinary curves, drawn beneath the objects in world space. */
-export function drawWiresUnder(ctx: CanvasRenderingContext2D, camera: CameraState, objects: readonly GraphObject[], overlay: WireOverlay | undefined): void {
+export function drawWiresUnder(ctx: DrawingContext, camera: CameraState, objects: readonly GraphObject[], overlay: WireOverlay | undefined, viewportWidth: number, viewportHeight: number): void {
   if (overlay?.visible !== true) return;
   const selected = overlay.selectedWire === undefined ? undefined : wireKey(overlay.selectedWire);
-  for (const placed of visibleWires(objects, camera, ctx)) {
+  for (const placed of visibleWires(objects, camera, viewportWidth, viewportHeight)) {
     const touching = touches(placed.wire, overlay.hoveredObjectId);
     if (touching || wireKey(placed.wire) === selected) continue;
     const style = overlay.hoveredObjectId === undefined ? WIRE_STYLE : WIRE_DIMMED_STYLE;
@@ -79,7 +80,7 @@ export function drawWiresUnder(ctx: CanvasRenderingContext2D, camera: CameraStat
 }
 
 /** The curves the operator is looking at, and the ring of a refused cycle, drawn above the objects. */
-export function drawWiresOver(ctx: CanvasRenderingContext2D, camera: CameraState, objects: readonly GraphObject[], overlay: WireOverlay | undefined): void {
+export function drawWiresOver(ctx: DrawingContext, camera: CameraState, objects: readonly GraphObject[], overlay: WireOverlay | undefined): void {
   if (overlay === undefined) return;
   const all = overlay.visible || overlay.cycle !== undefined ? placedWires(objects) : [];
   if (overlay.visible) {
@@ -106,9 +107,9 @@ function touches(wire: Wire, objectId: string | undefined): boolean {
  * on opposite sides still crosses the view, so the test reads the box around
  * all four points of the curve rather than its ends.
  */
-function visibleWires(objects: readonly GraphObject[], camera: CameraState, ctx: CanvasRenderingContext2D): readonly PlacedWire[] {
-  const width = ctx.canvas.width / camera.zoom;
-  const height = ctx.canvas.height / camera.zoom;
+function visibleWires(objects: readonly GraphObject[], camera: CameraState, viewportWidth: number, viewportHeight: number): readonly PlacedWire[] {
+  const width = viewportWidth / camera.zoom;
+  const height = viewportHeight / camera.zoom;
   const view = { minX: camera.x, minY: camera.y, maxX: camera.x + width, maxY: camera.y + height };
   return placedWires(objects).filter((placed) => {
     const points = [placed.from, placed.control1, placed.control2, placed.to];
@@ -118,7 +119,7 @@ function visibleWires(objects: readonly GraphObject[], camera: CameraState, ctx:
   });
 }
 
-function drawCurve(ctx: CanvasRenderingContext2D, camera: CameraState, placed: PlacedWire, style: string, widthScreen: number, dashed = false): void {
+function drawCurve(ctx: DrawingContext, camera: CameraState, placed: PlacedWire, style: string, widthScreen: number, dashed = false): void {
   const unit = 1 / camera.zoom;
   ctx.save();
   ctx.strokeStyle = style;
@@ -136,7 +137,7 @@ function drawCurve(ctx: CanvasRenderingContext2D, camera: CameraState, placed: P
 }
 
 /** An arrow head at the reading end, pointing along the last stretch of the curve. */
-function drawArrowHead(ctx: CanvasRenderingContext2D, placed: PlacedWire, unit: number): void {
+function drawArrowHead(ctx: DrawingContext, placed: PlacedWire, unit: number): void {
   const tail: Point = wirePoint(placed, 0.92);
   const dx = placed.to.x - tail.x;
   const dy = placed.to.y - tail.y;
@@ -156,7 +157,7 @@ function drawArrowHead(ctx: CanvasRenderingContext2D, placed: PlacedWire, unit: 
 }
 
 /** The count of slot edges behind a curve, in a small pill at its middle. */
-function drawCount(ctx: CanvasRenderingContext2D, at: Point, count: number, unit: number, style: string): void {
+function drawCount(ctx: DrawingContext, at: Point, count: number, unit: number, style: string): void {
   const label = String(count);
   ctx.font = `600 ${COUNT_FONT_SCREEN * unit}px sans-serif`;
   const height = COUNT_HEIGHT_SCREEN * unit;
@@ -180,7 +181,7 @@ function drawCount(ctx: CanvasRenderingContext2D, at: Point, count: number, unit
  * whose edge the refused change would have added, gets a curve placed for it
  * between the two boxes. A ring inside one object outlines that object.
  */
-function drawCycle(ctx: CanvasRenderingContext2D, camera: CameraState, objects: readonly GraphObject[], placed: readonly PlacedWire[], cycle: readonly Address[]): void {
+function drawCycle(ctx: DrawingContext, camera: CameraState, objects: readonly GraphObject[], placed: readonly PlacedWire[], cycle: readonly Address[]): void {
   const ring = cycleRing(cycle, objects);
   const byKey = new Map(placed.map((entry) => [wireKey(entry.wire), entry]));
   const shown = displayObjects(objects);

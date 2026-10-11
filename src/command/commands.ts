@@ -194,6 +194,7 @@ export type CommandEffect =
   | { readonly kind: "distribute"; readonly axis: "x" | "y" }
   | { readonly kind: "copy" | "cut"; readonly cells?: CellBlock }
   | { readonly kind: "paste" | "import"; readonly cell?: CellCorner }
+  | { readonly kind: "export"; readonly format: "png" | "svg"; readonly scale: number; readonly selection: boolean }
   | { readonly kind: "undo" }
   | { readonly kind: "redo" };
 
@@ -216,6 +217,12 @@ export function isCommandFailure(outcome: CommandOutcome): outcome is CommandRef
 }
 
 export const MAX_POLYGON_SIDES = 1000;
+
+/** The scale a raster picture takes when none is given, which reads sharp on a screen of twice the density. */
+export const DEFAULT_EXPORT_SCALE = 2;
+
+/** The largest scale a raster picture takes, past which a picture of a large document cannot be allocated. */
+export const MAX_EXPORT_SCALE = 8;
 
 const DEFAULT_POLYGON_ROTATION = 0;
 
@@ -345,6 +352,20 @@ export function executeCommand(command: Command, document: Document, context: Ev
     case "cut":
     case "paste":
       return clipboardCommand(command, document);
+    case "export": {
+      const format = command.format.toLowerCase();
+      if (format !== "png" && format !== "svg") {
+        return { ok: false, message: `export writes png or svg, got "${command.format}" — usage: export png|svg [scale] [selection]` };
+      }
+      if (format === "svg" && command.scale !== undefined) {
+        return { ok: false, message: "an svg picture is drawn in vectors and takes no scale — usage: export svg [selection]" };
+      }
+      const scale = command.scale ?? DEFAULT_EXPORT_SCALE;
+      if (!Number.isFinite(scale) || scale <= 0 || scale > MAX_EXPORT_SCALE) {
+        return { ok: false, message: `the scale must be a number above 0 and at most ${MAX_EXPORT_SCALE}, got ${scale}` };
+      }
+      return { ok: true, document, lines: [], effect: { kind: "export", format, scale, selection: command.selection } };
+    }
     case "import": {
       if (command.format.toLowerCase() !== "csv") {
         return { ok: false, message: `import reads csv, got "${command.format}" — usage: import csv [corner]` };
@@ -410,7 +431,7 @@ export const COMMANDS_WITH_HANDLERS: readonly string[] = [
   "redo",
   "group",
   "ungroup",
-  "upstream", "downstream", "orphans", "broken", "find", "wires", "arrange", "align", "distribute", "copy", "cut", "paste", "import",
+  "upstream", "downstream", "orphans", "broken", "find", "wires", "arrange", "align", "distribute", "copy", "cut", "paste", "import", "export",
 ];
 
 interface LiteralSlotDeclaration {

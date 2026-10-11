@@ -1866,6 +1866,17 @@ Canvas2D context. Geometry, text layout and measurement stay shared, and the
 backend that receives them differs. That seam is the one a GPU renderer wants as
 well, so build it once.
 
+**What a picture holds.** A picture holds the objects alone, on a white ground:
+no name label, table header, group outline or selection mark. Its frame is the
+box around the objects it draws with a margin of 16 world units, at one picture
+unit for each world unit before the scale. A selection picture draws the
+selected objects and everything inside a selected group, and leaves out every
+other object, even one that overlaps the frame. The raster form takes a scale of
+two when none is given, at most eight, and refuses a picture more than 8192
+pixels on a side, naming a scale that fits. The vector form takes no scale.
+Notation goes into the vector form as MathML, and into the raster form as a
+picture of that MathML laid over the canvas, so both carry the same notation.
+
 ### The clipboard
 
 **Objects.** A copy takes a new ID and the next free name. A formula inside the

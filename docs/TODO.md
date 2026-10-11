@@ -20,14 +20,7 @@ the file it is about.
 
 ## Open
 
-The item below is the rest of the baseline that section 22 of `SPEC.md` opens.
-Unsaved work, the clipboard and `import csv` are built.
-
-- Export a picture of the document or the selection, as specified in Moving data
-  in and out. A reader will know it is finished when an exported raster of a
-  document holding notation carries that notation, which a test asserts against
-  the same document without it, and when the vector form and the canvas form
-  share their geometry, text layout and measurement.
+Nothing is open. The next item starts in `SPEC.md`, as the section below says.
 
 ---
 
