@@ -99,6 +99,7 @@ import {
   pointerUp,
   focusPathPart,
   pathGripUnder,
+  sliderTrackUnder,
   groupLevelInside,
   resizeHandleUnder,
   INITIAL_INTERACTION_STATE,
@@ -944,9 +945,12 @@ export function pointerDownAt(
     return respondToPrompt({ ...state, pointer: world }, { kind: "picked", point: { x: world.x, y: world.y } }, viewport, context);
   }
   const interaction = pointerDown(state.interaction, screenPoint, state.document.objects, state.document.camera, additive);
-  const gestures = interaction.drag !== undefined || interaction.resize !== undefined || interaction.bend !== undefined;
+  const gestures = interaction.drag !== undefined || interaction.resize !== undefined || interaction.bend !== undefined || interaction.knob !== undefined;
   const gesture = gestures ? gestureBase(state) : undefined;
-  return transition(withInteraction({ ...state, gesture }, interaction));
+  const pressed = withInteraction({ ...state, gesture }, interaction);
+  // A press on a slider's track moves the knob there at once, before the
+  // pointer moves at all.
+  return transition(interaction.knob === undefined ? pressed : pointerMoveTo(pressed, screenPoint, context));
 }
 
 export function pointerMoveTo(
@@ -3322,7 +3326,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     }
     // The keys of the canvas reach it from outside any field, or from an
     // empty command line, and wait while a press is still under way.
-    const pointerBusy = state.interaction.drag !== undefined || state.interaction.resize !== undefined || state.interaction.bend !== undefined || state.interaction.marquee !== undefined
+    const pointerBusy = state.interaction.drag !== undefined || state.interaction.resize !== undefined || state.interaction.bend !== undefined || state.interaction.marquee !== undefined || state.interaction.knob !== undefined
       || tableResize !== undefined || rewireDrag !== undefined || pan !== undefined;
     if ((!editing || (target === input && input.value === "")) && state.pending === undefined && !pointerBusy && !event.altKey) {
       const command = event.ctrlKey || event.metaKey;
@@ -3520,7 +3524,9 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     const overHandle = resizeHandleUnder(state.interaction, point, state.document.objects, state.document.camera);
     const overGrip = pathGripUnder(state.interaction, point, state.document.objects, state.document.camera);
     const boundary = tableBoundaryAt(point);
-    canvas.style.cursor = boundary ? boundary.axis === "column" ? "col-resize" : "row-resize" : overHandle !== undefined ? resizeCursor(overHandle) : overGrip === undefined ? "" : "pointer";
+    const overTrack = boundary === undefined && overHandle === undefined && overGrip === undefined && state.interaction.drag === undefined
+      ? sliderTrackUnder(point, state.document.objects, state.document.camera) : undefined;
+    canvas.style.cursor = boundary ? boundary.axis === "column" ? "col-resize" : "row-resize" : overHandle !== undefined ? resizeCursor(overHandle) : overGrip !== undefined ? "pointer" : overTrack !== undefined || state.interaction.knob !== undefined ? "ew-resize" : "";
     // Hover dims the curves that leave the object alone, and only while no
     // button is held, so a drag keeps the overlay as it was at the press.
     hoveredObjectId = state.wires.visible && event.buttons === 0 ? hitTest(point, state.document.objects, state.document.camera)?.id : undefined;

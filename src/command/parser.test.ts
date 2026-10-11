@@ -80,6 +80,7 @@ const DOCUMENTED_EXAMPLES: readonly { readonly line: string; readonly command: C
   { line: "ungroup group_1 force", command: { kind: "ungroup", target: "group_1", force: true } },
   { line: "duplicate circle_1,rect_1", command: { kind: "duplicate", targets: ["circle_1", "rect_1"] } },
   { line: "snap off", command: { kind: "snap", state: "off" } },
+  { line: "slider x=1 y=2 max=20 step=0.5", command: { kind: "slider", x: 1, y: 2, min: 0, max: 20, step: 0.5, value: 5, width: 200 } },
   { line: "upstream circle_1 2", command: { kind: "upstream", target: "circle_1", depth: 2 } },
   { line: "downstream doc.speed", command: { kind: "downstream", target: "doc.speed" } },
   { line: "orphans", command: { kind: "orphans" } },

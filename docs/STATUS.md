@@ -15,8 +15,8 @@ register, and the measurements behind leaving that migration unscheduled.
 | --- | --- |
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
-| Tests | 3034 Vitest tests and 2 tooling tests pass, with 0 skipped. |
-| Spec | Built through section 22, except the parts section 17 postpones. |
+| Tests | 3052 Vitest tests and 2 tooling tests pass, with 0 skipped. |
+| Spec | Built through section 23, except the parts section 17 postpones. |
 | Scripts | Python runs in a Pyodide worker. Groups are script nodes with members. |
 | Rule 5 | Met for every committed batch. A refusal and a list with no index still cost the whole document. |
 | Selection | A box selects by window or crossing, a drag moves the whole selection and snaps, and Ctrl+A, the arrows, Delete and Ctrl+D act on it. |
@@ -120,6 +120,7 @@ covers everything it calls.
 | `tools/direct-edit-check.cjs` | Browser checks for the layers, panels, tables and rich text of section 18. |
 | `tools/export-check.cjs` | Browser checks that an exported raster carries its notation, at its scale, and that the vector form parses. |
 | `tools/selection-check.cjs` | Browser checks for selection boxes, a drag of many, snapping, and the keys of the canvas. |
+| `tools/slider-check.cjs` | Browser checks that a slider's knob sets its value, and that what reads it follows. |
 | `tools/prose-check.mjs` | The prose checker that enforces `docs/STYLE.md`. |
 
 ### `src/engine/` - the pure core
@@ -149,6 +150,7 @@ covers everything it calls.
 | `primitives/table.ts` | Cell addressing, range expansion, and the row and column resize. |
 | `primitives/text.ts` | The text block tree, its dependencies, and its measurements. |
 | `primitives/image.ts` | Slot path constants for the image type. |
+| `primitives/slider.ts` | The slots of a slider, and the rule that turns a place on its track into a value. |
 | `primitives/doc.ts` | The document variable, the copy of one on the canvas, and the names a variable may not take. |
 | `primitives/math.ts` | The slots a math object carries, the seeds a solve starts from, and the compute function behind each export. |
 | `math/ast.ts` | The node types of the math language, and the depth check over them. |
@@ -189,6 +191,7 @@ covers everything it calls.
 | `interaction.ts` | Pointer state to mutation calls: select, drag, resize, bend and the selection box. |
 | `marquee.ts` | What a selection box takes, window or crossing, and how it draws. |
 | `snap.ts` | Where a drag lands near the lines of other objects and the grid, and the guides it draws. |
+| `slider-layout.ts` | Where the box, track and knob of a slider sit, for drawing, picking and the knob drag. |
 | `panel.ts` | Where a properties panel sits beside its object. |
 | `drawing.ts` | The part of Canvas2D the renderer draws through, which both drawing backends implement. |
 | `svg-context.ts` | The second drawing backend, which writes what the renderer draws as an SVG picture. |

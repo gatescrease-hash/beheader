@@ -106,7 +106,7 @@ function tableObject(cols: number, values: readonly number[]): GraphObject {
 }
 
 function dragFromOrigin(objectId: string): InteractionState {
-  return { selectedObjectIds: [objectId], drag: { objectId, lastWorldPoint: { x: 0, y: 0 }, emittedNotices: [], vertices: undefined, carried: [], moved: false, click: undefined, pressWorldPoint: { x: 0, y: 0 }, applied: { x: 0, y: 0 }, snap: undefined, guides: [] }, resize: undefined, bend: undefined, focus: undefined, marquee: undefined };
+  return { selectedObjectIds: [objectId], drag: { objectId, lastWorldPoint: { x: 0, y: 0 }, emittedNotices: [], vertices: undefined, carried: [], moved: false, click: undefined, pressWorldPoint: { x: 0, y: 0 }, applied: { x: 0, y: 0 }, snap: undefined, guides: [] }, resize: undefined, bend: undefined, focus: undefined, marquee: undefined, knob: undefined };
 }
 
 describe("pointerDown — click to select, over a list of objects", () => {
@@ -182,7 +182,7 @@ describe("pointerDown — click to select, over a list of objects", () => {
 
   it("a shift press on empty canvas keeps the very same selection and arms a box that adds to it", () => {
     const { objects } = commit([rectObject(0, 0)]);
-    const idle: InteractionState = { selectedObjectIds: ["obj_1"], drag: undefined, resize: undefined, bend: undefined, focus: undefined, marquee: undefined };
+    const idle: InteractionState = { selectedObjectIds: ["obj_1"], drag: undefined, resize: undefined, bend: undefined, focus: undefined, marquee: undefined, knob: undefined };
     const pressed = pointerDown(idle, { x: 500, y: 500 }, objects, CAMERA_IDENTITY, true);
     expect(pressed.selectedObjectIds).toBe(idle.selectedObjectIds);
     expect(pressed.marquee).toEqual({ start: { x: 500, y: 500 }, end: { x: 500, y: 500 }, base: ["obj_1"], drawn: false });
@@ -206,13 +206,13 @@ describe("pointerUp and deselect", () => {
   });
 
   it("pointerUp returns the same state untouched when no drag is running", () => {
-    const idle: InteractionState = { selectedObjectIds: ["obj_1"], drag: undefined, resize: undefined, bend: undefined, focus: undefined, marquee: undefined };
+    const idle: InteractionState = { selectedObjectIds: ["obj_1"], drag: undefined, resize: undefined, bend: undefined, focus: undefined, marquee: undefined, knob: undefined };
     expect(pointerUp(idle)).toBe(idle);
   });
 
   it("pointerUp keeps a MULTI-object selection untouched, ending only the drag", () => {
-    const state: InteractionState = { selectedObjectIds: ["obj_1", "obj_2"], drag: { objectId: "obj_1", lastWorldPoint: { x: 0, y: 0 }, emittedNotices: [], vertices: undefined, carried: [], moved: false, click: undefined, pressWorldPoint: { x: 0, y: 0 }, applied: { x: 0, y: 0 }, snap: undefined, guides: [] }, resize: undefined, bend: undefined, focus: undefined, marquee: undefined };
-    expect(pointerUp(state)).toEqual({ selectedObjectIds: ["obj_1", "obj_2"], drag: undefined, resize: undefined, bend: undefined, focus: undefined, marquee: undefined });
+    const state: InteractionState = { selectedObjectIds: ["obj_1", "obj_2"], drag: { objectId: "obj_1", lastWorldPoint: { x: 0, y: 0 }, emittedNotices: [], vertices: undefined, carried: [], moved: false, click: undefined, pressWorldPoint: { x: 0, y: 0 }, applied: { x: 0, y: 0 }, snap: undefined, guides: [] }, resize: undefined, bend: undefined, focus: undefined, marquee: undefined, knob: undefined };
+    expect(pointerUp(state)).toEqual({ selectedObjectIds: ["obj_1", "obj_2"], drag: undefined, resize: undefined, bend: undefined, focus: undefined, marquee: undefined, knob: undefined });
   });
 
   it("deselect clears the selection AND a drag in progress, so no gesture survives Escape", () => {
@@ -265,7 +265,7 @@ describe("pointerMove — a drag calls the mutation API", () => {
 
   it("is a no-op with no drag in progress, so a caller may wire it to every pointer move", () => {
     const { objects, journal } = commit([rectObject(0, 0)]);
-    const idle: InteractionState = { selectedObjectIds: ["obj_1"], drag: undefined, resize: undefined, bend: undefined, focus: undefined, marquee: undefined };
+    const idle: InteractionState = { selectedObjectIds: ["obj_1"], drag: undefined, resize: undefined, bend: undefined, focus: undefined, marquee: undefined, knob: undefined };
     const outcome = pointerMove(idle, { x: 99, y: 99 }, objects, journal, CAMERA_IDENTITY);
     expect(outcome.state).toBe(idle);
     expect(outcome.objects).toBe(objects);
@@ -402,7 +402,7 @@ describe("a drag works per component, never all or nothing", () => {
     const state: InteractionState = {
       selectedObjectIds: ["obj_2"],
       drag: { objectId: "obj_2", lastWorldPoint: { x: 0, y: 0 }, emittedNotices: [], vertices: [], carried: [], moved: false, click: undefined, pressWorldPoint: { x: 0, y: 0 }, applied: { x: 0, y: 0 }, snap: undefined, guides: [] },
-      resize: undefined, bend: undefined, focus: undefined, marquee: undefined,
+      resize: undefined, bend: undefined, focus: undefined, marquee: undefined, knob: undefined,
     };
     const outcome = pointerMove(state, { x: 5, y: 5 }, objects, journal, CAMERA_IDENTITY);
     expect(outcome.objects).toBe(objects);
@@ -466,7 +466,7 @@ describe("a shift drag on a path moves only the segment it grabbed", () => {
 
   it("selects the path outright, rather than take it out of a selection it is already in", () => {
     const { objects } = commit([polylineObject()]);
-    const selected: InteractionState = { selectedObjectIds: ["obj_1"], drag: undefined, resize: undefined, bend: undefined, focus: undefined, marquee: undefined };
+    const selected: InteractionState = { selectedObjectIds: ["obj_1"], drag: undefined, resize: undefined, bend: undefined, focus: undefined, marquee: undefined, knob: undefined };
     const state = pointerDown(selected, { x: 50, y: 0 }, objects, CAMERA_IDENTITY, true);
     expect(state.selectedObjectIds).toEqual(["obj_1"]);
     expect(state.drag?.vertices).toEqual([0, 1]);
@@ -677,7 +677,7 @@ describe("resize — a text box's eight grabbers (2026-09-02)", () => {
       throw new Error(`test setup: ${created.message}`);
     }
     return {
-      state: { selectedObjectIds: ["obj_t"], drag: undefined, resize: undefined, bend: undefined, focus: undefined, marquee: undefined },
+      state: { selectedObjectIds: ["obj_t"], drag: undefined, resize: undefined, bend: undefined, focus: undefined, marquee: undefined, knob: undefined },
       objects: created.objects,
       journal: created.journal,
     };
@@ -700,7 +700,7 @@ describe("resize — a text box's eight grabbers (2026-09-02)", () => {
       throw new Error(`test setup: ${created.message}`);
     }
     return {
-      state: { selectedObjectIds: ["obj_t"], drag: undefined, resize: undefined, bend: undefined, focus: undefined, marquee: undefined },
+      state: { selectedObjectIds: ["obj_t"], drag: undefined, resize: undefined, bend: undefined, focus: undefined, marquee: undefined, knob: undefined },
       objects: created.objects,
       journal: created.journal,
     };
@@ -824,7 +824,7 @@ describe("resize — an image's grabbers write its own width/height slots", () =
       throw new Error(`test setup: ${created.message}`);
     }
     return {
-      state: { selectedObjectIds: ["obj_i"], drag: undefined, resize: undefined, bend: undefined, focus: undefined, marquee: undefined },
+      state: { selectedObjectIds: ["obj_i"], drag: undefined, resize: undefined, bend: undefined, focus: undefined, marquee: undefined, knob: undefined },
       objects: created.objects,
       journal: created.journal,
     };
@@ -887,7 +887,7 @@ describe("resize — an image's grabbers write its own width/height slots", () =
     if (!created.ok) {
       throw new Error(`test setup: ${created.message}`);
     }
-    const state: InteractionState = { selectedObjectIds: ["obj_i"], drag: undefined, resize: undefined, bend: undefined, focus: undefined, marquee: undefined };
+    const state: InteractionState = { selectedObjectIds: ["obj_i"], drag: undefined, resize: undefined, bend: undefined, focus: undefined, marquee: undefined, knob: undefined };
     const pressed = pointerDown(state, { x: 200, y: 100 }, created.objects, CAMERA_IDENTITY);
     const moved = pointerMove(pressed, { x: 300, y: 100 }, created.objects, created.journal, CAMERA_IDENTITY);
     const resized = moved.objects.find((candidate) => candidate.id === "obj_i");
@@ -913,7 +913,7 @@ describe("resize — an image's grabbers write its own width/height slots", () =
     if (!created.ok) {
       throw new Error(`test setup: ${created.message}`);
     }
-    const state: InteractionState = { selectedObjectIds: ["obj_i"], drag: undefined, resize: undefined, bend: undefined, focus: undefined, marquee: undefined };
+    const state: InteractionState = { selectedObjectIds: ["obj_i"], drag: undefined, resize: undefined, bend: undefined, focus: undefined, marquee: undefined, knob: undefined };
     const pressed = pointerDown(state, { x: 200, y: 100 }, created.objects, CAMERA_IDENTITY);
     const moved = pointerMove(pressed, { x: 300, y: 100 }, created.objects, created.journal, CAMERA_IDENTITY);
     const resized = moved.objects.find((candidate) => candidate.id === "obj_i");
@@ -1364,5 +1364,49 @@ describe("the review fixes for selecting many", () => {
     const { objects } = commit([rectNamed("obj_1", "rect_1", 100.2, 7.125)]);
     const values = planNudge(objects, ["obj_1"], 0.1, 0.1).operations.map((operation) => (operation.kind === "setSlot" ? operation.slot.value : undefined));
     expect(values).toEqual([100.3, 7.225]);
+  });
+});
+
+describe("the knob of a slider", () => {
+  // The track runs from x 7 to x 193 along y 22, and the knob of a value of 5 sits at x 100.
+  function sliderObject(value: Slot = { kind: "literal", value: 5 }): GraphObject {
+    const literal = (number: number): Slot => ({ kind: "literal", value: number });
+    return { id: "obj_s", name: "slider_1", type: "slider", slots: { "origin.x": literal(0), "origin.y": literal(0), width: literal(200), min: literal(0), max: literal(10), step: literal(1), value } };
+  }
+
+  it("is grabbed by a plain press on the track, which selects the slider", () => {
+    const { objects } = commit([sliderObject()]);
+    const pressed = pointerDown(INITIAL_INTERACTION_STATE, { x: 100, y: 22 }, objects, CAMERA_IDENTITY);
+    expect(pressed.knob).toEqual({ objectId: "obj_s", emittedNotices: [] });
+    expect(pressed.drag).toBeUndefined();
+    expect(pressed.selectedObjectIds).toEqual(["obj_s"]);
+  });
+
+  it("writes the value under the pointer, stepped from the minimum and held to the ends", () => {
+    const { objects, journal } = commit([sliderObject()]);
+    const pressed = pointerDown(INITIAL_INTERACTION_STATE, { x: 100, y: 22 }, objects, CAMERA_IDENTITY);
+    const three = pointerMove(pressed, { x: 7 + 0.34 * 186, y: 30 }, objects, journal, CAMERA_IDENTITY);
+    expect(slotValue(three.objects, "obj_s", "value")).toBe(3);
+    const past = pointerMove(three.state, { x: 500, y: 30 }, three.objects, three.journal, CAMERA_IDENTITY);
+    expect(slotValue(past.objects, "obj_s", "value")).toBe(10);
+    expect(slotValue(past.objects, "obj_s", "origin.x")).toBe(0);
+  });
+
+  it("holds still while a formula drives the value, and says what drives it", () => {
+    const { objects, journal } = commit([sliderObject({ kind: "formula", ast: { type: "literal", value: 7 }, value: null })]);
+    const pressed = pointerDown(INITIAL_INTERACTION_STATE, { x: 100, y: 22 }, objects, CAMERA_IDENTITY);
+    const moved = pointerMove(pressed, { x: 40, y: 22 }, objects, journal, CAMERA_IDENTITY);
+    expect(moved.objects).toBe(objects);
+    expect(moved.notices).toEqual(["slider_1.value did not move: it is driven by a formula"]);
+  });
+
+  it("leaves a shift press and a press above the track to the slider as an object", () => {
+    const { objects } = commit([sliderObject()]);
+    const shifted = pointerDown(INITIAL_INTERACTION_STATE, { x: 100, y: 22 }, objects, CAMERA_IDENTITY, true);
+    expect(shifted.knob).toBeUndefined();
+    expect(shifted.selectedObjectIds).toEqual(["obj_s"]);
+    const above = pointerDown(INITIAL_INTERACTION_STATE, { x: 100, y: 4 }, objects, CAMERA_IDENTITY);
+    expect(above.knob).toBeUndefined();
+    expect(above.drag?.objectId).toBe("obj_s");
   });
 });

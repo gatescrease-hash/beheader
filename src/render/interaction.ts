@@ -74,6 +74,7 @@ import {
   TEXT_AUTORESIZE_PATH,
   TEXT_HEIGHT_PATH,
   TEXT_TYPE,
+  SLIDER_VALUE_PATH,
   vertexBulgePath,
   vertexXPath,
   vertexYPath,
@@ -83,10 +84,11 @@ import { screenToWorld, type ScreenPoint, type WorldPoint } from "./camera.ts";
 import { groupBoundary, objectExtent, type WorldExtent } from "./extent.ts";
 import { constrainBoxToRatio, handleEdges, hasResizeHandles, resizeBox, resizeHandleAt, type ResizeHandle } from "./handles.ts";
 import { bulgeForGrabbedMidpoint, gripAt, hasPathGrips, sameGrip, type PathGrip } from "./grips.ts";
-import { hitTest, pathSegmentUnder } from "./hittest.ts";
+import { hitTest, pathSegmentUnder, STROKE_HIT_TOLERANCE_SCREEN_PIXELS } from "./hittest.ts";
 import { marqueeBox, marqueeMode, marqueeUnits } from "./marquee.ts";
 import { readBoolean, readNumber } from "./slots.ts";
 import { SNAP_TOLERANCE_SCREEN_PIXELS, snapTargets, snapTravel, type Guide, type SnapTargets } from "./snap.ts";
+import { onSliderTrack, sliderLayout, sliderValueUnder } from "./slider-layout.ts";
 
 /**
  * How far a press travels, in screen pixels, before it drags or draws a box.
@@ -158,6 +160,12 @@ export interface BendState {
   readonly emittedNotices: readonly string[];
 }
 
+/** A drag of a slider's knob, which writes the slider's value from the pointer. */
+export interface KnobState {
+  readonly objectId: string;
+  readonly emittedNotices: readonly string[];
+}
+
 export interface InteractionState {
   readonly selectedObjectIds: readonly string[];
   readonly drag: DragState | undefined;
@@ -165,6 +173,7 @@ export interface InteractionState {
   readonly bend: BendState | undefined;
   readonly focus: PathFocus | undefined;
   readonly marquee: MarqueeState | undefined;
+  readonly knob: KnobState | undefined;
 }
 
 export const INITIAL_INTERACTION_STATE: InteractionState = {
@@ -174,6 +183,7 @@ export const INITIAL_INTERACTION_STATE: InteractionState = {
   bend: undefined,
   focus: undefined,
   marquee: undefined,
+  knob: undefined,
 };
 
 export interface PointerMoveOutcome {
@@ -210,6 +220,15 @@ export function pointerDown(
 
   const worldPoint = screenToWorld(camera, screenPoint);
   const hit = hitTest(screenPoint, objects, camera);
+  // A plain press on the track of a slider grabs its knob, on any slider, since
+  // the knob is what the slider is for. The selection follows the press as it
+  // would for any object, and shift keeps its meaning.
+  const knob = hit !== undefined && hit.type === "slider" && !additive ? sliderLayout(hit) : undefined;
+  if (hit !== undefined && knob !== undefined && onSliderTrack(knob, worldPoint, STROKE_HIT_TOLERANCE_SCREEN_PIXELS / camera.zoom)) {
+    const level = groupLevelUnder(hit, objects, state.selectedObjectIds);
+    const selectedObjectIds = state.selectedObjectIds.includes(level.id) ? state.selectedObjectIds : [level.id];
+    return { ...INITIAL_INTERACTION_STATE, selectedObjectIds, knob: { objectId: hit.id, emittedNotices: [] } };
+  }
   if (hit === undefined) {
     // A plain press clears the selection at once, as a click on empty canvas
     // always did, and a shift press keeps it for the box to add to.
@@ -262,6 +281,7 @@ export function pointerDown(
     // A press on the body of a path is about the whole path, so it drops the part.
     focus: undefined,
     marquee: undefined,
+    knob: undefined,
   };
 }
 
@@ -434,6 +454,7 @@ function idle(state: InteractionState): InteractionState {
     bend: undefined,
     focus: keptFocus(state.focus, state.selectedObjectIds),
     marquee: undefined,
+    knob: undefined,
   };
 }
 
@@ -472,6 +493,7 @@ function gripGestureAt(
         bend: { objectId: object.id, index: grip.index, emittedNotices: [] },
         focus,
         marquee: undefined,
+        knob: undefined,
       };
     }
     return {
@@ -487,6 +509,7 @@ function gripGestureAt(
       bend: undefined,
       focus,
       marquee: undefined,
+      knob: undefined,
     };
   }
   return undefined;
@@ -505,6 +528,7 @@ export function focusPathPart(state: InteractionState, objectId: string, grip: P
     bend: undefined,
     focus: { objectId, grip },
     marquee: undefined,
+    knob: undefined,
   };
 }
 
@@ -517,6 +541,13 @@ function everyVertexOfPath(object: GraphObject): readonly number[] | undefined {
     return undefined;
   }
   return Array.from({ length: object.vertexCount ?? 0 }, (_unused, index) => index);
+}
+
+/** The slider whose track lies under a screen point, which a plain press there would set. */
+export function sliderTrackUnder(screenPoint: ScreenPoint, objects: readonly GraphObject[], camera: CameraState): GraphObject | undefined {
+  const hit = hitTest(screenPoint, objects, camera);
+  const layout = hit?.type === "slider" ? sliderLayout(hit) : undefined;
+  return layout !== undefined && onSliderTrack(layout, screenToWorld(camera, screenPoint), STROKE_HIT_TOLERANCE_SCREEN_PIXELS / camera.zoom) ? hit : undefined;
 }
 
 export function pathGripUnder(
@@ -586,6 +617,9 @@ export function pointerMove(
   }
   if (state.bend !== undefined) {
     return bendMove(state, state.bend, screenPoint, objects, journal, camera, context);
+  }
+  if (state.knob !== undefined) {
+    return knobMove(state, state.knob, screenPoint, objects, journal, camera, context);
   }
   if (state.marquee !== undefined) {
     return { state: marqueeMove(state, state.marquee, screenToWorld(camera, screenPoint), objects, camera), objects, journal, notices: [], rejection: undefined };
@@ -704,7 +738,7 @@ function bendMove(
 
   const path = vertexBulgePath(bend.index);
   const bulge = bulgeForGrabbedMidpoint(object, bend.index, screenToWorld(camera, screenPoint));
-  const plan = bulge === undefined ? { operations: [], notices: [] } : planBulge(object, objects, path, bulge);
+  const plan = bulge === undefined ? { operations: [], notices: [] } : planAbsoluteWrite(object, objects, path, bulge, "bend");
   const fresh = plan.notices.filter((notice) => !bend.emittedNotices.includes(notice));
   const advanced: InteractionState = {
     ...idle(state),
@@ -720,25 +754,71 @@ function bendMove(
   return { state: advanced, objects: result.objects, journal: result.journal, notices: fresh, rejection: undefined };
 }
 
-/** An absolute write to one bulge slot, under the same per component rule a drag follows. */
-function planBulge(
+/**
+ * An absolute write to one slot, a bulge or a slider's value, under the same
+ * per component rule a drag follows: a slot a formula drives holds still and
+ * gives a notice that names what drives it.
+ */
+function planAbsoluteWrite(
   object: GraphObject,
   objects: readonly GraphObject[],
   path: readonly string[],
-  bulge: number,
+  value: number,
+  verb: "bend" | "move",
 ): DragPlan {
   const address: Address = { objectId: object.id, path };
   const slot = getSlot(object, path);
   if (slot === undefined) {
-    return { operations: [], notices: [`${describeAddress(address, objects)} has no slot to bend`] };
+    return { operations: [], notices: [`${describeAddress(address, objects)} has no slot to ${verb}`] };
   }
   if (slot.kind !== "literal") {
-    return { operations: [], notices: [`${describeAddress(address, objects)} did not bend: ${describeSlotDriver(slot, objects)}`] };
+    return { operations: [], notices: [`${describeAddress(address, objects)} did not ${verb}: ${describeSlotDriver(slot, objects)}`] };
   }
-  if (slot.value === bulge) {
+  if (slot.value === value) {
     return { operations: [], notices: [] };
   }
-  return { operations: [{ kind: "setSlot", address, slot: { kind: "literal", value: bulge } }], notices: [] };
+  return { operations: [{ kind: "setSlot", address, slot: { kind: "literal", value } }], notices: [] };
+}
+
+/**
+ * Continues a drag of a slider's knob. It writes `value` from where the pointer
+ * is along the track, held to the ends and rounded to the step, and the write
+ * is absolute, so the knob stays under the pointer.
+ */
+function knobMove(
+  state: InteractionState,
+  knob: KnobState,
+  screenPoint: ScreenPoint,
+  objects: readonly GraphObject[],
+  journal: readonly MutationJournalEntry[],
+  camera: CameraState,
+  context: EvalContext,
+): PointerMoveOutcome {
+  const object = objects.find((candidate) => candidate.id === knob.objectId);
+  const layout = object === undefined ? undefined : sliderLayout(object);
+  if (object === undefined || layout === undefined) {
+    return {
+      state: idle(state),
+      objects,
+      journal,
+      notices: [`the slider being set (id "${knob.objectId}") no longer exists — drag ended`],
+      rejection: undefined,
+    };
+  }
+  const plan = planAbsoluteWrite(object, objects, SLIDER_VALUE_PATH, sliderValueUnder(layout, screenToWorld(camera, screenPoint).x), "move");
+  const fresh = plan.notices.filter((notice) => !knob.emittedNotices.includes(notice));
+  const advanced: InteractionState = {
+    ...idle(state),
+    knob: { ...knob, emittedNotices: fresh.length === 0 ? knob.emittedNotices : [...knob.emittedNotices, ...fresh] },
+  };
+  if (plan.operations.length === 0) {
+    return { state: advanced, objects, journal, notices: fresh, rejection: undefined };
+  }
+  const result = mutate(objects, plan.operations, journal, context);
+  if (!result.ok) {
+    return { state: advanced, objects, journal, notices: fresh, rejection: result.message };
+  }
+  return { state: advanced, objects: result.objects, journal: result.journal, notices: fresh, rejection: undefined };
 }
 
 function resizeMove(
@@ -865,7 +945,7 @@ function widenEmittedNotices(
  * lands here, unless the browser cancelled the press.
  */
 export function pointerUp(state: InteractionState, cancelled: boolean = false): InteractionState {
-  if (state.drag === undefined && state.resize === undefined && state.bend === undefined && state.marquee === undefined) {
+  if (state.drag === undefined && state.resize === undefined && state.bend === undefined && state.marquee === undefined && state.knob === undefined) {
     return state;
   }
   // A cancelled press is no click, so it leaves the selection as it was.

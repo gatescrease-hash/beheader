@@ -377,6 +377,12 @@ function everyStructuralOperation(random: SeededRandom, objectCount: number): Op
     [{ kind: "setSlot", address: at(sheet, "cols"), slot: literalSlot(1) }],
     [{ kind: "setSlot", address: at(sheet, "cols"), slot: literalSlot(4) }],
     [{ kind: "setSlot", address: at(sheet, "cols"), slot: literalSlot(2.5) }],
+    // A slider holds its value in a literal that readers take up, and a
+    // formula in that value makes it a gauge of another slot.
+    [{ kind: "createObject", object: { id: "obj_slider", name: "slider", type: "slider", slots: { "origin.x": literalSlot(0), "origin.y": literalSlot(0), width: literalSlot(200), min: literalSlot(0), max: literalSlot(10), step: literalSlot(1), value: literalSlot(random.integer(10)) } } }],
+    [readerOf("obj_slider_reader", "slider_reader", at("obj_slider", "value"))],
+    [{ kind: "setSlot", address: at("obj_slider", "value"), slot: literalSlot(random.integer(10)) }],
+    [{ kind: "setSlot", address: at("obj_slider", "value"), slot: formulaSlot({ type: "reference", address: at(sheet, "cells", "A1") }) }],
     [{ kind: "createObject", object: withDerivedSlots({ id: path, name: "path", type: "polyline", vertexCount: pathPoints.length, slots: pathSlots }) }],
     [readerOf("obj_path_reader", "path_reader", at(path, "vertex", "2", "x"))],
     [{ kind: "addVertex", objectId: path, point: point(random.integer(50), 60) }],

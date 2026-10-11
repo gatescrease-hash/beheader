@@ -139,6 +139,7 @@ function hitTestObject(object: GraphObject, worldPoint: WorldPoint, strokeTolera
     case "image":
     case "script":
     case "math":
+    case "slider":
       return hitTestBoundingBox(object, worldPoint);
     case "polyline":
       return hitTestPolyline(object, worldPoint, strokeToleranceWorld);

@@ -1290,8 +1290,10 @@ the bare name rather than in the address: `vat` alone would then have to find
 which family it belongs to. It waits for a document with enough knobs to need
 grouping.
 
-A slider, a stepper or any other widget. A copy on the canvas is text, and
-section 17 holds the reason a control surface waits.
+A slider bound to a variable. A copy on the canvas is text. The slider of
+section 23 holds its own value, which any formula can read, and a slider that
+wrote a variable would be the drag through to a source that section 17
+postpones.
 
 A unit, a number format or a value that is a list. A variable holds one member
 of the `Value` union, the same as every literal slot in the document.
@@ -1634,6 +1636,7 @@ text x=0 y=0 "Hello {= table_x.A1 }"
 table x=0 y=0 rows=8 cols=8
 script x=0 y=0
 image x=0 y=0
+slider x=0 y=0 [min=0] [max=10] [step=1] [value=5] [w=200]
 group circle_1,rect_1
 ungroup group_1 [force]
 duplicate circle_1,rect_1
@@ -2081,7 +2084,52 @@ This does not replace the save of section 16. It covers the tab that closed.
 
 ---
 
-## 23. When the spec is silent
+## 23. The slider
+
+A slider sets one number by hand. A document whose values travel through
+formulas still starts somewhere, and a slider is a start an operator can grab:
+drag the knob, and everything that reads it moves.
+
+```
+slider x=0 y=0 [min=0] [max=10] [step=1] [value=5] [w=200]
+```
+
+**The slots.** `origin.x` and `origin.y` place it, `width` sets the length of
+its track, `min` and `max` set the ends, `step` sets the spacing of the values
+the knob stops at, and `value` holds the number every other object reads as
+`slider_1.value`. The slot set is fixed, so evaluation never adds a slot. A step
+of 0 lets the knob stop anywhere.
+
+**The knob writes value.** A plain press on the knob, or on the track, which
+moves the knob to the press, starts a drag that writes `value` from where the
+pointer is along the track: held to the ends, and rounded to the nearest step
+counted from `min`. The write is absolute, like a bend, so the knob sits under
+the pointer and never drifts, and the whole drag is one gesture, so one undo
+takes it back. A press on the slider away from its track selects and moves the
+slider like any other object, and shift keeps its meaning everywhere on it.
+
+**A formula in value makes a gauge.** The knob then holds still and draws grey,
+the way a held grip does, and a drag on it gives the usual notice. So one object
+serves as an input and as a display, and its knob says which.
+
+**A typed value can sit outside the range.** `set slider_1.value 50` on a slider
+from 0 to 10 holds 50. The knob pins to the nearer end and the label shows 50.
+A refusal would make the range a rule for every writer of the slot, and the
+range is a convenience for the knob alone. In the same way, a `max` at or below
+`min` leaves the knob at the left end, and the command that creates a slider
+refuses such a range, because nothing typed there means it.
+
+**Drawing.** A track with the part up to the knob in the accent colour, a round
+knob, and the value as text above the right end of the track. The name label
+sits above it like the label of any object.
+
+**The slider owns its value.** A slider that wrote a document variable, or the
+cell a formula reads, would be a drag through to its source, which section 17
+postpones. The slider is the source, and other objects read it.
+
+---
+
+## 24. When the spec is silent
 
 Prefer, in this order:
 

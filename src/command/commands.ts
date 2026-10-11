@@ -51,6 +51,11 @@ import {
   groupingOperations,
   ungroupingOperations,
   GROUP_MEMBERSHIP_PATH,
+  SLIDER_MAX_PATH,
+  SLIDER_MIN_PATH,
+  SLIDER_STEP_PATH,
+  SLIDER_VALUE_PATH,
+  SLIDER_WIDTH_PATH,
   groupOf,
   GEOMETRY_STYLE_DEFAULTS,
   getObjectSchema,
@@ -137,6 +142,7 @@ import type {
   CreateRectCommand,
   CreateMathCommand,
   CreateScriptCommand,
+  CreateSliderCommand,
   CreateTableCommand,
   CreateTextCommand,
   DeleteCommand,
@@ -290,6 +296,8 @@ export function executeCommand(command: Command, document: Document, context: Ev
       return createImage(command, document, context);
     case "script":
       return createScript(command, document, context);
+    case "slider":
+      return createSlider(command, document, context);
     case "math":
       return createMath(command, document, context);
     case "set":
@@ -419,6 +427,7 @@ export const COMMANDS_WITH_HANDLERS: readonly string[] = [
   "table",
   "image",
   "script",
+  "slider",
   "math",
   "set",
   "link",
@@ -590,6 +599,32 @@ function createImage(command: CreateImageCommand, document: Document, context: E
     { path: IMAGE_SOURCE_PATH, value: DEFAULT_IMAGE_SOURCE },
     { path: IMAGE_PRESERVE_ASPECT_PATH, value: DEFAULT_IMAGE_PRESERVE_ASPECT },
     { path: IMAGE_PICTURE_ASPECT_PATH, value: DEFAULT_IMAGE_PICTURE_ASPECT },
+  ], context);
+}
+
+/**
+ * Creates a slider. The command refuses a range with no width and a negative
+ * step, because the knob of such a slider has nothing to mean, while a value
+ * outside the range is a value like any other, and the knob pins to the end.
+ */
+function createSlider(command: CreateSliderCommand, document: Document, context: EvalContext): CommandOutcome {
+  if (!(command.max > command.min)) {
+    return { ok: false, message: `a slider needs max above min — got min=${command.min} max=${command.max}` };
+  }
+  if (!(command.step >= 0)) {
+    return { ok: false, message: `a slider needs a step of 0 or more, where 0 stops anywhere — got step=${command.step}` };
+  }
+  if (!(command.width > 0)) {
+    return { ok: false, message: `a slider needs a width above 0 — got w=${command.width}` };
+  }
+  return createObjectFromCommand(document, "slider", [
+    { path: ORIGIN_X_PATH, value: command.x },
+    { path: ORIGIN_Y_PATH, value: command.y },
+    { path: SLIDER_WIDTH_PATH, value: command.width },
+    { path: SLIDER_MIN_PATH, value: command.min },
+    { path: SLIDER_MAX_PATH, value: command.max },
+    { path: SLIDER_STEP_PATH, value: command.step },
+    { path: SLIDER_VALUE_PATH, value: command.value },
   ], context);
 }
 

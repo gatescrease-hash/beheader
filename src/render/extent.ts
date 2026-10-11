@@ -38,6 +38,7 @@ import { asPointArray, readBoolean, readNumber, scriptBoxHeight, SCRIPT_BOX_WIDT
 import { textBoxSize } from "./textbox.ts";
 import { tableLayout } from "./table-layout.ts";
 import { groupOf, displayObjects } from "../engine/index.ts";
+import { sliderLayout } from "./slider-layout.ts";
 
 export interface WorldExtent {
   readonly minX: number;
@@ -95,6 +96,8 @@ export function objectExtent(object: GraphObject): WorldExtent | undefined {
       return groupAnchorBox(object);
     case "math":
       return mathWorldBox(object);
+    case "slider":
+      return sliderLayout(object)?.box;
     case "value":
     case "add":
       return undefined;

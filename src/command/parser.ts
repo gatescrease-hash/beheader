@@ -33,7 +33,7 @@
  * Command-layer code: it turns a typed line into mutation calls, and
  * imports from the engine and from its own layer.
  */
-import { bulgeForTangentArc, DEFAULT_TABLE_COLS, DEFAULT_TABLE_ROWS, edgeEndDirection, MIN_POLYLINE_VERTICES } from "../engine/index.ts";
+import { bulgeForTangentArc, DEFAULT_SLIDER_MAX, DEFAULT_SLIDER_MIN, DEFAULT_SLIDER_STEP, DEFAULT_SLIDER_VALUE, DEFAULT_SLIDER_WIDTH, DEFAULT_TABLE_COLS, DEFAULT_TABLE_ROWS, edgeEndDirection, MIN_POLYLINE_VERTICES } from "../engine/index.ts";
 
 export interface CreateCircleCommand {
   readonly kind: "circle";
@@ -234,6 +234,17 @@ export interface GroupCommand {
   readonly members: readonly string[];
 }
 
+export interface CreateSliderCommand {
+  readonly kind: "slider";
+  readonly x: number;
+  readonly y: number;
+  readonly min: number;
+  readonly max: number;
+  readonly step: number;
+  readonly value: number;
+  readonly width: number;
+}
+
 export interface SnapCommand {
   readonly kind: "snap";
   readonly state: string;
@@ -353,6 +364,7 @@ export type Command =
   | GroupCommand
   | DuplicateCommand
   | SnapCommand
+  | CreateSliderCommand
   | UngroupCommand
   | GraphWalkCommand
   | OrphansCommand
@@ -674,6 +686,36 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
     buildFromPrompts: (answers) => {
       const origin = pointAnswer(answers, "origin");
       return { kind: "image", x: origin.x, y: origin.y };
+    },
+  },
+  {
+    name: "slider",
+    usage: "slider x=<number> y=<number> [min=<number>] [max=<number>] [step=<number>] [value=<number>] [w=<number>]",
+    positional: [],
+    named: [
+      requiredNumber("x"),
+      requiredNumber("y"),
+      optionalNumber("min", DEFAULT_SLIDER_MIN),
+      optionalNumber("max", DEFAULT_SLIDER_MAX),
+      optionalNumber("step", DEFAULT_SLIDER_STEP),
+      optionalNumber("value", DEFAULT_SLIDER_VALUE),
+      optionalNumber("w", DEFAULT_SLIDER_WIDTH),
+    ],
+    flags: [],
+    build: (args) => ({
+      kind: "slider",
+      x: numberArgument(args, "x"),
+      y: numberArgument(args, "y"),
+      min: numberArgument(args, "min"),
+      max: numberArgument(args, "max"),
+      step: numberArgument(args, "step"),
+      value: numberArgument(args, "value"),
+      width: numberArgument(args, "w"),
+    }),
+    prompts: [{ name: "origin", message: "specify slider position", accepts: "point" }],
+    buildFromPrompts: (answers) => {
+      const origin = pointAnswer(answers, "origin");
+      return { kind: "slider", x: origin.x, y: origin.y, min: DEFAULT_SLIDER_MIN, max: DEFAULT_SLIDER_MAX, step: DEFAULT_SLIDER_STEP, value: DEFAULT_SLIDER_VALUE, width: DEFAULT_SLIDER_WIDTH };
     },
   },
   {

@@ -78,6 +78,7 @@ export type ObjectType =
   | "value"
   | "doc"
   | "docref"
+  | "slider"
   | "add";
 
 export const TABLE_TYPE: ObjectType = "table";
@@ -91,6 +92,8 @@ export const POLYLINE_TYPE: ObjectType = "polyline";
 export const SCRIPT_TYPE: ObjectType = "script";
 
 export const MATH_TYPE: ObjectType = "math";
+
+export const SLIDER_TYPE: ObjectType = "slider";
 
 export interface LiteralSlot {
   readonly kind: "literal";

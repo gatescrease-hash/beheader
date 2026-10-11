@@ -822,6 +822,7 @@ describe("every registry command reaches a handler", () => {
     "ungroup group_1",
     "duplicate rect_1",
     "snap on",
+    "slider x=0 y=0",
     "upstream polygon_1",
     "downstream polygon_1 1",
     "orphans",
@@ -2494,4 +2495,25 @@ it.each(["circle x=0 y=0 r=1", 'math x=0 y=0 "y=1"'])("refuses creation with an 
   expect(document.objects).toEqual([]);
   expect(document.journal).toEqual([]);
   expect(document.nextObjectId).toBe(Number.MAX_SAFE_INTEGER);
+});
+
+describe("slider — a number set by hand", () => {
+  it("creates a slider with the defaults, holding its value where every formula can read it", () => {
+    const document = committed("slider x=10 y=20", createEmptyDocument());
+    const slider = onlyNamed(document, "slider_1");
+    expect([literalValue(slider, ["min"]), literalValue(slider, ["max"]), literalValue(slider, ["step"]), literalValue(slider, ["value"]), literalValue(slider, ["width"])]).toEqual([0, 10, 1, 5, 200]);
+    const read = committed("set circle_1.radius = slider_1.value * 4", committed("circle x=0 y=0 r=1", document));
+    expect(getSlot(onlyNamed(read, "circle_1"), ["radius"])?.value).toBe(20);
+  });
+
+  it("refuses a range with no width, a negative step and a slider of no width", () => {
+    expect(refused("slider x=0 y=0 min=5 max=5", createEmptyDocument())).toBe("a slider needs max above min — got min=5 max=5");
+    expect(refused("slider x=0 y=0 step=-1", createEmptyDocument())).toContain("a step of 0 or more");
+    expect(refused("slider x=0 y=0 w=0", createEmptyDocument())).toContain("a width above 0");
+  });
+
+  it("takes a typed value outside its range, which the knob pins to the end", () => {
+    const document = committed("set slider_1.value 50", committed("slider x=0 y=0", createEmptyDocument()));
+    expect(literalValue(onlyNamed(document, "slider_1"), ["value"])).toBe(50);
+  });
 });

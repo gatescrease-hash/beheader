@@ -59,6 +59,7 @@ export * from "./primitives/geometry.ts";
 export * from "./primitives/table.ts";
 export * from "./primitives/text.ts";
 export * from "./primitives/image.ts";
+export * from "./primitives/slider.ts";
 export * from "./primitives/math.ts";
 
 export * from "./math/ast.ts";

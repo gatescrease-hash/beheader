@@ -100,6 +100,7 @@ import { EDGE_GRIP_SIZE_SCREEN, hasPathGrips, pathGrips, sameGrip, VERTEX_GRIP_S
 import { layOutText } from "./measure.ts";
 import { asPointArray, readBoolean, readNumber, readShapeStyle, readText, SCRIPT_HEADER_HEIGHT, SCRIPT_PORT_ROW_HEIGHT, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";
 import { tableLayout, cellStyle, fittedCellNumber } from "./table-layout.ts";
+import { SLIDER_KNOB_RADIUS, sliderLayout } from "./slider-layout.ts";
 import { displayObjects } from "../engine/index.ts";
 import { textBoxSize } from "./textbox.ts";
 import { GROUP_TAB_HEIGHT, groupBoundary, groupTabWidth, objectExtent } from "./extent.ts";
@@ -666,6 +667,9 @@ function drawObject(
     case "math":
       drawMath(ctx, object);
       return;
+    case "slider":
+      drawSlider(ctx, object);
+      return;
     case "value":
     case "add":
       return;
@@ -675,6 +679,52 @@ function drawObject(
       return;
     }
   }
+}
+
+const SLIDER_TRACK_STYLE = "#d3cab5";
+const SLIDER_FILLED_STYLE = "#667653";
+const SLIDER_KNOB_FILL_STYLE = "#ffffff";
+const SLIDER_HELD_KNOB_FILL_STYLE = "#c9c9c9";
+const SLIDER_KNOB_STROKE_STYLE = "#45543d";
+const SLIDER_VALUE_STYLE = "#303b32";
+const SLIDER_TRACK_WIDTH = 3;
+const SLIDER_VALUE_FONT = "12px sans-serif";
+
+/**
+ * A slider: the track, the part of it up to the knob in the accent colour, the
+ * knob, grey while a formula holds it, and the value above the right end of
+ * the track. A value that is no number prints as it is, with the knob at the
+ * left end.
+ */
+function drawSlider(ctx: DrawingContext, object: GraphObject): void {
+  const layout = sliderLayout(object);
+  if (layout === undefined) {
+    return;
+  }
+  ctx.lineWidth = SLIDER_TRACK_WIDTH;
+  ctx.strokeStyle = SLIDER_TRACK_STYLE;
+  ctx.beginPath();
+  ctx.moveTo(layout.trackStart, layout.trackY);
+  ctx.lineTo(layout.trackEnd, layout.trackY);
+  ctx.stroke();
+  ctx.strokeStyle = SLIDER_FILLED_STYLE;
+  ctx.beginPath();
+  ctx.moveTo(layout.trackStart, layout.trackY);
+  ctx.lineTo(layout.knobX, layout.trackY);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(layout.knobX, layout.trackY, SLIDER_KNOB_RADIUS, 0, Math.PI * 2);
+  ctx.fillStyle = layout.held ? SLIDER_HELD_KNOB_FILL_STYLE : SLIDER_KNOB_FILL_STYLE;
+  ctx.fill();
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = SLIDER_KNOB_STROKE_STYLE;
+  ctx.stroke();
+  const shown = layout.value === undefined ? "" : formatCellValue(layout.value) ?? "";
+  ctx.font = SLIDER_VALUE_FONT;
+  ctx.fillStyle = SLIDER_VALUE_STYLE;
+  ctx.textAlign = "right";
+  ctx.textBaseline = "alphabetic";
+  ctx.fillText(shown, layout.trackEnd, layout.trackY - SLIDER_KNOB_RADIUS - 3);
 }
 
 function buildCirclePath(ctx: DrawingContext, object: GraphObject): boolean {
@@ -1027,7 +1077,8 @@ function drawSelectionHighlight(ctx: DrawingContext, object: GraphObject): void 
     case "text":
     case "docref":
     case "image":
-    case "script": {
+    case "script":
+    case "slider": {
       const extent = objectExtent(object);
       if (extent === undefined) {
         return;

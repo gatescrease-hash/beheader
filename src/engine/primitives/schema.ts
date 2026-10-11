@@ -56,6 +56,7 @@ import {
   verticesDerivedSlots,
 } from "./geometry.ts";
 import { IMAGE_HEIGHT_PATH, IMAGE_OPACITY_PATH, IMAGE_PICTURE_ASPECT_PATH, IMAGE_PRESERVE_ASPECT_PATH, IMAGE_SOURCE_PATH, IMAGE_WIDTH_PATH } from "./image.ts";
+import { SLIDER_MAX_PATH, SLIDER_MIN_PATH, SLIDER_STEP_PATH, SLIDER_VALUE_PATH, SLIDER_WIDTH_PATH } from "./slider.ts";
 import {
   enumerateScriptInPaths,
   enumerateScriptOutDerivedSlots,
@@ -487,6 +488,19 @@ const MATH_SCHEMA: ObjectSchema = {
   ],
 };
 
+/**
+ * A slider holds its value and the range its knob covers, in a fixed set of
+ * literal slots, so evaluation never changes the set. slider.ts gives the rule
+ * the knob follows.
+ */
+const SLIDER_SCHEMA: ObjectSchema = {
+  type: "slider",
+  nonDerivedSlotPaths: [
+    { kind: "static", paths: [ORIGIN_X_PATH, ORIGIN_Y_PATH, SLIDER_WIDTH_PATH, SLIDER_MIN_PATH, SLIDER_MAX_PATH, SLIDER_STEP_PATH, SLIDER_VALUE_PATH] },
+  ],
+  derivedSlots: [],
+};
+
 const SCHEMAS: Partial<Record<ObjectType, ObjectSchema>> = {
   layer: {
     type: "layer", nonDerivedSlotPaths: [{ kind: "static", paths: STYLE_PATHS }], derivedSlots: [],
@@ -521,6 +535,7 @@ const SCHEMAS: Partial<Record<ObjectType, ObjectSchema>> = {
   script: SCRIPT_SCHEMA,
   group: GROUP_SCHEMA,
   math: MATH_SCHEMA,
+  slider: SLIDER_SCHEMA,
 };
 
 /** The schema for a type, or undefined for a type with no entry yet. */

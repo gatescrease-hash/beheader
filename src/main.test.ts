@@ -2784,3 +2784,23 @@ describe("the review fixes for gestures that fold", () => {
     expect(typed(state, "delete group_1").log.at(-1)).toBe("removed group_1, which held nothing");
   });
 });
+
+describe("a slider drives what reads it", () => {
+  it("jumps the knob to a press on the track, and a drag of it is one undo step that moves everything reading it", () => {
+    let state = typed(opened(), "slider x=0 y=0");
+    state = typed(state, "circle x=300 y=0 r=1");
+    state = typed(state, "set circle_1.radius = slider_1.value * 10");
+    const camera = state.document.camera;
+    const before = state.document.journal.length;
+    // The track runs from x 7 to x 193 along y 22.
+    let dragged = pointerDownAt(state, worldToScreen(camera, { x: 7 + 0.2 * 186, y: 22 }), VIEWPORT).state;
+    expect(numberAt(objectNamed(dragged, "slider_1"), ["value"])).toBe(2);
+    dragged = pointerMoveTo(dragged, worldToScreen(camera, { x: 7 + 0.6 * 186, y: 22 }));
+    dragged = pointerMoveTo(dragged, worldToScreen(camera, { x: 7 + 0.9 * 186, y: 22 }));
+    dragged = pointerUpNow(dragged);
+    expect(numberAt(objectNamed(dragged, "slider_1"), ["value"])).toBe(9);
+    expect(numberAt(objectNamed(dragged, "circle_1"), ["radius"])).toBe(90);
+    expect(dragged.document.journal).toHaveLength(before + 1);
+    expect(numberAt(objectNamed(typed(dragged, "undo"), "circle_1"), ["radius"])).toBe(50);
+  });
+});
