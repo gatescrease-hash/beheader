@@ -299,6 +299,12 @@ export interface EvaluationStrategyInput {
   readonly edges: readonly Edge[];
   readonly operations: readonly Operation[];
   readonly context: EvalContext;
+  /**
+   * The slots the repair pass rewrote to #REF, which evaluate again. A reader
+   * of an empty cell depends on an address with no slot behind it, so no root
+   * the operations name would reach it.
+   */
+  readonly repaired?: readonly Address[];
 }
 
 export type EvaluationStrategy = (input: EvaluationStrategyInput) => readonly GraphObject[];
@@ -341,7 +347,7 @@ function contextSlotAddresses(objects: readonly GraphObject[]): readonly Address
 function operationDirtyRoots(input: EvaluationStrategyInput): readonly Address[] | undefined {
   const previousById = new Map(input.previousObjects.map((object) => [object.id, object]));
   const stagedById = new Map(input.stagedObjects.map((object) => [object.id, object]));
-  const roots: Address[] = [...contextSlotAddresses(input.stagedObjects)];
+  const roots: Address[] = [...contextSlotAddresses(input.stagedObjects), ...(input.repaired ?? [])];
 
   for (const operation of input.operations) {
     if (operation.kind === "setSlot" || operation.kind === "clearSlot") {
@@ -479,6 +485,7 @@ function deriveValidateAndEvaluateWithStrategy(
   operations: readonly Operation[],
   context: EvalContext,
   evaluationStrategy: EvaluationStrategy,
+  repaired: readonly Address[] = [],
 ): CheckedEvaluation {
   const edges = deriveEdges(objects);
 
@@ -494,7 +501,7 @@ function deriveValidateAndEvaluateWithStrategy(
 
   return {
     ok: true,
-    objects: evaluationStrategy({ previousObjects, stagedObjects: objects, edges, operations, context }),
+    objects: evaluationStrategy({ previousObjects, stagedObjects: objects, edges, operations, context, repaired }),
     edges,
   };
 }
@@ -1495,7 +1502,10 @@ function commitIndexedBatch(
     [...addresses].sort((left, right) => positionOf(left.objectId) - positionOf(right.objectId)))).filter((address) =>
     current(address.objectId)?.slots[slotKey(address.path)] !== undefined);
 
-  const roots: Address[] = [];
+  // A slot the repair pass rewrote to #REF evaluates again. A reader of an
+  // empty cell depends on an address with no slot behind it, so no root under
+  // the object a forced delete removes would reach it.
+  const roots: Address[] = [...brokenSlots];
   for (const operation of operations) {
     if (operation.kind === "setSlot" || operation.kind === "clearSlot") {
       roots.push(operation.address);
@@ -1743,6 +1753,7 @@ export function mutate(
     operations,
     context,
     evaluationStrategy,
+    folded.brokenSlots,
   );
   if (!result.ok) {
     return result;

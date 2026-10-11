@@ -4968,6 +4968,27 @@ describe("mutate — the structural operations commit through the index of the c
     return { id, name, type: "group", slots: { "origin.x": { kind: "literal", value: 0 }, "origin.y": { kind: "literal", value: 0 }, language: { kind: "literal", value: "python" }, source: { kind: "literal", value: "" } } };
   }
 
+  it("evaluates again a reader of an empty cell that a forced delete or a deleted row breaks, on the indexed path as on the whole document", () => {
+    let state = stagingFixture();
+    const table = idOf(state.objects, "table_1");
+    const readsEmpty = (id: string, cell: string): Operation =>
+      ({ kind: "createObject", object: { id, name: id, type: "value", slots: { value: { kind: "formula", ast: { type: "reference", address: { objectId: table, path: ["cells", cell] } }, value: null } } } });
+    // The table is 8 by 8, so H7 and H8 are empty cells inside it.
+    const created = expectIndexedAndSame(state, [readsEmpty("reads_h7", "H7"), readsEmpty("reads_h8", "H8")]);
+    if (!created.ok) throw new Error(created.message);
+    state = created;
+    expect(state.objects.find((object) => object.id === "reads_h7")?.slots.value?.value).toBe(0);
+    const rowGone = expectIndexedAndSame(state, [{ kind: "deleteTableLine", objectId: table, axis: "row", index: 8 }]);
+    expect(rowGone.ok && rowGone.objects.find((object) => object.id === "reads_h8")?.slots.value?.value).toMatchObject({ error: "#REF" });
+    const forced: Operation[] = [{ kind: "deleteObject", objectId: table, force: true }];
+    const tableGone = expectIndexedAndSame(state, forced);
+    expect(tableGone.ok && tableGone.objects.find((object) => object.id === "reads_h7")?.slots.value?.value).toMatchObject({ error: "#REF" });
+    // The list handed its index on, so the same batch now takes the path for a
+    // list with no index, which has to agree as well.
+    expect(graphIndexOf(state.objects)).toBeUndefined();
+    expect(mutate(state.objects, forced, state.journal, stagingContext)).toEqual(tableGone);
+  });
+
   it("resizes tables, edits paths and ports, writes math sources, variables and memberships, and deletes with force, all through the index", () => {
     let state = stagingFixture();
     const doc = idOf(state.objects, "doc");
