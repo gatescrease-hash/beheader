@@ -113,7 +113,9 @@ function groupTaken(group: GraphObject, shown: readonly GraphObject[], box: Worl
   const inside = groupDescendants(group.id, shown);
   const members = inside.filter((object) => object.type !== "group");
   if (mode === "window") {
-    return members.length === 0 ? enclosed(groupBoundary(group, shown), box) : members.every((member) => enclosed(objectExtent(member), box));
+    // A member with no box, such as an empty text, draws nothing a window could leave out.
+    const boxes = members.map(objectExtent).filter((extent): extent is WorldExtent => extent !== undefined);
+    return boxes.length === 0 ? enclosed(groupBoundary(group, shown), box) : boxes.every((extent) => enclosed(extent, box));
   }
   return members.some((member) => touches(member, box))
     || [group, ...inside.filter((object) => object.type === "group")].some((each) => touchesGroupOutline(each, shown, box));
@@ -290,9 +292,13 @@ export function drawMarquee(ctx: DrawingContext, camera: CameraState, start: Wor
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = MARQUEE_COLORS[mode].fill;
   ctx.fillRect(x, y, width, height);
+  // A whole number of device pixels, offset by half a pixel when odd, puts the
+  // outline on whole rows and columns of pixels at any pixel ratio.
+  const lineWidth = Math.max(1, Math.round(pixelRatio));
+  const offset = lineWidth % 2 === 1 ? 0.5 : 0;
   ctx.strokeStyle = MARQUEE_COLORS[mode].stroke;
-  ctx.lineWidth = pixelRatio;
-  ctx.setLineDash(mode === "crossing" ? [5 * pixelRatio, 3 * pixelRatio] : []);
-  ctx.strokeRect(x + 0.5, y + 0.5, width, height);
+  ctx.lineWidth = lineWidth;
+  ctx.setLineDash(mode === "crossing" ? [5 * lineWidth, 3 * lineWidth] : []);
+  ctx.strokeRect(Math.round(x) + offset, Math.round(y) + offset, Math.round(width), Math.round(height));
   ctx.restore();
 }

@@ -143,6 +143,11 @@ describe("a box takes units", () => {
     expect(window(members(), -1, -1, 50, 21)).toEqual([]);
   });
 
+  it("takes a group with a window around its members when one member, an empty text, draws nothing", () => {
+    const empty: GraphObject = { id: "e", name: "e", type: "text", slots: { "origin.x": { kind: "literal", value: 500 }, "origin.y": { kind: "literal", value: 500 } } };
+    expect(window([group("g", 0, 0), inGroup(square("a", 0, 0, 20), "g"), inGroup(empty, "g")], -1, -1, 21, 21)).toEqual(["g"]);
+  });
+
   it("takes a group with a crossing that touches one member, and never a member alone", () => {
     expect(crossing(members(), 110, -5, 130, 5)).toEqual(["g"]);
   });

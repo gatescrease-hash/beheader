@@ -15,7 +15,7 @@ register, and the measurements behind leaving that migration unscheduled.
 | --- | --- |
 | Build | Clean. `npx vite build` succeeds. |
 | Types | Clean. Both configs pass `tsc --noEmit`. |
-| Tests | 3027 Vitest tests and 2 tooling tests pass, with 0 skipped. |
+| Tests | 3034 Vitest tests and 2 tooling tests pass, with 0 skipped. |
 | Spec | Built through section 22, except the parts section 17 postpones. |
 | Scripts | Python runs in a Pyodide worker. Groups are script nodes with members. |
 | Rule 5 | Met for every committed batch. A refusal and a list with no index still cost the whole document. |
@@ -391,13 +391,14 @@ the code it constrains.
    `pointerDownAt` in `main.ts` keeps the document as it stood at the press, and
    `pointerUpNow` commits the frames again as one batch against it, built by
    `gestureOperations` in `journal.ts`, which replaces the frames in the
-   journal. A gesture that commits anything through another path between the
-   press and the release keeps its frames, because the journal no longer
-   continues from the press. An undo refuses while a gesture is under way for
-   the same reason. A held arrow key folds the same way through `foldGesture`,
-   against `nudgeBase`, on every repeat rather than on the release of the key,
-   because a release can go missing when the window loses focus, and a fold
-   that waits for one would leave an undo refused.
+   journal. `GestureBase` counts the entries the gesture committed and keeps the
+   last of them, and `foldGesture` folds only while the journal after the press
+   holds exactly those, so a gesture during which anything else commits keeps
+   its frames. An undo refuses while a gesture is under way for the same
+   reason. A held arrow key folds the same way, against `nudgeBase`, on every
+   repeat rather than on the release of the key, because a release can go
+   missing when the window loses focus, and a repeat joins the run only while
+   the run's own entry is still the last one.
 
 24. **Every read across objects in edge derivation or the integrity checks is
    listed in `objectFacts` in `mutation.ts`.** The indexed path re-derives and

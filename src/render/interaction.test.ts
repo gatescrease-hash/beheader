@@ -1341,3 +1341,28 @@ describe("a drag snaps to the lines around it when snap settings are given", () 
     expect(slotValue(moved.objects, "obj_2", "origin.x")).toBe(80);
   });
 });
+
+describe("the review fixes for selecting many", () => {
+  it("keeps shift's meaning of adding and taking out over the stroke of a path, while other objects are selected", () => {
+    const { objects } = commit([{ ...polylineObject(), id: "obj_p", name: "polyline_1" }, rectNamed("obj_1", "rect_1", 300, 300)]);
+    const pressed = pointerDown(selecting(["obj_1", "obj_p"]), { x: 50, y: 0 }, objects, CAMERA_IDENTITY, true);
+    expect(pressed.selectedObjectIds).toEqual(["obj_1", "obj_p"]);
+    expect(pressed.drag).toMatchObject({ objectId: "obj_p", carried: ["obj_1"], click: { objectId: "obj_p", selects: "out" } });
+    expect(pointerUp(pressed).selectedObjectIds).toEqual(["obj_1"]);
+    // Alone, the same shift press still grabs the segment under it.
+    const alone = pointerDown(selecting(["obj_p"]), { x: 50, y: 0 }, objects, CAMERA_IDENTITY, true);
+    expect(alone.drag?.vertices).toEqual([0, 1]);
+  });
+
+  it("drops the click of a press the browser cancelled, so the selection stays as it was", () => {
+    const { objects } = commit([rectNamed("obj_1", "rect_1", 0, 0), rectNamed("obj_3", "rect_2", 100, 0)]);
+    const pressed = pointerDown(selecting(["obj_1", "obj_3"]), { x: 10, y: 0 }, objects, CAMERA_IDENTITY);
+    expect(pointerUp(pressed, true).selectedObjectIds).toEqual(["obj_1", "obj_3"]);
+  });
+
+  it("keeps a nudged value free of binary rounding, and every decimal the value had before", () => {
+    const { objects } = commit([rectNamed("obj_1", "rect_1", 100.2, 7.125)]);
+    const values = planNudge(objects, ["obj_1"], 0.1, 0.1).operations.map((operation) => (operation.kind === "setSlot" ? operation.slot.value : undefined));
+    expect(values).toEqual([100.3, 7.225]);
+  });
+});

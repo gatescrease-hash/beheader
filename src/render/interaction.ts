@@ -225,9 +225,12 @@ export function pointerDown(
   // the way down is already selected, so a selected group drags as a whole and
   // a member reached by a double click or by name stays the one selected.
   const object = groupLevelUnder(hit, objects, state.selectedObjectIds);
-  // Shift over an edge of a path grabs that segment. Held anywhere else, it adds
-  // the object to the selection.
-  const segment = additive && object === hit ? pathSegmentUnder(object, screenPoint, camera) : undefined;
+  // Shift over an edge of a path grabs that segment, while the path is the
+  // only thing selected or nothing is. With other objects selected, shift
+  // means what it means everywhere else, so a selection of many can take a
+  // path in and out by its stroke.
+  const alone = state.selectedObjectIds.length === 0 || (state.selectedObjectIds.length === 1 && state.selectedObjectIds[0] === object.id);
+  const segment = additive && alone && object === hit ? pathSegmentUnder(object, screenPoint, camera) : undefined;
   // A segment grab selects the path outright, so the drag moves the two ends
   // of that edge and nothing else.
   if (segment !== undefined) {
@@ -360,7 +363,33 @@ export function movingUnits(objects: readonly GraphObject[], selectedObjectIds: 
  * moving unit through planMove, under the rule a drag follows.
  */
 export function planNudge(objects: readonly GraphObject[], selectedObjectIds: readonly string[], deltaX: number, deltaY: number): DragPlan {
-  return joinPlans(movingUnits(objects, selectedObjectIds).map((unit) => planMove(unit, objects, deltaX, deltaY)));
+  const plan = joinPlans(movingUnits(objects, selectedObjectIds).map((unit) => planMove(unit, objects, deltaX, deltaY)));
+  // A step of 0.1 adds in binary, so 100.2 and 0.1 make 100.30000000000001.
+  // Each written value keeps as many decimals as the step or the value before
+  // it had, which drops that error and nothing the operator wrote.
+  const stepDecimals = Math.max(decimalsOf(Math.abs(deltaX)), decimalsOf(Math.abs(deltaY)));
+  const byId = new Map(objects.map((object) => [object.id, object]));
+  return {
+    ...plan,
+    operations: plan.operations.map((operation) => {
+      if (operation.kind !== "setSlot" || operation.slot.kind !== "literal" || typeof operation.slot.value !== "number") return operation;
+      const before = byId.get(operation.address.objectId);
+      const previous = before === undefined ? undefined : getSlot(before, operation.address.path)?.value;
+      const decimals = Math.min(MAX_NUDGE_DECIMALS, Math.max(stepDecimals, typeof previous === "number" ? decimalsOf(previous) : 0));
+      return { ...operation, slot: { kind: "literal", value: Number(operation.slot.value.toFixed(decimals)) } };
+    }),
+  };
+}
+
+/** The most decimals a nudged value keeps, which is past what an operator types and short of what a binary number holds. */
+const MAX_NUDGE_DECIMALS = 12;
+
+/** The decimals in the shortest text of a number, and the most a nudge keeps for one written in exponent form. */
+function decimalsOf(value: number): number {
+  const text = String(value);
+  if (text.includes("e")) return MAX_NUDGE_DECIMALS;
+  const point = text.indexOf(".");
+  return point < 0 ? 0 : text.length - point - 1;
 }
 
 /**
@@ -598,9 +627,8 @@ export function pointerMove(
     return { state: { ...idle(state), drag: following }, objects, journal, notices: [], rejection: undefined };
   }
 
-  const carried = drag.carried
-    .map((id) => objects.find((candidate) => candidate.id === id))
-    .filter((each): each is GraphObject => each !== undefined);
+  const wanted = new Set(drag.carried);
+  const carried = wanted.size === 0 ? [] : objects.filter((candidate) => wanted.has(candidate.id));
   const plan = joinPlans([
     object.type === "group" ? planMove(object, objects, deltaX, deltaY) : planDrag(object, objects, deltaX, deltaY, drag.vertices),
     ...carried.map((each) => planMove(each, objects, deltaX, deltaY)),
@@ -834,13 +862,14 @@ function widenEmittedNotices(
 /**
  * Ends a drag, a resize, a bend or a selection box. A drag that never passed
  * the threshold after a press on a selected object is a click, and the click
- * lands here.
+ * lands here, unless the browser cancelled the press.
  */
-export function pointerUp(state: InteractionState): InteractionState {
+export function pointerUp(state: InteractionState, cancelled: boolean = false): InteractionState {
   if (state.drag === undefined && state.resize === undefined && state.bend === undefined && state.marquee === undefined) {
     return state;
   }
-  const click = state.drag !== undefined && !state.drag.moved ? state.drag.click : undefined;
+  // A cancelled press is no click, so it leaves the selection as it was.
+  const click = state.drag !== undefined && !state.drag.moved && !cancelled ? state.drag.click : undefined;
   if (click === undefined) {
     return idle(state);
   }

@@ -1440,10 +1440,14 @@ The vertex list is the one part of a panel that scrolls, so a long path cannot
 push the derived slots off the screen.
 
 **Shift has two meanings.** Shift adds an object to the selection, or takes it
-out again. Over an edge of a path it means something else. It grabs that
+out again. Over an edge of a path that is selected alone, or with nothing
+selected, it means something else. It grabs that
 segment, and the drag moves only the two vertices at the ends of that edge. A
-press that grabs a segment selects the path outright, because nothing can drag
-an object that the same press has just deselected. A shift press inside a
+press that grabs a segment selects the path, so the vertices it moves belong to
+the object the operator sees selected. With other objects selected, a shift
+press on the stroke of a path adds the path or takes it out, as it does for any
+object, because a hollow path offers nothing but its stroke to press on, and a
+selection of many has to be able to take it in. A shift press inside a
 filled path reaches no edge. So it adds to the selection and drags the whole
 path, the way it does everywhere else. The gesture picks its vertices at the
 press and holds them, so the set never changes under the pointer.
@@ -1519,13 +1523,16 @@ key below is the field's again.
 
 Cmd stands in for Ctrl on a Mac, as it does for undo.
 
-**The arrows go where the operator last worked.** The command line recalls
-its history with Up and Down, and the canvas moves the selection with all four
-arrows, so the two share the keys. A press on the canvas, a pick in the list of
-objects or Ctrl+A gives the arrows to the canvas. Typing into the command line,
-or running a line from it, gives them back, so an operator who has just run a
-command and presses Up gets the command back rather than a moved object. With
-nothing selected the arrows always belong to the command line.
+**The arrows, Delete and Backspace go where the operator last worked.** The
+command line recalls its history with Up and Down and clears its text with
+Backspace, and the canvas wants the same keys for the selection. A press on the
+canvas, a pick in the list of objects, Ctrl+A or Ctrl+D gives these keys to the
+canvas. Typing into the command line, or running a line from it, gives them
+back. So an operator who has just run a command and presses Up gets the command
+back rather than a moved object, and a Backspace tapped once too often while
+clearing the line deletes nothing. With nothing selected the keys always belong
+to the command line, and a key the command line has acted on, such as a Down
+that walked its history back to the empty line, does nothing more.
 
 An arrow moves the selection through the planner a drag uses, so a position a
 formula drives holds still and gives the same notice. The step follows the grid
@@ -1534,13 +1541,15 @@ zoom: at a zoom of 1 the grid step is 10, so an arrow moves 1 unit and Shift
 moves 10. Each fresh press is one batch and one journal entry. A held key
 repeats, and the repeats fold into the entry of the fresh press, so one undo
 takes back the whole run. The active cell of a selected table takes the arrows
-before the selection does, because a table with an active cell is a
-table the operator is working inside. For the same reason Delete and Backspace
+while the table is the whole selection, because a table with an active cell is
+a table the operator is working inside, and a wider selection is not. For the same reason Delete and Backspace
 clear the active cell through the `clear` command, as a spreadsheet does, and
 leave the table where it is.
 
 Delete removes everything the selection holds, a group with everything inside
-it, in one batch, the same as a cut. The `delete` command on a group dissolves
+it, in one batch, the same as a cut. It waits while a press is under way, a
+drag, a resize, a rewire or a pan, because the press would go on writing to
+what the key removed. The `delete` command on a group dissolves
 it and keeps the members, which is the gesture for taking a group apart. The
 key acts on what the operator sees selected, and a selected group looks like
 one object. A delete of an object that something outside the selection reads
@@ -1548,7 +1557,8 @@ refuses by name, the way the command does. Only a fresh press deletes. A
 Backspace held to clear the command line repeats, and a repeat reaches no
 object, so the drawing survives the line running empty under a held key.
 
-Ctrl+D copies the selection a step down and right, through the copy that the
+A held Ctrl+A or Ctrl+D repeats, and a repeat does nothing more, so holding
+the keys never stacks copies. Ctrl+D copies the selection a step down and right, through the copy that the
 clipboard of section 22 makes, so a formula among the copies that names
 another copy reads that copy. The copies become the selection, so a second
 Ctrl+D steps on again. The clipboard keeps what it held, because a duplicate is

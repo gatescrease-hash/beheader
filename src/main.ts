@@ -62,7 +62,7 @@ import {
   IMAGE_SOURCE_PATH,
   IMAGE_TYPE,
   IMAGE_WIDTH_PATH,
-  groupDescendants,
+  groupOf,
   loadDocument,
   NULL_EVAL_CONTEXT,
   saveDocument,
@@ -204,6 +204,18 @@ export const INITIAL_WIRES_STATE: WiresState = { visible: false, selected: undef
 export interface GestureBase {
   readonly objects: readonly GraphObject[];
   readonly journal: readonly MutationJournalEntry[];
+  /**
+   * How many entries the gesture itself committed since the base, and the last
+   * of them. A fold needs the journal after the base to hold exactly these, so
+   * an entry that something else committed in the meantime stops it.
+   */
+  readonly committed: number;
+  readonly last: MutationJournalEntry | undefined;
+}
+
+/** The state of a document as the base of a gesture that has committed nothing yet. */
+function gestureBase(state: AppState): GestureBase {
+  return { objects: state.document.objects, journal: state.document.journal, committed: 0, last: undefined };
 }
 
 export type FileRequest = "save" | "load" | "csv";
@@ -933,7 +945,7 @@ export function pointerDownAt(
   }
   const interaction = pointerDown(state.interaction, screenPoint, state.document.objects, state.document.camera, additive);
   const gestures = interaction.drag !== undefined || interaction.resize !== undefined || interaction.bend !== undefined;
-  const gesture = gestures ? { objects: state.document.objects, journal: state.document.journal } : undefined;
+  const gesture = gestures ? gestureBase(state) : undefined;
   return transition(withInteraction({ ...state, gesture }, interaction));
 }
 
@@ -952,11 +964,15 @@ export function pointerMoveTo(
     context,
     snapping,
   );
+  const gesture = state.gesture === undefined || outcome.journal === state.document.journal
+    ? state.gesture
+    : { ...state.gesture, committed: state.gesture.committed + outcome.journal.length - state.document.journal.length, last: outcome.journal.at(-1) };
   const moved: AppState = {
     ...state,
     document: { ...state.document, objects: outcome.objects, journal: outcome.journal },
     interaction: outcome.state,
     pointer: screenToWorld(state.document.camera, screenPoint),
+    gesture,
   };
   const lines = outcome.rejection === undefined ? outcome.notices : [...outcome.notices, outcome.rejection];
   return withLog(moved, lines);
@@ -974,18 +990,23 @@ export function pointerMoveTo(
  * state at the press, which is the case when something else committed in the
  * meantime, or when the batch refuses.
  */
-export function pointerUpNow(state: AppState, context: EvalContext = NULL_EVAL_CONTEXT): AppState {
-  return foldGesture(withInteraction({ ...state, gesture: undefined }, pointerUp(state.interaction)), state.gesture, context);
+export function pointerUpNow(state: AppState, context: EvalContext = NULL_EVAL_CONTEXT, cancelled: boolean = false): AppState {
+  return foldGesture(withInteraction({ ...state, gesture: undefined }, pointerUp(state.interaction, cancelled)), state.gesture, context);
 }
 
-/** Replaces the entries committed since a base with one batch that writes the same final values. */
+/**
+ * Replaces the entries a gesture committed with one batch that writes the same
+ * final values. It folds only while the journal after the base holds exactly
+ * the gesture's own entries, so an entry anything else committed meanwhile
+ * keeps every entry as it stands.
+ */
 function foldGesture(ended: AppState, base: GestureBase | undefined, context: EvalContext): AppState {
   const journal = ended.document.journal;
-  if (base === undefined || journal.length <= base.journal.length + 1) {
+  if (base === undefined || base.committed < 2) {
     return ended;
   }
   const continues = base.journal.length === 0 || journal[base.journal.length - 1] === base.journal[base.journal.length - 1];
-  if (!continues) {
+  if (!continues || journal.length !== base.journal.length + base.committed || journal.at(-1) !== base.last) {
     return ended;
   }
   const operations = gestureOperations(journal.slice(base.journal.length));
@@ -1422,9 +1443,16 @@ export function nudgeSelection(state: AppState, deltaX: number, deltaY: number, 
   if (!result.ok) {
     return transition(withLog({ ...state, refusedCycle: result.cycle }, [result.message]), true);
   }
-  const base = repeat && state.nudgeBase !== undefined ? state.nudgeBase : { objects: state.document.objects, journal: state.document.journal };
-  const moved: AppState = { ...state, nudgeBase: base, refusedCycle: undefined, document: { ...state.document, objects: result.objects, journal: result.journal } };
-  return transition(withLog(foldGesture(moved, base, context), notices));
+  // A repeat joins the run only while the run's own entry is still the last
+  // one, so nothing committed since then folds into it.
+  const run = state.nudgeBase;
+  const joins = repeat && run !== undefined && run.last !== undefined && state.document.journal.at(-1) === run.last;
+  const base = joins ? run : gestureBase(state);
+  const committed: GestureBase = { ...base, committed: base.committed + 1, last: result.journal.at(-1) };
+  const moved: AppState = { ...state, refusedCycle: undefined, document: { ...state.document, objects: result.objects, journal: result.journal } };
+  const folded = foldGesture(moved, committed, context);
+  const nudgeBase = folded === moved ? committed : { ...base, committed: 1, last: folded.document.journal.at(-1) };
+  return transition(withLog({ ...folded, nudgeBase }, notices));
 }
 
 /**
@@ -1435,10 +1463,17 @@ export function nudgeSelection(state: AppState, deltaX: number, deltaY: number, 
  */
 export function deleteSelection(state: AppState, viewport: Viewport, context: EvalContext = NULL_EVAL_CONTEXT): AppTransition {
   const objects = state.document.objects;
-  const chosen = new Set<string>();
-  for (const unit of movingUnits(objects, state.interaction.selectedObjectIds)) {
-    chosen.add(unit.id);
-    for (const member of groupDescendants(unit.id, objects)) chosen.add(member.id);
+  const chosen = new Set(movingUnits(objects, state.interaction.selectedObjectIds).map((unit) => unit.id));
+  // One pass for each level of nesting takes in everything inside a chosen group.
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const object of objects) {
+      const group = groupOf(object);
+      if (group !== undefined && chosen.has(group) && !chosen.has(object.id)) {
+        chosen.add(object.id);
+        grew = true;
+      }
+    }
   }
   const names = objects.filter((object) => chosen.has(object.id)).map((object) => object.name);
   if (names.length === 0) {
@@ -1807,12 +1842,13 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   let pan: PanGesture | undefined;
   let spaceHeld = false;
   /**
-   * Whether the arrow keys move the selection or recall the history of the
-   * command line, which both want them. A press on the canvas or a pick in the
-   * list of objects gives them to the canvas, and typing into the command line
-   * or running a line from it gives them back.
+   * Whether the arrows, Delete and Backspace act on the canvas or belong to the
+   * command line, which wants them too: the arrows recall its history, and
+   * Backspace clears its text. A press on the canvas, a pick in the list of
+   * objects, Ctrl+A or Ctrl+D gives them to the canvas, and typing into the
+   * command line or running a line from it gives them back.
    */
-  let arrowsToCanvas = false;
+  let keysToCanvas = false;
   let openMenu: { readonly menu: PathMenu; readonly at: ScreenPoint } | undefined;
   let menuElement: HTMLElement | undefined;
   const panelElements = new Map<string, HTMLElement>();
@@ -2989,7 +3025,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       writeLayerTree(objectList, state.document.objects, selected, query, {
         select: (id, extend) => {
           commitInPlace();
-          arrowsToCanvas = true;
+          keysToCanvas = true;
           const ids = extend ? selected.includes(id) ? selected.filter(item => item !== id) : [...selected, id] : [id];
           apply(withInteraction(state, { ...state.interaction, selectedObjectIds: ids }));
         },
@@ -3116,7 +3152,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   });
 
   input.addEventListener("input", () => {
-    arrowsToCanvas = false;
+    keysToCanvas = false;
     paintCommandLine();
   });
 
@@ -3129,7 +3165,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   input.addEventListener("keydown", (event: KeyboardEvent) => {
     // An empty line passes the arrows to the canvas, which moves the selection
     // or the active cell, while the canvas holds them and something is selected.
-    const canvasTakesArrows = arrowsToCanvas && input.value === "" && state.interaction.selectedObjectIds.length > 0;
+    const canvasTakesArrows = keysToCanvas && input.value === "" && state.interaction.selectedObjectIds.length > 0;
     if ((event.key === "ArrowUp" || event.key === "ArrowDown") && history.length > 0 && state.pending === undefined && !canvasTakesArrows) {
       event.preventDefault();
       if (historyIndex === history.length) historyDraft = input.value;
@@ -3154,7 +3190,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     }
     const line = input.value;
     if (line.trim() === "" && state.pending === undefined) return;
-    arrowsToCanvas = false;
+    keysToCanvas = false;
     if (state.pending === undefined && line.trim() !== "") {
       if (history[history.length - 1] !== line) history.push(line);
       historyIndex = history.length;
@@ -3247,6 +3283,9 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       apply(escape(state));
       return;
     }
+    // The command line already acted on this key, such as an arrow that
+    // recalled its history, and one key does one thing.
+    if (event.defaultPrevented) return;
     const target = event.target as HTMLElement;
     const editing = target.matches("input, textarea, select, math-field, [contenteditable]");
     // A field with text in it keeps the key for its own text undo, so the
@@ -3267,9 +3306,12 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     if ((!editing || (target === input && input.value === "")) && (event.ctrlKey || event.metaKey) && ["b", "i"].includes(event.key.toLowerCase())) {
       event.preventDefault(); formatEmphasis(event.key.toLowerCase() === "b" ? "bold" : "italic"); return;
     }
-    const arrowKey = ARROW_DIRECTIONS[event.key] !== undefined;
-    const arrowsFree = !arrowKey || !editing || arrowsToCanvas;
-    if (activeCell && arrowsFree && state.interaction.selectedObjectIds.includes(activeCell.objectId) && (!editing || (target === input && input.value === "")) && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "F2", "Delete", "Backspace"].includes(event.key)) {
+    const sharedKey = ARROW_DIRECTIONS[event.key] !== undefined || event.key === "Delete" || event.key === "Backspace";
+    const keysFree = !sharedKey || !editing || keysToCanvas;
+    // The active cell takes the keys while its table is the whole selection,
+    // so a wider selection, made with Ctrl+A or a box, is never a cell edit.
+    const cellTable = activeCell !== undefined && state.interaction.selectedObjectIds.length === 1 && state.interaction.selectedObjectIds[0] === activeCell.objectId;
+    if (activeCell && keysFree && cellTable && (!editing || (target === input && input.value === "")) && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "F2", "Delete", "Backspace"].includes(event.key)) {
       event.preventDefault();
       const table = state.document.objects.find((object) => object.id === activeCell?.objectId);
       if (event.key === "Delete" || event.key === "Backspace") {
@@ -3280,24 +3322,27 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
     }
     // The keys of the canvas reach it from outside any field, or from an
     // empty command line, and wait while a press is still under way.
-    const pointerBusy = state.interaction.drag !== undefined || state.interaction.resize !== undefined || state.interaction.bend !== undefined || state.interaction.marquee !== undefined;
+    const pointerBusy = state.interaction.drag !== undefined || state.interaction.resize !== undefined || state.interaction.bend !== undefined || state.interaction.marquee !== undefined
+      || tableResize !== undefined || rewireDrag !== undefined || pan !== undefined;
     if ((!editing || (target === input && input.value === "")) && state.pending === undefined && !pointerBusy && !event.altKey) {
       const command = event.ctrlKey || event.metaKey;
+      // A held Ctrl+A or Ctrl+D repeats, and a repeat does nothing more, so
+      // holding the keys never stacks copies.
       if (command && key === "a") {
-        event.preventDefault(); closeMenu(); arrowsToCanvas = true; apply(selectAll(state)); return;
+        event.preventDefault(); if (event.repeat) return; closeMenu(); keysToCanvas = true; apply(selectAll(state)); return;
       }
       if (command && key === "d") {
-        event.preventDefault(); closeMenu(); applyTransition(duplicateSelection(state, viewport(), evalContext)); return;
+        event.preventDefault(); if (event.repeat) return; closeMenu(); keysToCanvas = true; applyTransition(duplicateSelection(state, viewport(), evalContext)); return;
       }
       const arrow = ARROW_DIRECTIONS[event.key];
-      if (!command && arrow !== undefined && arrowsFree && state.interaction.selectedObjectIds.length > 0) {
+      if (!command && arrow !== undefined && keysFree && state.interaction.selectedObjectIds.length > 0) {
         event.preventDefault();
         closeMenu();
         const step = gridWorldStep(state.document.camera, window.devicePixelRatio > 0 ? window.devicePixelRatio : 1) / (event.shiftKey ? 1 : 10);
         applyTransition(nudgeSelection(state, arrow.x * step, arrow.y * step, event.repeat, evalContext));
         return;
       }
-      if (!command && (event.key === "Delete" || event.key === "Backspace") && state.interaction.selectedObjectIds.length > 0) {
+      if (!command && (event.key === "Delete" || event.key === "Backspace") && keysFree && state.interaction.selectedObjectIds.length > 0) {
         event.preventDefault();
         // A repeat comes from a key held down, such as a Backspace held to
         // clear the command line, and reaches no object.
@@ -3339,7 +3384,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
   canvas.addEventListener("pointerdown", (event: PointerEvent) => {
     event.preventDefault();
     canvas.setPointerCapture(event.pointerId);
-    arrowsToCanvas = true;
+    keysToCanvas = true;
     const point = screenPointOf(event);
     if (event.button === 1 || spaceHeld) {
       if (inPlaceEditor === undefined) {
@@ -3511,7 +3556,7 @@ function start(canvas: HTMLCanvasElement, logElement: HTMLElement, input: HTMLIn
       if (event.type !== "pointercancel" && resize.value !== resize.size) applyOperations([setLiteral(resize.objectId, [resize.axis === "column" ? "columns" : "rowsizes", String(resize.index), resize.axis === "column" ? "width" : "height"], resize.value)]);
     }
     pan = undefined;
-    apply(pointerUpNow(state, evalContext));
+    apply(pointerUpNow(state, evalContext, event.type === "pointercancel"));
   };
   canvas.addEventListener("pointerup", endGesture);
   canvas.addEventListener("pointercancel", endGesture);

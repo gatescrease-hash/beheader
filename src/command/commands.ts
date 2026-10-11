@@ -1016,7 +1016,9 @@ function ungroupObject(target: string, force: boolean, document: Document, conte
   return {
     ok: true,
     document: { ...document, objects: result.objects, journal: result.journal },
-    lines: [`ungrouped ${group.name} — ${released === 1 ? "its member stays" : `its ${released} members stay`} where ${released === 1 ? "it was" : "they were"}`],
+    lines: [released === 0
+      ? `removed ${group.name}, which held nothing`
+      : `ungrouped ${group.name} — ${released === 1 ? "its member stays" : `its ${released} members stay`} where ${released === 1 ? "it was" : "they were"}`],
   };
 }
 
@@ -1061,14 +1063,17 @@ function deleteObject(command: DeleteCommand, document: Document, context: EvalC
  */
 function deleteObjects(names: readonly string[], force: boolean, document: Document, context: EvalContext): CommandOutcome {
   const targets: GraphObject[] = [];
+  const leaving = new Set<string>();
   for (const name of names) {
     const object = findGraphObjectByName(name, document.objects);
     if (object === undefined) {
       return { ok: false, message: `no object named "${name}"${nameSuggestion(name, document.objects.map((object) => object.name))}` };
     }
-    if (!targets.includes(object)) targets.push(object);
+    if (!leaving.has(object.id)) {
+      leaving.add(object.id);
+      targets.push(object);
+    }
   }
-  const leaving = new Set(targets.map((object) => object.id));
   const byId = new Map(document.objects.map((object) => [object.id, object]));
   const keptGroup = (object: GraphObject): string | null => {
     let parent = groupOf(object);

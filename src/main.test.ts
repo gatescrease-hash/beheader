@@ -2746,3 +2746,41 @@ describe("snapping a drag", () => {
     expect(replaceDocument(off, createEmptyDocument(), "opened").snap).toBe(false);
   });
 });
+
+describe("the review fixes for gestures that fold", () => {
+  function one(): AppState {
+    const state = typed(opened(), "rect x=0 y=0 w=20 h=20");
+    return withSelection(state, [objectNamed(state, "rect_1").id]);
+  }
+
+  it("starts a new run when a command committed since the last nudge, so no repeat swallows the command", () => {
+    let state = nudgeSelection(one(), 1, 0, false).state;
+    const before = state.document.journal.length;
+    state = typed(state, "circle x=200 y=0 r=10");
+    state = nudgeSelection(state, 1, 0, true).state;
+    expect(state.document.journal).toHaveLength(before + 2);
+    const undone = typed(state, "undo");
+    expect(undone.document.objects.map((object) => object.name)).toContain("circle_1");
+    expect(numberAt(objectNamed(undone, "rect_1"), ["origin", "x"])).toBe(1);
+  });
+
+  it("keeps the frames of a drag apart when a command commits in the middle of it", () => {
+    const state = one();
+    const onEdge = worldToScreen(state.document.camera, { x: 10, y: 0 });
+    let dragged = pointerDownAt(state, onEdge, VIEWPORT).state;
+    dragged = pointerMoveTo(dragged, { x: onEdge.x + 10, y: onEdge.y });
+    dragged = pointerMoveTo(dragged, { x: onEdge.x + 20, y: onEdge.y });
+    dragged = typed(dragged, "circle x=200 y=0 r=10");
+    dragged = pointerMoveTo(dragged, { x: onEdge.x + 30, y: onEdge.y });
+    const ended = pointerUpNow(dragged);
+    expect(ended.document.journal).toHaveLength(state.document.journal.length + 4);
+  });
+
+  it("says a group that held nothing was removed, rather than counting no members", () => {
+    let state = typed(opened(), "rect x=0 y=0 w=20 h=20");
+    state = withSelection(state, [objectNamed(state, "rect_1").id]);
+    state = groupSelection(state, VIEWPORT).state;
+    state = typed(state, "delete rect_1");
+    expect(typed(state, "delete group_1").log.at(-1)).toBe("removed group_1, which held nothing");
+  });
+});

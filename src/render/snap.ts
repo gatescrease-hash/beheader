@@ -174,24 +174,27 @@ export function snapTravel(targets: SnapTargets, travel: { readonly x: number; r
 const GUIDE_COLOR = "#e8338b";
 
 /**
- * Draws the guides in screen space, one device pixel wide at any zoom, so a
- * guide reads as a hairline over the drawing rather than as part of it.
+ * Draws the guides in screen space, one CSS pixel wide at any zoom, so a guide
+ * reads as a hairline over the drawing rather than as part of it.
  */
 export function drawGuides(ctx: DrawingContext, camera: CameraState, guides: readonly Guide[], pixelRatio: number = 1): void {
   if (guides.length === 0) {
     return;
   }
+  // A whole number of device pixels, offset by half a pixel when odd, puts a
+  // guide on whole rows or columns of pixels at any pixel ratio.
+  const lineWidth = Math.max(1, Math.round(pixelRatio));
+  const half = lineWidth % 2 === 1 ? 0.5 : 0;
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.strokeStyle = GUIDE_COLOR;
-  ctx.lineWidth = pixelRatio;
+  ctx.lineWidth = lineWidth;
   ctx.setLineDash([]);
   ctx.beginPath();
   for (const guide of guides) {
     const start = worldToScreen(camera, guide.axis === "x" ? { x: guide.at, y: guide.from } : { x: guide.from, y: guide.at });
     const end = worldToScreen(camera, guide.axis === "x" ? { x: guide.at, y: guide.to } : { x: guide.to, y: guide.at });
-    // Half a pixel off the pixel grid puts a hairline on one row of pixels.
-    const offset = guide.axis === "x" ? { x: 0.5, y: 0 } : { x: 0, y: 0.5 };
+    const offset = guide.axis === "x" ? { x: half, y: 0 } : { x: 0, y: half };
     ctx.moveTo(Math.round(start.x) + offset.x, Math.round(start.y) + offset.y);
     ctx.lineTo(Math.round(end.x) + offset.x, Math.round(end.y) + offset.y);
   }

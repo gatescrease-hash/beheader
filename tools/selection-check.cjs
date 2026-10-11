@@ -137,6 +137,8 @@ const fs = require('node:fs');
       await page.keyboard.press('Control+d');
       assert.deepEqual(await selection(), ['rect_2'], 'Ctrl+D selects the copy');
       assert.equal(await slot('rect_2', 'origin.x'), '121');
+      // The props line handed the keys back to the command line, and a press on the copy takes them again.
+      await click(at(161, 130));
       await page.keyboard.press('Delete');
       assert.ok((await log()).includes('> delete rect_2'), 'Delete runs the delete line');
       assert.deepEqual(await selection(), []);
@@ -192,8 +194,61 @@ const fs = require('node:fs');
       assert.equal(await slot('rect_1', 'origin.y'), '151', 'snap off drags freely');
     }
 
+    // The keys stay with the command line after typing, and one key does one thing.
+    {
+      const { page, command, run, at, selection, click, slot, log } = await fresh();
+      await run('rect x=100 y=100 w=80 h=60');
+      await click(at(140, 100));
+      const before = (await log()).length;
+      // The line is empty already. A fill would clear it with a Delete key,
+      // which, right after a press on the canvas, deletes the selection as it should.
+      await command.type('ab');
+      for (let press = 0; press < 3; press += 1) await page.keyboard.press('Backspace');
+      assert.ok(!(await log()).slice(before).some(line => line.startsWith('> delete')), 'a Backspace tapped after typing stays with the command line');
+      assert.deepEqual(await selection(), ['rect_1']);
+      await page.keyboard.press('Escape');
+      await page.keyboard.press('ArrowUp');
+      assert.notEqual(await command.inputValue(), '', 'Up with nothing selected recalls a command');
+      await click(at(140, 100));
+      await page.keyboard.press('ArrowDown');
+      assert.equal(await command.inputValue(), '', 'Down walks back to the empty line');
+      assert.equal(await slot('rect_1', 'origin.y'), '100', 'and the same Down moves nothing');
+      await click(at(140, 100));
+      await page.keyboard.down('Control');
+      await page.keyboard.down('d');
+      await page.keyboard.down('d');
+      await page.keyboard.up('d');
+      await page.keyboard.up('Control');
+      assert.equal(await page.evaluate(() => document.querySelectorAll('.object-item').length), 2, 'a held Ctrl+D makes one copy');
+    }
+
+    // A wide selection over an active cell deletes the selection, and Delete waits out a column resize.
+    {
+      const { page, run, at, selection } = await fresh();
+      await run('table x=100 y=100 rows=2 cols=2');
+      await run('set table_1.A1 5');
+      await run('rect x=400 y=100 w=40 h=40');
+      await page.mouse.move(at(260, 112).x, at(260, 112).y);
+      await page.mouse.click(at(120, 110).x, at(120, 110).y);
+      await page.locator('#command').focus();
+      await page.mouse.down();
+      // The press at the cell starts nothing new. A column resize starts at the boundary between A and B.
+      await page.mouse.up();
+      await page.mouse.move(at(180, 110).x, at(180, 110).y);
+      await page.mouse.down();
+      await page.mouse.move(at(200, 110).x, at(200, 110).y, { steps: 4 });
+      await page.keyboard.press('Delete');
+      await page.mouse.up();
+      await page.waitForTimeout(100);
+      assert.equal(await page.evaluate(() => document.querySelectorAll('.object-item').length), 2, 'Delete waits while a column resize is under way');
+      await page.keyboard.press('Control+a');
+      assert.deepEqual(await selection(), ['table_1', 'rect_1']);
+      await page.keyboard.press('Delete');
+      assert.equal(await page.evaluate(() => document.querySelectorAll('.object-item').length), 0, 'Delete takes a wide selection rather than clearing the active cell');
+    }
+
     assert.deepEqual(errors, []);
-    console.log('Selection checks passed: window and crossing boxes, a drag of two, click to pick, Ctrl+A, arrows, a held arrow as one undo, Ctrl+D, Delete, a held Backspace, Delete over a cell, and snapping.');
+    console.log('Selection checks passed: window and crossing boxes, a drag of two, click to pick, Ctrl+A, arrows, a held arrow as one undo, Ctrl+D, Delete, a held Backspace, Delete over a cell, snapping, keys that stay with the command line after typing, a held Ctrl+D, and Delete during a column resize.');
   } finally {
     await browser.close();
   }
