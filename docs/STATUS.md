@@ -116,6 +116,7 @@ covers everything it calls.
 | `tsconfig.json` | Strict mode over the whole of `src`. |
 | `tsconfig.engine.json` | The narrower config over `src/engine/` alone, which fails when the engine reaches the DOM. |
 | `vite.config.ts` | Dev server, production build, the Pyodide assets, and the Vitest settings. |
+| `tools/direct-edit-check.cjs` | Browser checks for the layers, panels, tables and rich text of section 18. |
 | `tools/prose-check.mjs` | The prose checker that enforces `docs/STYLE.md`. |
 
 ### `src/engine/` - the pure core

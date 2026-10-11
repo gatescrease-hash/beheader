@@ -20,11 +20,6 @@ the file it is about.
 
 ## Open
 
-- Implement direct text and table editing, adaptive grid, persistent quick
-  properties, and addressable layers as specified in Direct editing and layers.
-  Verify inheritance, overrides, visibility, ordering, save/load, resizing and
-  formatting in tests and in the browser.
-
 The item below finishes Rule 5 of `SPEC.md`. Slot writes, cell clears,
 creates, renames and deletes without force read the index in
 `graph/graph-index.ts` and cost what they affect. The operations below still

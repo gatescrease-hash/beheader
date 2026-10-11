@@ -1,3 +1,19 @@
+/**
+ * direct-edit-check.cjs
+ *
+ * Drives the real workspace in Chromium through the surfaces of section 18 of
+ * SPEC.md, and asserts on the saved document rather than on pixels: layer
+ * membership and visibility, style sources by layer and by local override, a
+ * selection of two objects joining a layer and changing a source together,
+ * the fixed quick panel and a pinned panel with its thread, the grid toggle,
+ * a column resize, cell formatting and movement between cells, and rich text
+ * with a live value. It writes four screenshots to dist/ for a person to read.
+ *
+ * It reads three environment variables, the same as workspace-check.cjs:
+ * PLAYWRIGHT_MODULE for a Playwright installed outside the repository,
+ * PLAYWRIGHT_EXECUTABLE for the browser binary, and WORKSPACE_URL for the dev
+ * server, which defaults to http://127.0.0.1:5173/.
+ */
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -45,6 +61,24 @@ const fs = require('node:fs');
     saved = await save(); assert.equal(object(saved, 'circle_1').slots['style.strokeWidth'].value, 4);
     await page.getByLabel('Source for circle_1.style.strokeWidth', { exact: true }).selectOption({ label: 'By layer: GEOM' });
     saved = await save(); assert.equal(object(saved, 'circle_1').slots['style.strokeWidth'].value, 1);
+
+    // A selection of two objects joins a layer together, and one source change reaches both.
+    await run('circle x=760 y=520 r=30');
+    await select('circle_1');
+    await page.locator('.object-item').filter({ hasText: 'circle_2' }).click({ modifiers: ['Shift'] });
+    await page.getByLabel('Assign selected objects to layer').selectOption({ label: 'GEOM' });
+    // The quick panel follows the last object selected, and its control acts on the whole selection.
+    await page.getByLabel('Source for circle_2.style.strokeWidth', { exact: true }).selectOption({ label: 'From: TXT' });
+    saved = await save();
+    assert.equal(object(saved, 'circle_2').slots['view.layer'].value, object(saved, 'GEOM').id);
+    for (const name of ['circle_1', 'circle_2']) {
+      assert.equal(object(saved, name).slots['style.strokeWidth'].kind, 'formula');
+      assert.equal(object(saved, name).slots['style.strokeWidth'].value, 6);
+    }
+    await page.getByLabel('Source for circle_2.style.strokeWidth', { exact: true }).selectOption({ label: 'By layer: GEOM' });
+    saved = await save(); assert.equal(object(saved, 'circle_1').slots['style.strokeWidth'].value, 1);
+    await run('delete circle_2');
+    await select('circle_1');
 
     const sourceControl = page.locator('.panel-row[data-path="style.strokeWidth"] .property-source');
     const sourceBox = await sourceControl.boundingBox();
@@ -119,7 +153,7 @@ const fs = require('node:fs');
     await page.setViewportSize({ width: 760, height: 850 });
     await page.screenshot({ path: 'dist/direct-edit-narrow.png' });
     assert.deepEqual(errors, []);
-    console.log('Direct editing checks passed: layers, inheritance, overrides, saved formulas, pinned panels, grid, resizing, formatting, cell navigation, rich text and embedded values.');
+    console.log('Direct editing checks passed: layers, inheritance, overrides, a selection of two, saved formulas, pinned panels, grid, resizing, formatting, cell navigation, rich text and embedded values.');
   } finally {
     await browser.close();
   }
