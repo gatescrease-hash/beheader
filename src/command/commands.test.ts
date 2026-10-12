@@ -825,6 +825,7 @@ describe("every registry command reaches a handler", () => {
     "slider x=0 y=0",
     "frame x=0 y=0",
     "connect rect_1 polygon_1",
+    "plot polygon_1",
     "view polygon_1",
     "upstream polygon_1",
     "downstream polygon_1 1",

@@ -619,8 +619,9 @@ loses nothing, and the operator gets an editable path.
 ### Derived slots
 
 `centroid.x`, `centroid.y`, `area` (closed paths only), `length`,
-`bounds.{minX,minY,maxX,maxY}` and the `box` of section 25. All are `derived`. A formula can read them. No
-formula can write them. A `link` to one fails at parse time.
+`bounds.{minX,minY,maxX,maxY}` and the `box` of section 25. All are `derived`.
+A formula can read them. No formula can write them. A `link` to one fails at
+parse time.
 
 ---
 
@@ -1640,6 +1641,7 @@ image x=0 y=0
 slider x=0 y=0 [min=0] [max=10] [step=1] [value=5] [w=200]
 frame x=0 y=0 w=800 h=600
 connect rect_1 text_1 [both|start|none]
+plot math_1 [x=0] [y=0] [w=320] [h=200] [from=-10] [to=10]
 group circle_1,rect_1
 ungroup group_1 [force]
 duplicate circle_1,rect_1
@@ -1761,9 +1763,6 @@ The team considered each item below and postponed it on purpose.
 - **64 bit precision or a floating origin.** A plain JavaScript number is a
   binary64 already. More precision than that at a large offset from the origin
   was a CAD drafting requirement, and section 1 retires that goal.
-- **Graphing a function as a curve.** A math object gives numbers, and drawing
-  one as a curve is geometry. The primitives and the ports it would read exist
-  already, so this waits on want rather than on design.
 - **Constraint solving across objects.** The document graph refuses a cycle and
   never solves one. A math object may solve for an unknown its own lines
   constrain, because that solve begins and ends inside one compute function.
@@ -2259,7 +2258,46 @@ runs through takes it.
 
 ---
 
-## 26. When the spec is silent
+## 26. Plots
+
+A plot draws an export of a math object as a curve against one of its inputs.
+A math object gives one number for the inputs it holds, and a curve shows how
+that number moves as one input runs across a range, which a table of values
+shows only in part.
+
+```
+math "y = a \\sin(x)"
+plot math_1 x=0 y=100 from=-10 to=10
+```
+
+**A plot reads a math object.** A plot is left with no equations of its own,
+so the math language stays in one kind of object. Its `curve` slot is a formula on one
+export, such as `= math_1.out.y`, and its `variable` slot names the input that
+runs along the horizontal axis. The formula makes the plot an ordinary reader:
+a rename of the math object rewrites it, a delete refuses by name, and `link
+plot_1.curve math_1.out.z` aims it at another export. A new plot takes the first
+export and the input named `x`, or the first input where the object has no `x`.
+
+**Samples.** A derived `samples` slot runs the math object's program at 201
+places from `xmin` to `xmax`, with the variable at each place and every other
+input as the math object holds it, and keeps each place where the export is a
+finite number as a point. A place with no finite number, such as a pole, leaves
+a gap, because no number in plain document state stands for it. The count is
+fixed, so a plot costs the same to evaluate in any document and at any zoom.
+`xmin` and `xmax` are slots like any other, so a slider can drive the range.
+
+**Drawing.** A sheet with a border, an axis wherever zero lies in range, the
+curve in the plot's stroke cut at the edges of the sheet and broken at each gap,
+and the ends of both ranges as labels inside the sheet. The vertical range is
+`ymin` to `ymax` where each holds a number, and fits the samples where it holds
+null, with a twentieth of the span added above and below. A plot resizes by its
+handles. Its `curve` slot holds the export at the math object's own inputs, which
+can be an error where the plot draws numbers, so the error mark of a plot leaves
+that slot out.
+
+---
+
+## 27. When the spec is silent
 
 Prefer, in this order:
 

@@ -62,6 +62,7 @@ import {
   type GraphObject,
   FRAME_HEIGHT_PATH,
   FRAME_TYPE,
+  PLOT_TYPE,
   FRAME_WIDTH_PATH,
   IMAGE_HEIGHT_PATH,
   IMAGE_PRESERVE_ASPECT_PATH,
@@ -914,7 +915,7 @@ function resizePlanShape(object: GraphObject): ResizePlanShape | undefined {
       dropsAutoresize: false,
     };
   }
-  if (object.type === FRAME_TYPE) {
+  if (object.type === FRAME_TYPE || object.type === PLOT_TYPE) {
     return { widthPath: FRAME_WIDTH_PATH, heightPath: FRAME_HEIGHT_PATH, keepsRatio: false, dropsAutoresize: false };
   }
   return undefined;

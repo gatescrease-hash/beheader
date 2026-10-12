@@ -65,6 +65,7 @@ export function objectExtent(object: GraphObject): WorldExtent | undefined {
     case "math":
     case "slider":
     case "frame":
+    case "plot":
       return committedBox(object);
     case "group":
       return groupAnchorBox(object);

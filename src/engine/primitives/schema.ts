@@ -30,6 +30,7 @@ import type { Address } from "../address.ts";
 import { STYLE_PATHS, VIEW_PATHS } from "../layers.ts";
 import { GROUP_MEMBERSHIP_PATH } from "../groups.ts";
 import { BOX_DERIVED_SLOT } from "./box.ts";
+import { PLOT_CURVE_PATH, PLOT_HEIGHT_PATH, PLOT_SAMPLES_SLOT, PLOT_VARIABLE_PATH, PLOT_WIDTH_PATH, PLOT_XMAX_PATH, PLOT_XMIN_PATH, PLOT_YMAX_PATH, PLOT_YMIN_PATH } from "./plot.ts";
 import { CONNECTOR_ARROW_PATH, CONNECTOR_ARROWS, CONNECTOR_DERIVED_SLOTS, CONNECTOR_FROM_PATH, CONNECTOR_TO_PATH } from "./connector.ts";
 import { DOCREF_DERIVED_SLOTS } from "./doc.ts";
 import type { EvalContext } from "../eval-context.ts";
@@ -542,6 +543,23 @@ const CONNECTOR_SCHEMA: ObjectSchema = {
   derivedSlots: [{ kind: "static", slots: CONNECTOR_DERIVED_SLOTS }],
 };
 
+/**
+ * A plot holds its box, the export it graphs, the input that runs along its
+ * axis and the two ranges, and derives the points it draws. plot.ts gives the
+ * rule.
+ */
+const PLOT_SCHEMA: ObjectSchema = {
+  type: "plot",
+  slotFormats: [{ path: STYLE_STROKE_COLOR_PATH, format: "color" }],
+  nonDerivedSlotPaths: [
+    {
+      kind: "static",
+      paths: [ORIGIN_X_PATH, ORIGIN_Y_PATH, PLOT_WIDTH_PATH, PLOT_HEIGHT_PATH, PLOT_CURVE_PATH, PLOT_VARIABLE_PATH, PLOT_XMIN_PATH, PLOT_XMAX_PATH, PLOT_YMIN_PATH, PLOT_YMAX_PATH, STYLE_STROKE_COLOR_PATH, STYLE_STROKE_WIDTH_PATH],
+    },
+  ],
+  derivedSlots: [{ kind: "static", slots: [PLOT_SAMPLES_SLOT] }, BOX_SLOTS],
+};
+
 const SCHEMAS: Partial<Record<ObjectType, ObjectSchema>> = {
   layer: {
     type: "layer", nonDerivedSlotPaths: [{ kind: "static", paths: STYLE_PATHS }], derivedSlots: [],
@@ -579,6 +597,7 @@ const SCHEMAS: Partial<Record<ObjectType, ObjectSchema>> = {
   slider: SLIDER_SCHEMA,
   frame: FRAME_SCHEMA,
   connector: CONNECTOR_SCHEMA,
+  plot: PLOT_SCHEMA,
 };
 
 /** The schema for a type, or undefined for a type with no entry yet. */

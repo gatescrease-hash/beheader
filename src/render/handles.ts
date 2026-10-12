@@ -18,7 +18,7 @@
  * GPU renderer can replace the whole layer later.
  */
 
-import { type CameraState, FRAME_TYPE, type GraphObject, IMAGE_TYPE, TEXT_TYPE } from "../engine/index.ts";
+import { type CameraState, FRAME_TYPE, PLOT_TYPE, type GraphObject, IMAGE_TYPE, TEXT_TYPE } from "../engine/index.ts";
 import { worldToScreen, type ScreenPoint, type WorldPoint } from "./camera.ts";
 import type { WorldExtent } from "./extent.ts";
 
@@ -39,7 +39,7 @@ export interface ResizeEdges {
 }
 
 export function hasResizeHandles(object: GraphObject): boolean {
-  return object.type === TEXT_TYPE || object.type === IMAGE_TYPE || object.type === FRAME_TYPE;
+  return object.type === TEXT_TYPE || object.type === IMAGE_TYPE || object.type === FRAME_TYPE || object.type === PLOT_TYPE;
 }
 
 export function handleEdges(handle: ResizeHandle): ResizeEdges {

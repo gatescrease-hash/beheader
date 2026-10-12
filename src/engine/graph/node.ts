@@ -81,6 +81,7 @@ export type ObjectType =
   | "slider"
   | "frame"
   | "connector"
+  | "plot"
   | "add";
 
 export const TABLE_TYPE: ObjectType = "table";
@@ -100,6 +101,8 @@ export const SLIDER_TYPE: ObjectType = "slider";
 export const FRAME_TYPE: ObjectType = "frame";
 
 export const CONNECTOR_TYPE: ObjectType = "connector";
+
+export const PLOT_TYPE: ObjectType = "plot";
 
 export interface LiteralSlot {
   readonly kind: "literal";

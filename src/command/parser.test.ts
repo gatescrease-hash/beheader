@@ -82,6 +82,7 @@ const DOCUMENTED_EXAMPLES: readonly { readonly line: string; readonly command: C
   { line: "snap off", command: { kind: "snap", state: "off" } },
   { line: "frame x=0 y=0 w=300 h=200", command: { kind: "frame", x: 0, y: 0, width: 300, height: 200 } },
   { line: "connect rect_1 text_1", command: { kind: "connect", from: "rect_1", to: "text_1" } },
+  { line: "plot math_1 x=10 from=0 to=5", command: { kind: "plot", math: "math_1", x: 10, y: 0, width: 320, height: 200, from: 0, to: 5 } },
   { line: "view frame_1", command: { kind: "view", target: "frame_1" } },
   { line: "slider x=1 y=2 max=20 step=0.5", command: { kind: "slider", x: 1, y: 2, min: 0, max: 20, step: 0.5, value: 5, width: 200 } },
   { line: "upstream circle_1 2", command: { kind: "upstream", target: "circle_1", depth: 2 } },

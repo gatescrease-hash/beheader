@@ -33,7 +33,7 @@
  * Command-layer code: it turns a typed line into mutation calls, and
  * imports from the engine and from its own layer.
  */
-import { bulgeForTangentArc, DEFAULT_FRAME_HEIGHT, DEFAULT_FRAME_WIDTH, DEFAULT_SLIDER_MAX, DEFAULT_SLIDER_MIN, DEFAULT_SLIDER_STEP, DEFAULT_SLIDER_VALUE, DEFAULT_SLIDER_WIDTH, DEFAULT_TABLE_COLS, DEFAULT_TABLE_ROWS, edgeEndDirection, MIN_POLYLINE_VERTICES } from "../engine/index.ts";
+import { bulgeForTangentArc, DEFAULT_PLOT_HEIGHT, DEFAULT_PLOT_WIDTH, DEFAULT_PLOT_XMAX, DEFAULT_PLOT_XMIN, DEFAULT_FRAME_HEIGHT, DEFAULT_FRAME_WIDTH, DEFAULT_SLIDER_MAX, DEFAULT_SLIDER_MIN, DEFAULT_SLIDER_STEP, DEFAULT_SLIDER_VALUE, DEFAULT_SLIDER_WIDTH, DEFAULT_TABLE_COLS, DEFAULT_TABLE_ROWS, edgeEndDirection, MIN_POLYLINE_VERTICES } from "../engine/index.ts";
 
 export interface CreateCircleCommand {
   readonly kind: "circle";
@@ -255,6 +255,18 @@ function connectorEndArgument(text: string): string | { readonly x: number; read
   return parts.length === 2 && parts.every((part) => NUMBER_PATTERN.test(part)) ? { x: Number(parts[0]), y: Number(parts[1]) } : text;
 }
 
+/** `plot`, which graphs an export of a math object along one of its inputs. */
+export interface CreatePlotCommand {
+  readonly kind: "plot";
+  readonly math: string;
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+  readonly from: number;
+  readonly to: number;
+}
+
 export interface CreateFrameCommand {
   readonly kind: "frame";
   readonly x: number;
@@ -403,6 +415,7 @@ export type Command =
   | CreateSliderCommand
   | CreateFrameCommand
   | CreateConnectorCommand
+  | CreatePlotCommand
   | ViewCommand
   | UngroupCommand
   | GraphWalkCommand
@@ -726,6 +739,20 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
       const origin = pointAnswer(answers, "origin");
       return { kind: "image", x: origin.x, y: origin.y };
     },
+  },
+  {
+    name: "plot",
+    usage: "plot <object> [x=<number>] [y=<number>] [w=<number>] [h=<number>] [from=<number>] [to=<number>]",
+    positional: [objectName("math")],
+    named: [
+      optionalNumber("x", 0), optionalNumber("y", 0), optionalNumber("w", DEFAULT_PLOT_WIDTH), optionalNumber("h", DEFAULT_PLOT_HEIGHT),
+      optionalNumber("from", DEFAULT_PLOT_XMIN), optionalNumber("to", DEFAULT_PLOT_XMAX),
+    ],
+    flags: [],
+    build: (args) => ({
+      kind: "plot", math: textArgument(args, "math"), x: numberArgument(args, "x"), y: numberArgument(args, "y"),
+      width: numberArgument(args, "w"), height: numberArgument(args, "h"), from: numberArgument(args, "from"), to: numberArgument(args, "to"),
+    }),
   },
   {
     name: "connect",

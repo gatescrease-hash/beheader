@@ -141,6 +141,7 @@ function hitTestObject(object: GraphObject, worldPoint: WorldPoint, strokeTolera
     case "script":
     case "math":
     case "slider":
+    case "plot":
       return hitTestBoundingBox(object, worldPoint);
     // A frame hits on its border and its name only, which hitTest checks after
     // every other object and group, so everything inside stays clickable.

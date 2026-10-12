@@ -426,6 +426,14 @@ function everyStructuralOperation(random: SeededRandom, objectCount: number): Op
     [{ kind: "addPort", objectId: runner, family: "in", name: "not a name" }],
     [{ kind: "createObject", object: withDerivedSlots({ id: equation, name: "eq", type: "math", slots: { "origin.x": literalSlot(0), "origin.y": literalSlot(0), source: { kind: "literal", value: "" }, display: { kind: "literal", value: "source" } } }) }],
     [{ kind: "setMathSource", objectId: equation, source: "y=x*2" }],
+    // A plot samples the math object along an input, and follows its ports.
+    [{ kind: "createObject", object: withDerivedSlots({ id: "obj_plot", name: "graph", type: "plot", slots: {
+      "origin.x": literalSlot(0), "origin.y": literalSlot(0), width: literalSlot(200), height: literalSlot(100),
+      curve: formulaSlot({ type: "reference", address: at(equation, "out", "y") }), variable: { kind: "literal", value: "x" },
+      xmin: literalSlot(-random.integer(5) - 1), xmax: literalSlot(random.integer(5) + 1), ymin: { kind: "literal", value: null }, ymax: { kind: "literal", value: null },
+      "style.strokeColor": { kind: "literal", value: "#2f6db5" }, "style.strokeWidth": literalSlot(2),
+    } }) }],
+    [readerOf("obj_plot_reader", "plot_reader", at("obj_plot", "samples"))],
     [{ kind: "setSlot", address: at(equation, "in", "x"), slot: formulaSlot({ type: "reference", address: valueRead }) }],
     [readerOf("obj_eq_reader", "eq_reader", at(equation, "out", "y"))],
     [{ kind: "setMathSource", objectId: equation, source: `y=x*${2 + random.integer(3)}+w` }],

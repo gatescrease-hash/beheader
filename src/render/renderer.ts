@@ -102,6 +102,7 @@ import { asPointArray, readBoolean, readNumber, readShapeStyle, readText, SCRIPT
 import { tableLayout, cellStyle, fittedCellNumber } from "./table-layout.ts";
 import { SLIDER_KNOB_RADIUS, sliderLayout } from "./slider-layout.ts";
 import { connectorLayout } from "./connector-layout.ts";
+import { plotLabel, plotLayout } from "./plot-layout.ts";
 import { displayObjects } from "../engine/index.ts";
 import { textBoxSize } from "../engine/index.ts";
 import { GROUP_TAB_HEIGHT, groupBoundary, groupTabWidth, objectExtent } from "./extent.ts";
@@ -680,6 +681,9 @@ function drawObject(
     case "connector":
       drawConnector(ctx, object);
       return;
+    case "plot":
+      drawPlot(ctx, object);
+      return;
     // renderDocument draws every frame before any other object, groups
     // included, so a frame sits beneath everything it holds.
     case "frame":
@@ -693,6 +697,69 @@ function drawObject(
       return;
     }
   }
+}
+
+const PLOT_SHEET_STYLE = "#fffdf7";
+const PLOT_BORDER_STYLE = "#d3cab5";
+const PLOT_AXIS_STYLE = "#b9b29f";
+const PLOT_LABEL_STYLE = "#6f7464";
+const PLOT_LABEL_FONT = "11px sans-serif";
+
+/**
+ * A plot: a sheet with a border, the two axes where zero lies in range, the
+ * curve in its stroke cut at the edges of the sheet, and the ends of the two
+ * ranges as labels, so the scale reads without a grid.
+ */
+function drawPlot(ctx: DrawingContext, object: GraphObject): void {
+  const layout = plotLayout(object);
+  if (layout === undefined) {
+    return;
+  }
+  const { box } = layout;
+  const width = box.maxX - box.minX;
+  const height = box.maxY - box.minY;
+  ctx.fillStyle = PLOT_SHEET_STYLE;
+  ctx.fillRect(box.minX, box.minY, width, height);
+  ctx.strokeStyle = PLOT_BORDER_STYLE;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(box.minX, box.minY, width, height);
+  ctx.strokeStyle = PLOT_AXIS_STYLE;
+  ctx.beginPath();
+  if (layout.axisY !== undefined) {
+    ctx.moveTo(box.minX, layout.axisY);
+    ctx.lineTo(box.maxX, layout.axisY);
+  }
+  if (layout.axisX !== undefined) {
+    ctx.moveTo(layout.axisX, box.minY);
+    ctx.lineTo(layout.axisX, box.maxY);
+  }
+  ctx.stroke();
+  const style = readShapeStyle(object);
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(box.minX, box.minY, width, height);
+  ctx.clip();
+  ctx.strokeStyle = style.strokeColor;
+  ctx.lineWidth = style.strokeWidth;
+  for (const run of layout.runs) {
+    ctx.beginPath();
+    run.forEach((point, index) => (index === 0 ? ctx.moveTo(point.x, point.y) : ctx.lineTo(point.x, point.y)));
+    if (run.length === 1) {
+      ctx.lineTo(run[0]!.x + 0.01, run[0]!.y);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+  // The labels sit inside the sheet, so a picture of the plot's box holds them.
+  ctx.fillStyle = PLOT_LABEL_STYLE;
+  ctx.font = PLOT_LABEL_FONT;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "top";
+  ctx.fillText(plotLabel(layout.ymax), box.minX + 4, box.minY + 3);
+  ctx.textBaseline = "bottom";
+  ctx.fillText(plotLabel(layout.ymin), box.minX + 4, box.maxY - 3);
+  ctx.textAlign = "right";
+  ctx.fillText(`${layout.variable} ${plotLabel(layout.xmin)} to ${plotLabel(layout.xmax)}`, box.maxX - 4, box.maxY - 3);
 }
 
 /** A connector: its line in its stroke, then each arrowhead filled in the same colour. */
@@ -1149,6 +1216,7 @@ function drawSelectionHighlight(ctx: DrawingContext, object: GraphObject): void 
     case "image":
     case "script":
     case "slider":
+    case "plot":
     case "frame": {
       const extent = objectExtent(object);
       if (extent === undefined) {
@@ -1197,8 +1265,14 @@ function chromeAnchorPoint(object: GraphObject): Point | undefined {
   return { x: (extent.minX + extent.maxX) / 2, y: extent.minY };
 }
 
+/**
+ * True when a slot of the object holds an error. A plot's `curve` is left out:
+ * it holds the export at the math object's own inputs, which can be an error
+ * while every point the plot draws is a number, because the plot sets the
+ * variable itself.
+ */
 function objectHasError(object: GraphObject): boolean {
-  return Object.values(object.slots).some((slot) => isErrorValue(slot.value));
+  return Object.entries(object.slots).some(([key, slot]) => isErrorValue(slot.value) && !(object.type === "plot" && key === "curve"));
 }
 
 function drawObjectChrome(ctx: DrawingContext, camera: CameraState, object: GraphObject, suppressName: boolean): void {

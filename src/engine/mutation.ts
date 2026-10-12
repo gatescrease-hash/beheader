@@ -121,12 +121,13 @@ import {
   TABLE_ROWS_PATH,
 } from "./primitives/table.ts";
 import { applyMathSource, isMathSourceError, MATH_SOURCE_PATH, readMathNames, unresolvedMathReferences } from "./primitives/math.ts";
+import { plotCurveTarget } from "./primitives/plot.ts";
 import { detectCycle } from "./graph/cycles.ts";
 import { addressKey, type Edge } from "./graph/edge.ts";
 import { evaluate, evaluateAffected, type SlotEvaluationObserver } from "./graph/eval.ts";
 import { lookupFromEdges, type GraphLookup } from "./graph/lookup.ts";
 import { attachGraphIndex, buildGraphIndex, commitGraphIndex, edgeChanges, graphIndexOf, nameScope, stagedLookup, stagedObject, wordsOf, type GraphIndexChanges, type NameScope, type ObjectFacts } from "./graph/graph-index.ts";
-import { hasIllegalNumber, isIllegalNumber, isLegalPortName, MATH_TYPE, POLYLINE_TYPE, slotKey, TABLE_TYPE, TEXT_TYPE, type GraphObject, type ObjectType, type Point, type Slot, type Value } from "./graph/node.ts";
+import { hasIllegalNumber, isIllegalNumber, isLegalPortName, MATH_TYPE, PLOT_TYPE, POLYLINE_TYPE, slotKey, TABLE_TYPE, TEXT_TYPE, type GraphObject, type ObjectType, type Point, type Slot, type Value } from "./graph/node.ts";
 
 /**
  * Step 3 rebuilds the whole edge set from stored ASTs and from the schema. It
@@ -1070,8 +1071,14 @@ function textContentWords(object: GraphObject): readonly string[] {
  * resolver reads the list, and it reads it to resolve names, so the scope of
  * its words answers it the same way the whole document would.
  */
-function resolverObjects(object: GraphObject, scope: NameScope): readonly GraphObject[] {
-  return object.type === TEXT_TYPE ? scope(textContentWords(object)) : [];
+function resolverObjects(object: GraphObject, scope: NameScope, current: (id: string) => GraphObject | undefined): readonly GraphObject[] {
+  if (object.type === TEXT_TYPE) {
+    return scope(textContentWords(object));
+  }
+  // A plot reads the ports of the one math object its curve names.
+  const target = object.type === PLOT_TYPE ? plotCurveTarget(object) : undefined;
+  const math = target === undefined ? undefined : current(target.objectId);
+  return math === undefined ? [] : [math];
 }
 
 /**
@@ -1448,7 +1455,7 @@ function commitIndexedBatch(
       if (index.ownEdges.has(id)) ownEdges.set(id, []);
       continue;
     }
-    const edges = deriveObjectEdges(object, current, resolverObjects(object, scope));
+    const edges = deriveObjectEdges(object, current, resolverObjects(object, scope, current));
     const failed = findUndeclaredFormulaOrDerivedSlots([object]).length > 0
       || findSchemaSlotKindMismatches([object]).length > 0
       || findIllegalSlotValues([object]).length > 0

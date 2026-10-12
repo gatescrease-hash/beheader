@@ -28,7 +28,7 @@
  */
 import { formatAddress, isAddressError, parseAddress, type Address } from "../address.ts";
 import { hasMathMeasurer, type EvalContext } from "../eval-context.ts";
-import { isErrorValue, MATH_TYPE, slotKey, type GraphObject, type Slot, type Value } from "../graph/node.ts";
+import { isErrorValue, MATH_TYPE, slotKey, type ErrorValue, type GraphObject, type Slot, type Value } from "../graph/node.ts";
 import { BOX_PATH, ORIGIN_X_PATH, ORIGIN_Y_PATH } from "./geometry.ts";
 import { mathExportLines, type MathProgram } from "../math/ast.ts";
 import { evaluateMathObject, mathAddressKey } from "../math/eval.ts";
@@ -392,77 +392,106 @@ function mathOutDependencies(): DerivedSlotDependencies {
   };
 }
 
+/** What one run of a math program reads: the program, and the numbers its inputs, references and seeds hold. */
+export interface MathEnvironment {
+  readonly program: MathProgram;
+  readonly inputs: Readonly<Record<string, number>>;
+  readonly references: Readonly<Record<string, number>>;
+  readonly seeds: Readonly<Record<string, number>>;
+}
+
+/**
+ * Reads everything a run of a math object's program needs, through the
+ * evaluator's reader. An export of the object reads it, and a plot reads it to
+ * run the same program at many places along its axis, so the two read the
+ * ports by one rule.
+ */
+export function readMathEnvironment(object: GraphObject, read: (address: Address) => Value | undefined): MathEnvironment | ErrorValue {
+  const source = read({ objectId: object.id, path: MATH_SOURCE_PATH });
+  if (source === undefined) {
+    return { error: "#REF", message: `math: source did not resolve to a value` };
+  }
+  if (isErrorValue(source)) {
+    return source;
+  }
+  if (typeof source !== "string") {
+    return { error: "#TYPE", message: "math: source holds something other than text" };
+  }
+
+  const program = parseMath(source);
+  if (isMathParseError(program)) {
+    return { error: "#MATH", message: `math: line ${program.line + 1} does not parse, and ${program.message}` };
+  }
+
+  const inputs: Record<string, number> = {};
+  for (const name of object.ports?.in ?? []) {
+    const value = read({ objectId: object.id, path: mathInPortPath(name) });
+    if (value === undefined) {
+      return { error: "#REF", message: `math: in.${name} did not resolve to a value` };
+    }
+    if (isErrorValue(value)) {
+      return value;
+    }
+    // A port nobody has filled yet is left out of the environment rather
+    // than refused here, because this loop is read once for the whole object
+    // and a refusal would take down every export, including the lines that
+    // never name the port. Left out, the name fails on the lines that read
+    // it, and `evaluateMathObject` says which name carried no value.
+    if (value === null) {
+      continue;
+    }
+    if (typeof value !== "number") {
+      return { error: "#TYPE", message: `math: in.${name} holds something other than a number` };
+    }
+    inputs[name] = value;
+  }
+
+  const references: Record<string, number> = {};
+  for (const address of program.lines.length === 0 ? [] : collectProgramReferences(program)) {
+    const value = read(address);
+    if (value === undefined) {
+      return { error: "#REF", message: `math: ${mathAddressKey(address)} did not resolve to a value` };
+    }
+    if (isErrorValue(value)) {
+      return value;
+    }
+    if (typeof value !== "number") {
+      return { error: "#TYPE", message: `math: ${mathAddressKey(address)} holds something other than a number` };
+    }
+    references[mathAddressKey(address)] = value;
+  }
+
+  const seeds: Record<string, number> = {};
+  for (const name of object.ports?.seed ?? []) {
+    const value = read({ objectId: object.id, path: mathSeedPath(name) });
+    if (value === undefined) {
+      return { error: "#REF", message: `math: seed.${name} did not resolve to a value` };
+    }
+    if (isErrorValue(value)) {
+      return value;
+    }
+    if (typeof value !== "number") {
+      return { error: "#TYPE", message: `math: seed.${name} holds something other than a number` };
+    }
+    seeds[name] = value;
+  }
+
+  return { program, inputs, references, seeds };
+}
+
+/** The addresses a run of a math object's program reads, which a plot of the object depends on too. */
+export function mathEnvironmentDependencies(object: GraphObject): readonly Address[] {
+  const dependencies = mathOutDependencies();
+  return dependencies.kind === "dynamic" ? dependencies.resolve(object, []) : [];
+}
+
 function makeMathOutputCompute(exportName: string): DerivedSlotCompute {
   return (object, read) => {
-    const source = read({ objectId: object.id, path: MATH_SOURCE_PATH });
-    if (source === undefined) {
-      return { error: "#REF", message: `math: source did not resolve to a value` };
+    const environment = readMathEnvironment(object, read);
+    if ("error" in environment) {
+      return environment;
     }
-    if (isErrorValue(source)) {
-      return source;
-    }
-    if (typeof source !== "string") {
-      return { error: "#TYPE", message: "math: source holds something other than text" };
-    }
-
-    const program = parseMath(source);
-    if (isMathParseError(program)) {
-      return { error: "#MATH", message: `math: line ${program.line + 1} does not parse, and ${program.message}` };
-    }
-
-    const inputs: Record<string, number> = {};
-    for (const name of object.ports?.in ?? []) {
-      const value = read({ objectId: object.id, path: mathInPortPath(name) });
-      if (value === undefined) {
-        return { error: "#REF", message: `math: in.${name} did not resolve to a value` };
-      }
-      if (isErrorValue(value)) {
-        return value;
-      }
-      // A port nobody has filled yet is left out of the environment rather
-      // than refused here, because this loop is read once for the whole object
-      // and a refusal would take down every export, including the lines that
-      // never name the port. Left out, the name fails on the lines that read
-      // it, and `evaluateMathObject` says which name carried no value.
-      if (value === null) {
-        continue;
-      }
-      if (typeof value !== "number") {
-        return { error: "#TYPE", message: `math: in.${name} holds something other than a number` };
-      }
-      inputs[name] = value;
-    }
-
-    const references: Record<string, number> = {};
-    for (const address of program.lines.length === 0 ? [] : collectProgramReferences(program)) {
-      const value = read(address);
-      if (value === undefined) {
-        return { error: "#REF", message: `math: ${mathAddressKey(address)} did not resolve to a value` };
-      }
-      if (isErrorValue(value)) {
-        return value;
-      }
-      if (typeof value !== "number") {
-        return { error: "#TYPE", message: `math: ${mathAddressKey(address)} holds something other than a number` };
-      }
-      references[mathAddressKey(address)] = value;
-    }
-
-    const seeds: Record<string, number> = {};
-    for (const name of object.ports?.seed ?? []) {
-      const value = read({ objectId: object.id, path: mathSeedPath(name) });
-      if (value === undefined) {
-        return { error: "#REF", message: `math: seed.${name} did not resolve to a value` };
-      }
-      if (isErrorValue(value)) {
-        return value;
-      }
-      if (typeof value !== "number") {
-        return { error: "#TYPE", message: `math: seed.${name} holds something other than a number` };
-      }
-      seeds[name] = value;
-    }
-
+    const { program, inputs, references, seeds } = environment;
     const evaluation = evaluateMathObject(program, inputs, references, seeds);
     const result = evaluation.exports[exportName];
     if (result === undefined) {

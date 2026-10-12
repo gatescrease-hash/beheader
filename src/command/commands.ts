@@ -146,6 +146,17 @@ import {
   DEFAULT_CONNECTOR_STROKE_WIDTH,
   displayObjects,
   STYLE_STROKE_WIDTH_PATH,
+  DEFAULT_PLOT_STROKE,
+  DEFAULT_PLOT_STROKE_WIDTH,
+  PLOT_CURVE_PATH,
+  PLOT_HEIGHT_PATH,
+  PLOT_VARIABLE_PATH,
+  PLOT_WIDTH_PATH,
+  PLOT_XMAX_PATH,
+  PLOT_XMIN_PATH,
+  PLOT_YMAX_PATH,
+  PLOT_YMIN_PATH,
+  MATH_TYPE,
 } from "../engine/index.ts";
 import { copyObjects, pasteObjects } from "./clipboard.ts";
 import { buildSlotDescriptors, describeSlotValue, type SlotDescriptor } from "./props.ts";
@@ -164,6 +175,7 @@ import type {
   CreateScriptCommand,
   CreateSliderCommand,
   CreateConnectorCommand,
+  CreatePlotCommand,
   CreateFrameCommand,
   CreateTableCommand,
   CreateTextCommand,
@@ -428,6 +440,8 @@ export function executeCommand(command: Command, document: Document, context: Ev
       return createFrame(command, document, context);
     case "connect":
       return createConnector(command, document, context);
+    case "plot":
+      return createPlot(command, document, context);
     case "import": {
       if (command.format.toLowerCase() !== "csv") {
         return { ok: false, message: `import reads csv, got "${command.format}" — usage: import csv [corner]` };
@@ -477,6 +491,7 @@ export const COMMANDS_WITH_HANDLERS: readonly string[] = [
   "slider",
   "frame",
   "connect",
+  "plot",
   "view",
   "math",
   "set",
@@ -728,6 +743,46 @@ function createConnector(command: CreateConnectorCommand, document: Document, co
     { path: STYLE_STROKE_COLOR_PATH, value: DEFAULT_CONNECTOR_STROKE },
     { path: STYLE_STROKE_WIDTH_PATH, value: DEFAULT_CONNECTOR_STROKE_WIDTH },
   ], context, undefined, { [slotKey(CONNECTOR_FROM_PATH)]: from.slot, [slotKey(CONNECTOR_TO_PATH)]: to.slot });
+}
+
+/**
+ * Creates a plot of a math object: its first export, along the input named x
+ * where it has one, and its first input where it does not. The curve is a
+ * formula on the export, so `link` aims it at another export, and `set`
+ * changes the variable and the ranges.
+ */
+function createPlot(command: CreatePlotCommand, document: Document, context: EvalContext): CommandOutcome {
+  const math = findGraphObjectByName(command.math, document.objects);
+  if (math === undefined) {
+    return { ok: false, message: `no object named "${command.math}"${nameSuggestion(command.math, document.objects.filter((object) => object.type === MATH_TYPE).map((object) => object.name))}` };
+  }
+  if (math.type !== MATH_TYPE) {
+    return { ok: false, message: `${math.name} is a ${math.type}, and a plot graphs a math object, such as one made with math "y = x^2"` };
+  }
+  const exportName = math.ports?.out[0];
+  const inputs = math.ports?.in ?? [];
+  if (exportName === undefined || inputs.length === 0) {
+    return { ok: false, message: `${math.name} needs a line that defines a name from an input, such as y = x^2, before a plot can graph it` };
+  }
+  if (!(command.to > command.from)) {
+    return { ok: false, message: `a plot needs to above from — got from=${command.from} to=${command.to}` };
+  }
+  if (!(command.width > 0) || !(command.height > 0)) {
+    return { ok: false, message: `a plot needs a width and a height above 0 — got w=${command.width} h=${command.height}` };
+  }
+  return createObjectFromCommand(document, "plot", [
+    { path: ORIGIN_X_PATH, value: command.x },
+    { path: ORIGIN_Y_PATH, value: command.y },
+    { path: PLOT_WIDTH_PATH, value: command.width },
+    { path: PLOT_HEIGHT_PATH, value: command.height },
+    { path: PLOT_VARIABLE_PATH, value: inputs.includes("x") ? "x" : inputs[0]! },
+    { path: PLOT_XMIN_PATH, value: command.from },
+    { path: PLOT_XMAX_PATH, value: command.to },
+    { path: PLOT_YMIN_PATH, value: null },
+    { path: PLOT_YMAX_PATH, value: null },
+    { path: STYLE_STROKE_COLOR_PATH, value: DEFAULT_PLOT_STROKE },
+    { path: STYLE_STROKE_WIDTH_PATH, value: DEFAULT_PLOT_STROKE_WIDTH },
+  ], context, undefined, { [slotKey(PLOT_CURVE_PATH)]: { kind: "formula", ast: { type: "reference", address: { objectId: math.id, path: ["out", exportName] } }, value: null } });
 }
 
 /**

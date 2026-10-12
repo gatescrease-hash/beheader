@@ -122,6 +122,7 @@ export function boxDependencyPaths(object: GraphObject): readonly (readonly stri
       case "slider":
         return [ORIGIN_X_PATH, ORIGIN_Y_PATH, SLIDER_WIDTH_PATH];
       case "frame":
+      case "plot":
         return [ORIGIN_X_PATH, ORIGIN_Y_PATH, FRAME_WIDTH_PATH, FRAME_HEIGHT_PATH];
       default:
         return [];
@@ -186,7 +187,9 @@ export function objectBox(object: GraphObject, read: BoxReader): ObjectBox | und
       return sizedBox(x ?? 0, y ?? 0, finiteNumber(read(["measuredWidth"])) ?? DOCREF_FALLBACK_WIDTH, finiteNumber(read(["measuredHeight"])) ?? DOCREF_FALLBACK_HEIGHT);
     case "slider":
       return sizedBox(x, y, positiveNumber(read(SLIDER_WIDTH_PATH)) ?? DEFAULT_SLIDER_WIDTH, SLIDER_HEIGHT);
+    // A frame and a plot each hold their size in `width` and `height`.
     case "frame":
+    case "plot":
       return sizedBox(x, y, positiveNumber(read(FRAME_WIDTH_PATH)), positiveNumber(read(FRAME_HEIGHT_PATH)));
     default:
       return undefined;
