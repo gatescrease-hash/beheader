@@ -158,7 +158,15 @@ export function pasteObjects(document: Document, payload: ObjectsPayload, offset
 }
 
 /** A position slot moved by the offset when it holds a literal number: the origin, or a vertex of a path with no origin. */
+function isPoint(value: Value): value is { readonly x: number; readonly y: number } {
+  return typeof value === "object" && value !== null && !Array.isArray(value) && typeof (value as { x?: unknown }).x === "number" && typeof (value as { y?: unknown }).y === "number";
+}
+
 function movedSlot(object: GraphObject, key: string, slot: Slot, offset: { readonly x: number; readonly y: number }): Slot {
+  // A connector's free end is a place, so it moves with the paste.
+  if (object.type === "connector" && (key === "from" || key === "to") && slot.kind === "literal" && isPoint(slot.value)) {
+    return { kind: "literal", value: { x: slot.value.x + offset.x, y: slot.value.y + offset.y } };
+  }
   if (slot.kind !== "literal" || typeof slot.value !== "number") return slot;
   const hasOrigin = object.slots["origin.x"] !== undefined || object.slots["origin.y"] !== undefined;
   const axis = hasOrigin

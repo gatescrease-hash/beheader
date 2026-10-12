@@ -135,6 +135,7 @@ import {
   vertexYPath,
   attachedConnectors,
   BOX_PATH,
+  connectorLine,
   boxReference,
   CONNECTOR_ARROW_PATH,
   CONNECTOR_ARROWS,
@@ -715,6 +716,12 @@ function createConnector(command: CreateConnectorCommand, document: Document, co
   if (!to.ok) return to;
   if (from.objectId !== undefined && from.objectId === to.objectId) {
     return { ok: false, message: "a connector joins two different objects, and both ends are on one" };
+  }
+  // A connector with no line has nothing to draw or press, so it could only be found by name.
+  const endValue = (end: { readonly slot: Slot; readonly objectId?: string }): Value | undefined =>
+    end.objectId === undefined ? end.slot.value : document.objects.find((object) => object.id === end.objectId)?.slots[slotKey(BOX_PATH)]?.value;
+  if (connectorLine(endValue(from), endValue(to)) === null) {
+    return { ok: false, message: "a connector there would draw no line, because an end has no box yet, or the two ends overlap" };
   }
   return createObjectFromCommand(document, "connector", [
     { path: CONNECTOR_ARROW_PATH, value: arrow },
@@ -1904,14 +1911,18 @@ function deleteDocumentVariable(command: Extract<Command, { kind: "delvar" }>, d
   if ("ok" in address) {
     return address;
   }
-  const result = mutate(document.objects, [{ kind: "clearSlot", address }], document.journal, context);
+  // The copies of the variable go with it, and so does each connector to one of them.
+  const copies = new Set(document.objects.filter((object) => object.type === DOCREF_TYPE && object.target?.objectId === address.objectId && slotKey(object.target.path) === slotKey(address.path)).map((object) => object.id));
+  const connectors = attachedConnectors(document.objects, copies);
+  const operations: Operation[] = [...connectors.map((connector): Operation => ({ kind: "deleteObject", objectId: connector.id, force: false })), { kind: "clearSlot", address }];
+  const result = mutate(document.objects, operations, document.journal, context);
   if (!result.ok) {
     return result;
   }
   return {
     ok: true,
     document: { ...document, objects: result.objects, journal: result.journal },
-    lines: [`deleted ${command.name}`],
+    lines: [connectors.length === 0 ? `deleted ${command.name}` : `deleted ${command.name}, ${connectors.map((connector) => connector.name).join(", ")}`],
   };
 }
 

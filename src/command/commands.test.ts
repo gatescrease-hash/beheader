@@ -2608,6 +2608,19 @@ describe("connect — a line from one object to another that follows both", () =
     expect(outcome.ok && outcome.document.objects.map((object) => object.name)).toEqual(["rect_1"]);
   });
 
+  it("refuses a connector that would draw no line: an end with no box yet, two ends at one point, or two boxes that overlap", () => {
+    expect(refused("connect 300,10 300,10", pair())).toContain("draw no line");
+    expect(refused("connect text_1 rect_1", committed('text x=0 y=100 ""', pair()))).toContain("draw no line");
+    expect(refused("connect frame_1 rect_1", committed("frame x=-10 y=-10 w=400 h=300", pair()))).toContain("draw no line");
+  });
+
+  it("takes along a connector to a copy of a variable when the variable is deleted", () => {
+    const linked = committed("connect docref_1 rect_1", committed("docvar speed 5 x=0 y=100", pair()));
+    const outcome = run("delvar speed", linked);
+    expect(outcome.ok && outcome.lines).toEqual(["deleted speed, connector_1"]);
+    expect(outcome.ok && outcome.document.objects.filter((object) => object.type === "connector")).toEqual([]);
+  });
+
   it("deletes a connector alone and leaves both objects", () => {
     const document = committed("delete connector_1", committed("connect rect_1 rect_2", pair()));
     expect(document.objects.map((object) => object.name)).toEqual(["rect_1", "rect_2"]);

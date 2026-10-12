@@ -2210,7 +2210,10 @@ connect                        // the word alone, then a press on each end
 A press, or a point as typed, takes the smallest object whose box holds it, so
 a press on a shape inside a frame takes the shape rather than the frame. A press
 on empty canvas makes a free end at that point. Both ends on one object refuse,
-and so does an object with no box, such as a group.
+and so does an object with no box, such as a group. So does a connector that
+would draw no line, because an end holds no box yet, as an empty text does, or
+the two ends overlap, because a connector with no line has nothing to press and
+could only be found by name.
 
 **Every object with a place carries a box.** A derived slot `box` holds the
 corners of the object's box, as two points, the top left and then the bottom
@@ -2242,7 +2245,9 @@ the object it lands on.
 reads the box of that object and nothing else, in the same batch, because a
 connector to nothing is no part of a diagram. A formula of any other kind that
 reads the box still refuses the delete by name, as section 4 has it. A cut takes
-the same connectors along.
+the same connectors along, and so does a `delvar` that removes the copies of a
+variable. A paste moves a free end by the paste offset, as it moves every other
+place.
 
 **Drawing.** A line in the connector's stroke, with an arrowhead at the end its
 `arrow` slot names: `end`, `start`, `both` or `none`. The arrowhead scales with

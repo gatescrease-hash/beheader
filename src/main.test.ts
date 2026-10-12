@@ -2875,6 +2875,14 @@ describe("connectors in the workspace", () => {
     expect(objectNamed(nudged.state, "connector_1").slots.vertices?.value).toEqual([{ x: 40, y: 20 }, { x: 200, y: 100 }]);
   });
 
+  it("moves a group that holds a connector with no notice about the connector", () => {
+    let state = typed(joined(), "group rect_1,connector_1");
+    state = withSelection(state, [objectNamed(state, "group_1").id]);
+    const nudged = nudgeSelection(state, 0, 10, false);
+    expect(nudged.state.log.filter((line) => line.includes("no origin"))).toEqual([]);
+    expect(numberAt(objectNamed(nudged.state, "rect_1"), ["origin", "y"])).toBe(10);
+  });
+
   it("rewires a connector end dropped on a table to the table's box rather than a cell", () => {
     const state = joined();
     const connector = objectNamed(state, "connector_1");

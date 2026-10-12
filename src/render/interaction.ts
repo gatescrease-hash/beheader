@@ -1012,10 +1012,6 @@ export interface DragPlan {
  * Arrangement moves objects through this, so it follows the rule of a drag.
  */
 export function planMove(object: GraphObject, objects: readonly GraphObject[], deltaX: number, deltaY: number): DragPlan {
-  // A connector has no place of its own, and follows the objects it joins.
-  if (object.type === "connector") {
-    return { operations: [], notices: [] };
-  }
   const moved = object.type === "group" ? [object, ...groupDescendants(object.id, objects)] : [object];
   return joinPlans(moved.map((each) => planDrag(each, objects, deltaX, deltaY, everyVertexOfPath(each))));
 }
@@ -1036,6 +1032,11 @@ function planDrag(
   deltaY: number,
   vertices: readonly number[] | undefined,
 ): DragPlan {
+  // A connector has no place of its own, and follows the objects it joins,
+  // whether it moves alone, in a selection or inside a group.
+  if (object.type === "connector") {
+    return { operations: [], notices: [] };
+  }
   if (vertices === undefined) {
     return gather([planComponent(object, ORIGIN_X_PATH, deltaX, objects), planComponent(object, ORIGIN_Y_PATH, deltaY, objects)]);
   }

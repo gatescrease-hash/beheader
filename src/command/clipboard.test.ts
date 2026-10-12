@@ -50,6 +50,12 @@ function formulaOf(document: Document, name: string, key: string): string {
 const PAIR = ["circle x=0 y=0 r=10", "circle x=100 y=0 r=5", "set circle_2.radius = circle_1.radius * 2"];
 
 describe("copying objects", () => {
+  it("moves a connector's free end by the paste offset, as it moves every other place", () => {
+    const document = pasted(built(["rect x=0 y=0 w=40 h=20", "connect rect_1 300,10"]), ["rect_1", "connector_1"]);
+    expect(named(document, "connector_2").slots.to).toEqual({ kind: "literal", value: { x: 320, y: 30 } });
+    expect(named(document, "connector_1").slots.to).toEqual({ kind: "literal", value: { x: 300, y: 10 } });
+  });
+
   it("pastes a copy taken before a type gained its box, and gives the pasted object one", () => {
     const document = built(["rect x=0 y=0 w=10 h=10"]);
     const payload = copyObjects(document.objects, [named(document, "rect_1").id]);
