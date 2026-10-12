@@ -711,11 +711,12 @@ const PLOT_LABEL_FONT = "11px sans-serif";
  * ranges as labels, so the scale reads without a grid.
  */
 function drawPlot(ctx: DrawingContext, object: GraphObject): void {
-  const layout = plotLayout(object);
-  if (layout === undefined) {
+  // The sheet draws from the box alone, so a plot whose range does not read
+  // still shows where it is, beside the error mark that says why.
+  const box = objectExtent(object);
+  if (box === undefined) {
     return;
   }
-  const { box } = layout;
   const width = box.maxX - box.minX;
   const height = box.maxY - box.minY;
   ctx.fillStyle = PLOT_SHEET_STYLE;
@@ -723,6 +724,10 @@ function drawPlot(ctx: DrawingContext, object: GraphObject): void {
   ctx.strokeStyle = PLOT_BORDER_STYLE;
   ctx.lineWidth = 1;
   ctx.strokeRect(box.minX, box.minY, width, height);
+  const layout = plotLayout(object);
+  if (layout === undefined) {
+    return;
+  }
   ctx.strokeStyle = PLOT_AXIS_STYLE;
   ctx.beginPath();
   if (layout.axisY !== undefined) {

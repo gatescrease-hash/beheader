@@ -94,22 +94,34 @@ function computeSamples(object: GraphObject, read: (address: Address) => Value |
   if (xmax !== undefined && isErrorValue(xmax)) return xmax;
   const low = finiteNumber(xmin);
   const high = finiteNumber(xmax);
-  if (low === undefined || high === undefined || !(high > low)) {
-    return { error: "#TYPE", message: `${object.name} needs xmax above xmin, each a number` };
+  // A span past the largest number would put a place at infinity, which is
+  // not legal document state.
+  if (low === undefined || high === undefined || !(high > low) || !Number.isFinite(high - low)) {
+    return { error: "#TYPE", message: `${object.name} needs xmax above xmin, each a number, with a span a number can hold` };
   }
-  const math: GraphObject = { id: target.objectId, name: "", type: "math", slots: {}, ports: { in: inputs, out: exports, ...(seeds.length === 0 ? {} : { seed: seeds }) } };
+  // The variable's own port is left out, because the plot sets the variable at
+  // each place, so what the port holds, an error included, is never read.
+  const others = inputs.filter((name) => name !== variable);
+  const math: GraphObject = { id: target.objectId, name: "", type: "math", slots: {}, ports: { in: others, out: exports, ...(seeds.length === 0 ? {} : { seed: seeds }) } };
   const environment = readMathEnvironment(math, read);
   if ("error" in environment) {
     return environment;
   }
   const points: Point[] = [];
+  let failure: Value | undefined;
   for (let index = 0; index < PLOT_SAMPLE_COUNT; index += 1) {
-    const x = low + ((high - low) * index) / (PLOT_SAMPLE_COUNT - 1);
+    const x = low + (high - low) * (index / (PLOT_SAMPLE_COUNT - 1));
     const evaluation = evaluateMathObject(environment.program, { ...environment.inputs, [variable]: x }, environment.references, environment.seeds);
     const y = evaluation.exports[target.exportName];
-    if (typeof y === "number" && Number.isFinite(y)) {
+    if (typeof y === "number" && Number.isFinite(y) && Number.isFinite(x)) {
       points.push({ x: x === 0 ? 0 : x, y: y === 0 ? 0 : y });
+    } else if (failure === undefined && y !== undefined && isErrorValue(y)) {
+      failure = y;
     }
+  }
+  // A plot with no point anywhere says why, rather than drawing an empty sheet.
+  if (points.length === 0) {
+    return failure ?? { error: "#MATH", message: `${object.name}: ${target.exportName} is a finite number nowhere from xmin to xmax` };
   }
   return points;
 }
@@ -125,7 +137,14 @@ export const PLOT_SAMPLES_SLOT: DerivedSlotSchema = {
         .map((path): Address => ({ objectId: object.id, path }));
       const target = plotCurveTarget(object);
       const math = target === undefined ? undefined : objects.find((candidate) => candidate.id === target.objectId);
-      return math?.type === "math" ? [...own, ...mathEnvironmentDependencies(math)] : own;
+      if (math?.type !== "math") {
+        return own;
+      }
+      // A variable written as a literal names a port the plot never reads, so
+      // a change to that port leaves the samples alone.
+      const variable = object.slots[PLOT_VARIABLE_PATH.join(".")];
+      const skipped = variable?.kind === "literal" && typeof variable.value === "string" ? `in.${variable.value}` : undefined;
+      return [...own, ...mathEnvironmentDependencies(math).filter((address) => !(address.objectId === math.id && address.path.join(".") === skipped))];
     },
   },
   compute: (object, read) => computeSamples(object, read),

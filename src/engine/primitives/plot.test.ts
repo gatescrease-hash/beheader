@@ -73,6 +73,24 @@ describe("a plot samples a math object along one input", () => {
     expect(samples(run(["set math_1.in.b 3", "set math_1.in.b 7"], gained)).at(-1)).toEqual({ x: 1, y: 7 });
   });
 
+  it("keeps every place finite on the widest range a number holds, and refuses a span past it, staying editable", () => {
+    const wide = run(['math "y = 1 / x"', "plot math_1", "set plot_1.xmax =10^308"]);
+    expect(samples(wide).every((point) => Number.isFinite(point.x))).toBe(true);
+    const document = run(["set plot_1.xmin =-10^308"], wide);
+    expect(named(document, "plot_1").slots.samples?.value).toMatchObject({ error: "#TYPE", message: expect.stringContaining("span") });
+    expect(samples(run(["set plot_1.xmin -10", "set plot_1.xmax 10"], document))).toHaveLength(PLOT_SAMPLE_COUNT - 1);
+  });
+
+  it("never reads the variable's own port, so an error there leaves the plot alone", () => {
+    const document = run(['math "y = 2 x"', "plot math_1 from=0 to=1", 'set math_1.in.x "abc"']);
+    expect(samples(document).at(-1)).toEqual({ x: 1, y: 2 });
+  });
+
+  it("holds the error of the first place that failed when no place gives a number", () => {
+    const document = run(['math "y = a \\\\sin(x)"', "plot math_1"]);
+    expect(named(document, "plot_1").slots.samples?.value).toMatchObject({ error: "#MATH", message: expect.stringContaining('"a"') });
+  });
+
   it("leaves a gap where the export gives no finite number", () => {
     const points = samples(run(['math "y = 1 / x"', "plot math_1 from=-1 to=1"]));
     expect(points).toHaveLength(PLOT_SAMPLE_COUNT - 1);

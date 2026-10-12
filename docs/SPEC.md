@@ -2266,7 +2266,7 @@ that number moves as one input runs across a range, which a table of values
 shows only in part.
 
 ```
-math "y = a \\sin(x)"
+math "y = 2 \\sin(x)"
 plot math_1 x=0 y=100 from=-10 to=10
 ```
 
@@ -2282,7 +2282,10 @@ export and the input named `x`, or the first input where the object has no `x`.
 places from `xmin` to `xmax`, with the variable at each place and every other
 input as the math object holds it, and keeps each place where the export is a
 finite number as a point. A place with no finite number, such as a pole, leaves
-a gap, because no number in plain document state stands for it. The count is
+a gap, because no number in plain document state stands for it. A plot with no
+point anywhere holds the error of the first place that failed, so the plot says
+why it draws nothing. The variable's own port is never read, so an error there
+leaves the plot alone. The count is
 fixed, so a plot costs the same to evaluate in any document and at any zoom.
 `xmin` and `xmax` are slots like any other, so a slider can drive the range.
 
@@ -2290,7 +2293,11 @@ fixed, so a plot costs the same to evaluate in any document and at any zoom.
 curve in the plot's stroke cut at the edges of the sheet and broken at each gap,
 and the ends of both ranges as labels inside the sheet. The vertical range is
 `ymin` to `ymax` where each holds a number, and fits the samples where it holds
-null, with a twentieth of the span added above and below. A plot resizes by its
+null, with a twentieth of the span added above and below. A fixed end holds, and
+a fitted end keeps clear of it. The fit leaves out a tail of samples that runs
+far past the rest, as the samples beside a pole do, because a range that held
+them would flatten the curve, and the curve breaks where two samples lie past
+opposite ends of the range, which is a pole between them. A plot resizes by its
 handles. Its `curve` slot holds the export at the math object's own inputs, which
 can be an error where the plot draws numbers, so the error mark of a plot leaves
 that slot out.

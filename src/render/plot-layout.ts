@@ -7,7 +7,8 @@
  *
  * The vertical range comes from `ymin` and `ymax` where each holds a number,
  * and from the samples where it does not, with a twentieth of the span added
- * above and below, so the curve never runs along the edge of the box. A curve
+ * above and below, so the curve never runs along the edge of the box. The
+ * samples next to a pole are left out of the fit, which fittedRange explains. A curve
  * with one height everywhere takes a span of one around that height, because a
  * span of nothing would divide by zero.
  *
@@ -59,19 +60,19 @@ export function plotLayout(object: GraphObject): PlotLayout | undefined {
   }
   const value = getSlot(object, PLOT_SAMPLES_PATH)?.value;
   const samples = Array.isArray(value) ? (value as readonly Point[]) : [];
-  const heights = samples.map((sample) => sample.y);
-  const low = heights.length === 0 ? -1 : Math.min(...heights);
-  const high = heights.length === 0 ? 1 : Math.max(...heights);
-  const centre = (low + high) / 2;
+  const [low, high] = fittedRange(samples.map((sample) => sample.y));
   const span = high > low ? high - low : 1;
   const pad = span / 20;
+  const autoLow = high > low ? low - pad : (low + high) / 2 - span / 2 - pad;
+  const autoHigh = high > low ? high + pad : (low + high) / 2 + span / 2 + pad;
   const fixedLow = readNumber(object, PLOT_YMIN_PATH);
   const fixedHigh = readNumber(object, PLOT_YMAX_PATH);
-  let ymin = fixedLow ?? (high > low ? low - pad : centre - span / 2 - pad);
-  let ymax = fixedHigh ?? (high > low ? high + pad : centre + span / 2 + pad);
+  // A fixed end holds, and the other end keeps clear of it by the fitted span.
+  let ymin = fixedLow ?? (fixedHigh !== undefined && !(autoLow < fixedHigh) ? fixedHigh - (autoHigh - autoLow) : autoLow);
+  let ymax = fixedHigh ?? (fixedLow !== undefined && !(autoHigh > fixedLow) ? fixedLow + (autoHigh - autoLow) : autoHigh);
   if (!(ymax > ymin)) {
-    ymin = centre - 1;
-    ymax = centre + 1;
+    ymin = (ymin + ymax) / 2 - 1;
+    ymax = ymin + 2;
   }
   const toWorld = (point: Point): Point => ({
     x: box.minX + ((point.x - xmin) / (xmax - xmin)) * (box.maxX - box.minX),
@@ -82,7 +83,10 @@ export function plotLayout(object: GraphObject): PlotLayout | undefined {
   const runs: Point[][] = [];
   let previous: Point | undefined;
   for (const sample of samples) {
-    if (previous === undefined || sample.x - previous.x > step * 1.5) {
+    // A pole between two samples puts them past opposite ends of the range,
+    // and the curve breaks there as it does at a pole a sample lands on.
+    const across = previous !== undefined && ((previous.y > ymax && sample.y < ymin) || (previous.y < ymin && sample.y > ymax));
+    if (previous === undefined || sample.x - previous.x > step * 1.5 || across) {
       runs.push([]);
     }
     runs[runs.length - 1]!.push(toWorld(sample));
@@ -100,6 +104,26 @@ export function plotLayout(object: GraphObject): PlotLayout | undefined {
     axisY: ymin <= 0 && ymax >= 0 ? toWorld({ x: xmin, y: 0 }).y : undefined,
     axisX: xmin <= 0 && xmax >= 0 ? toWorld({ x: 0, y: ymin }).x : undefined,
   };
+}
+
+/**
+ * The fitted vertical range of a set of heights: from the lowest to the
+ * highest, except that a tail far past the bulk of the heights is left out,
+ * because the heights next to a pole run toward infinity and a range that held
+ * them would flatten the rest of the curve onto one line. A tail is far when it
+ * runs more than twice the span of the middle nine tenths past it.
+ */
+export function fittedRange(heights: readonly number[]): readonly [number, number] {
+  if (heights.length === 0) {
+    return [-1, 1];
+  }
+  const sorted = [...heights].sort((a, b) => a - b);
+  const lowBulk = sorted[Math.floor(0.05 * (sorted.length - 1))]!;
+  const highBulk = sorted[Math.ceil(0.95 * (sorted.length - 1))]!;
+  const bulk = highBulk - lowBulk;
+  const lowest = sorted[0]!;
+  const highest = sorted[sorted.length - 1]!;
+  return [lowBulk - lowest <= 2 * bulk ? lowest : lowBulk, highest - highBulk <= 2 * bulk ? highest : highBulk];
 }
 
 /** A number for an axis label, short enough to read at a glance. */

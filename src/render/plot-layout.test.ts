@@ -49,6 +49,19 @@ describe("plotLayout", () => {
     expect(layout.ymax - layout.ymin).toBeCloseTo(1.1);
   });
 
+  it("keeps one fixed end and fits the other clear of it", () => {
+    const layout = plotLayout(plot([{ x: 0, y: 0 }, { x: 2, y: 4 }], { ymin: 5 }))!;
+    expect(layout.ymin).toBe(5);
+    expect(layout.ymax).toBeGreaterThan(5);
+  });
+
+  it("leaves the samples beside a pole out of the fit, and breaks the curve across a pole between two samples", () => {
+    const points = Array.from({ length: 201 }, (_unused, index) => -1 + index / 100).map((x) => ({ x, y: 1 / (x - 0.005) }));
+    const layout = plotLayout(plot(points, { xmin: -1, xmax: 1 }))!;
+    expect(layout.ymax).toBeLessThan(100);
+    expect(layout.runs.length).toBeGreaterThanOrEqual(2);
+  });
+
   it("breaks the curve where samples are missing", () => {
     const step = 2 / 200;
     const layout = plotLayout(plot([{ x: 0, y: 1 }, { x: step, y: 1 }, { x: 10 * step, y: 1 }]))!;
