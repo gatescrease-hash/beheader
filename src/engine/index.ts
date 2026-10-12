@@ -63,6 +63,7 @@ export * from "./primitives/slider.ts";
 export * from "./primitives/frame.ts";
 export * from "./primitives/textbox.ts";
 export * from "./primitives/box.ts";
+export * from "./primitives/connector.ts";
 export * from "./primitives/math.ts";
 
 export * from "./math/ast.ts";

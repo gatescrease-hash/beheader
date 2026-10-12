@@ -81,6 +81,7 @@ const DOCUMENTED_EXAMPLES: readonly { readonly line: string; readonly command: C
   { line: "duplicate circle_1,rect_1", command: { kind: "duplicate", targets: ["circle_1", "rect_1"] } },
   { line: "snap off", command: { kind: "snap", state: "off" } },
   { line: "frame x=0 y=0 w=300 h=200", command: { kind: "frame", x: 0, y: 0, width: 300, height: 200 } },
+  { line: "connect rect_1 text_1", command: { kind: "connect", from: "rect_1", to: "text_1" } },
   { line: "view frame_1", command: { kind: "view", target: "frame_1" } },
   { line: "slider x=1 y=2 max=20 step=0.5", command: { kind: "slider", x: 1, y: 2, min: 0, max: 20, step: 0.5, value: 5, width: 200 } },
   { line: "upstream circle_1 2", command: { kind: "upstream", target: "circle_1", depth: 2 } },
@@ -505,6 +506,13 @@ describe("an argument that names something declares which kind it is", () => {
   it("finds an object or an address argument on every command that takes one", () => {
     const named = COMMAND_NAMES.filter((name) => positionalKinds(name).some((kind) => kind === "object" || kind === "address"));
     expect(named.length).toBeGreaterThan(10);
+  });
+});
+
+describe("connect reads an end as a point or a name", () => {
+  it("reads x,y as a free end, and a third word as where the arrowhead goes", () => {
+    expect(parsed("connect rect_1 300,40 both")).toEqual({ kind: "connect", from: "rect_1", to: { x: 300, y: 40 }, arrow: "both" });
+    expect(parsed("connect -5,0.5 text_1")).toEqual({ kind: "connect", from: { x: -5, y: 0.5 }, to: "text_1" });
   });
 });
 

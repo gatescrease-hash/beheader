@@ -54,6 +54,7 @@ import { worldToScreen, type WorldPoint } from "./camera.ts";
 import type { DrawingContext } from "./drawing.ts";
 import { FRAME_LABEL_HEIGHT, frameLabelWidth, GROUP_TAB_HEIGHT, groupBoundary, groupTabWidth, objectExtent, type WorldExtent } from "./extent.ts";
 import { asPointArray, readBoolean, readNumber, readShapeStyle } from "./slots.ts";
+import { connectorLayout } from "./connector-layout.ts";
 
 /** A window takes what lies wholly inside the box, and a crossing takes what the box touches. */
 export type MarqueeMode = "window" | "crossing";
@@ -158,6 +159,10 @@ function touches(object: GraphObject, box: WorldExtent): boolean {
     }
     case "polyline":
       return edgesTouch(pathEdgesOfObject(object), box, filled && readBoolean(object, CLOSED_PATH) === true);
+    case "connector": {
+      const layout = connectorLayout(object);
+      return layout !== undefined && edgesTouch(buildPathEdges([layout.start, layout.end], [], false), box, false);
+    }
     // A frame hits on its border and its name alone, so a crossing drawn inside
     // it takes what is in the frame and leaves the frame.
     case "frame": {

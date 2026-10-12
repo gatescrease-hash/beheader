@@ -392,6 +392,14 @@ function everyStructuralOperation(random: SeededRandom, objectCount: number): Op
     [{ kind: "setSlot", address: at("obj_frame", "width"), slot: formulaSlot({ type: "binaryOp", operator: "*", left: { type: "reference", address: at("obj_slider", "value") }, right: { type: "literal", value: 40 } }) }],
     [readerOf("obj_frame_reader", "frame_reader", at("obj_frame", "width"))],
     [readerOf("obj_frame_box_reader", "frame_box_reader", at("obj_frame", "box"))],
+    // A connector reads two boxes, so a move or a resize of either end redraws it.
+    [{ kind: "createObject", object: withDerivedSlots({ id: "obj_link", name: "link", type: "connector", slots: {
+      from: formulaSlot({ type: "reference", address: at("obj_frame", "box") }), to: formulaSlot({ type: "reference", address: at(sheet, "box") }),
+      arrow: { kind: "literal", value: "end" }, "style.strokeColor": { kind: "literal", value: "#1a1a1a" }, "style.strokeWidth": literalSlot(1),
+    } }) }],
+    [readerOf("obj_link_reader", "link_reader", at("obj_link", "vertices"))],
+    [{ kind: "setSlot", address: at("obj_frame", "origin", "x"), slot: literalSlot(400 + random.integer(200)) }],
+    [{ kind: "setSlot", address: at(sheet, "origin", "y"), slot: literalSlot(random.integer(300)) }],
     [{ kind: "createObject", object: withDerivedSlots({ id: path, name: "path", type: "polyline", vertexCount: pathPoints.length, slots: pathSlots }) }],
     [readerOf("obj_path_reader", "path_reader", at(path, "vertex", "2", "x"))],
     [{ kind: "addVertex", objectId: path, point: point(random.integer(50), 60) }],

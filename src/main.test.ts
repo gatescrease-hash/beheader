@@ -41,6 +41,7 @@ import {
   pickWireRow,
   beginRewire,
   finishRewire,
+  rewireDropAddress,
   selectedWire,
   initialAppState,
   movePanel,
@@ -2847,5 +2848,39 @@ describe("frames: views, steps and pictures", () => {
     const arranged = typed(framed(), "arrange grid");
     expect(numberAt(objectNamed(arranged, "frame_2"), ["origin", "x"])).toBe(1000);
     expect(numberAt(objectNamed(arranged, "frame_1"), ["origin", "x"])).toBe(0);
+  });
+});
+
+describe("connectors in the workspace", () => {
+  function joined(): AppState {
+    let state = typed(opened(), "rect x=0 y=0 w=40 h=20");
+    state = typed(state, "rect x=200 y=0 w=40 h=20");
+    state = typed(state, "table x=0 y=200 rows=2 cols=2");
+    return typed(state, "connect rect_1 rect_2");
+  }
+
+  it("cuts a connector along with an object it joins, and pastes the object alone", () => {
+    const state = withSelection(joined(), [objectNamed(joined(), "rect_2").id]);
+    const cut = typed(state, "cut");
+    expect(cut.document.objects.map((object) => object.name)).toEqual(["rect_1", "table_1"]);
+    expect(typed(cut, "undo").document.objects.map((object) => object.name)).toContain("connector_1");
+  });
+
+  it("moves the objects in a selection that holds a connector, and the connector follows them", () => {
+    const state = joined();
+    const moved = withSelection(state, [objectNamed(state, "rect_2").id, objectNamed(state, "connector_1").id]);
+    const nudged = nudgeSelection(moved, 0, 100, false);
+    expect(nudged.state.log.filter((line) => line.includes("no origin"))).toEqual([]);
+    expect(numberAt(objectNamed(nudged.state, "rect_2"), ["origin", "y"])).toBe(100);
+    expect(objectNamed(nudged.state, "connector_1").slots.vertices?.value).toEqual([{ x: 40, y: 20 }, { x: 200, y: 100 }]);
+  });
+
+  it("rewires a connector end dropped on a table to the table's box rather than a cell", () => {
+    const state = joined();
+    const connector = objectNamed(state, "connector_1");
+    const table = objectNamed(state, "table_1");
+    const edge = { sourceSlot: { objectId: objectNamed(state, "rect_2").id, path: ["box"] }, dependentSlot: { objectId: connector.id, path: ["to"] } };
+    const dropped = rewireDropAddress(state, edge, worldToScreen(state.document.camera, { x: 30, y: 210 }));
+    expect(dropped).toEqual({ ok: true, address: { objectId: table.id, path: ["box"] } });
   });
 });

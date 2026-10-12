@@ -824,6 +824,7 @@ describe("every registry command reaches a handler", () => {
     "snap on",
     "slider x=0 y=0",
     "frame x=0 y=0",
+    "connect rect_1 polygon_1",
     "view polygon_1",
     "upstream polygon_1",
     "downstream polygon_1 1",
@@ -2562,5 +2563,53 @@ describe("frame and view — named regions of the one canvas", () => {
     const outcome = run("view frame_1", document);
     expect(outcome.ok && outcome.effect).toEqual({ kind: "view", objectId: onlyNamed(document, "frame_1").id });
     expect(refused("view nosuch", document)).toContain('no object named "nosuch"');
+  });
+});
+
+describe("connect — a line from one object to another that follows both", () => {
+  const pair = (): Document => ["rect x=0 y=0 w=40 h=20", "rect x=200 y=0 w=40 h=20"].reduce((document, line) => committed(line, document), createEmptyDocument());
+
+  it("creates a connector whose two ends read the boxes of the two objects, pointing at the second", () => {
+    const outcome = run("connect rect_1 rect_2", pair());
+    expect(outcome.ok && outcome.lines).toEqual(["created connector_1"]);
+    const document = committed("connect rect_1 rect_2", pair());
+    const connector = onlyNamed(document, "connector_1");
+    const slot = connector.slots.from;
+    expect(slot?.kind === "formula" && formatFormula(slot.ast, document.objects)).toBe("rect_1.box");
+    expect(connector.slots.arrow?.value).toBe("end");
+    expect(connector.slots.vertices?.value).toEqual([{ x: 40, y: 10 }, { x: 200, y: 10 }]);
+  });
+
+  it("takes the arrowhead from a third word, and refuses a word it does not know", () => {
+    expect(onlyNamed(committed("connect rect_1 rect_2 both", pair()), "connector_1").slots.arrow?.value).toBe("both");
+    expect(refused("connect rect_1 rect_2 sideways", pair())).toContain("end, start, both or none");
+  });
+
+  it("refuses both ends on one object, an object with no box, and a name no object has", () => {
+    expect(refused("connect rect_1 rect_1", pair())).toContain("two different objects");
+    const grouped = committed("group rect_1", pair());
+    expect(refused("connect group_1 rect_2", grouped)).toContain("has no box");
+    expect(refused("connect rect_1 nosuch", pair())).toContain('no object named "nosuch"');
+  });
+
+  it("places an end by a point on the smallest object whose box holds it, or as a free end on empty canvas", () => {
+    const framed = committed("frame x=-100 y=-100 w=600 h=400", pair());
+    const document = committed("connect 20,10 700,250", framed);
+    const connector = onlyNamed(document, "connector_1");
+    const from = connector.slots.from;
+    expect(from?.kind === "formula" && formatFormula(from.ast, document.objects)).toBe("rect_1.box");
+    expect(connector.slots.to).toEqual({ kind: "literal", value: { x: 700, y: 250 } });
+  });
+
+  it("takes a connector along when either object it joins is deleted, and names it", () => {
+    const document = committed("connect rect_1 rect_2", pair());
+    const outcome = run("delete rect_2", document);
+    expect(outcome.ok && outcome.lines).toEqual(["deleted rect_2, connector_1"]);
+    expect(outcome.ok && outcome.document.objects.map((object) => object.name)).toEqual(["rect_1"]);
+  });
+
+  it("deletes a connector alone and leaves both objects", () => {
+    const document = committed("delete connector_1", committed("connect rect_1 rect_2", pair()));
+    expect(document.objects.map((object) => object.name)).toEqual(["rect_1", "rect_2"]);
   });
 });

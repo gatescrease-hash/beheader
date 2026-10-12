@@ -234,6 +234,27 @@ export interface GroupCommand {
   readonly members: readonly string[];
 }
 
+/**
+ * `connect`, with each end named, or placed by a press, which takes the object
+ * under it or, on empty canvas, a free end at that point.
+ */
+export interface CreateConnectorCommand {
+  readonly kind: "connect";
+  readonly from: string | { readonly x: number; readonly y: number };
+  readonly to: string | { readonly x: number; readonly y: number };
+  readonly arrow?: string;
+}
+
+/**
+ * An end of `connect` as typed: a point such as `100,40`, which places the end
+ * the way a press there would, or the name of an object. A name never holds a
+ * comma, so the two forms never meet.
+ */
+function connectorEndArgument(text: string): string | { readonly x: number; readonly y: number } {
+  const parts = text.split(",");
+  return parts.length === 2 && parts.every((part) => NUMBER_PATTERN.test(part)) ? { x: Number(parts[0]), y: Number(parts[1]) } : text;
+}
+
 export interface CreateFrameCommand {
   readonly kind: "frame";
   readonly x: number;
@@ -381,6 +402,7 @@ export type Command =
   | SnapCommand
   | CreateSliderCommand
   | CreateFrameCommand
+  | CreateConnectorCommand
   | ViewCommand
   | UngroupCommand
   | GraphWalkCommand
@@ -704,6 +726,23 @@ const COMMAND_SPECS: readonly CommandSpec[] = [
       const origin = pointAnswer(answers, "origin");
       return { kind: "image", x: origin.x, y: origin.y };
     },
+  },
+  {
+    name: "connect",
+    usage: "connect <object> <object> [end|start|both|none]",
+    positional: [objectName("from"), objectName("to"), { name: "arrow", kind: "text", optional: true }],
+    named: [],
+    flags: [],
+    build: (args) => {
+      const arrow = findArgument(args, "arrow")?.value;
+      const base = { kind: "connect" as const, from: connectorEndArgument(textArgument(args, "from")), to: connectorEndArgument(textArgument(args, "to")) };
+      return typeof arrow === "string" ? { ...base, arrow } : base;
+    },
+    prompts: [
+      { name: "from", message: "specify first object", accepts: "point" },
+      { name: "to", message: "specify second object", accepts: "point" },
+    ],
+    buildFromPrompts: (answers) => ({ kind: "connect", from: pointAnswer(answers, "from"), to: pointAnswer(answers, "to") }),
   },
   {
     name: "frame",

@@ -101,6 +101,7 @@ import { layOutText } from "./measure.ts";
 import { asPointArray, readBoolean, readNumber, readShapeStyle, readText, SCRIPT_HEADER_HEIGHT, SCRIPT_PORT_ROW_HEIGHT, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";
 import { tableLayout, cellStyle, fittedCellNumber } from "./table-layout.ts";
 import { SLIDER_KNOB_RADIUS, sliderLayout } from "./slider-layout.ts";
+import { connectorLayout } from "./connector-layout.ts";
 import { displayObjects } from "../engine/index.ts";
 import { textBoxSize } from "../engine/index.ts";
 import { GROUP_TAB_HEIGHT, groupBoundary, groupTabWidth, objectExtent } from "./extent.ts";
@@ -676,6 +677,9 @@ function drawObject(
     case "slider":
       drawSlider(ctx, object);
       return;
+    case "connector":
+      drawConnector(ctx, object);
+      return;
     // renderDocument draws every frame before any other object, groups
     // included, so a frame sits beneath everything it holds.
     case "frame":
@@ -688,6 +692,29 @@ function drawObject(
       void exhaustive;
       return;
     }
+  }
+}
+
+/** A connector: its line in its stroke, then each arrowhead filled in the same colour. */
+function drawConnector(ctx: DrawingContext, object: GraphObject): void {
+  const layout = connectorLayout(object);
+  if (layout === undefined) {
+    return;
+  }
+  ctx.strokeStyle = layout.strokeColor;
+  ctx.lineWidth = layout.strokeWidth;
+  ctx.beginPath();
+  ctx.moveTo(layout.lineStart.x, layout.lineStart.y);
+  ctx.lineTo(layout.lineEnd.x, layout.lineEnd.y);
+  ctx.stroke();
+  ctx.fillStyle = layout.strokeColor;
+  for (const head of layout.heads) {
+    ctx.beginPath();
+    ctx.moveTo(head[0]!.x, head[0]!.y);
+    ctx.lineTo(head[1]!.x, head[1]!.y);
+    ctx.lineTo(head[2]!.x, head[2]!.y);
+    ctx.closePath();
+    ctx.fill();
   }
 }
 
@@ -1132,6 +1159,17 @@ function drawSelectionHighlight(ctx: DrawingContext, object: GraphObject): void 
       ctx.strokeRect(extent.minX, extent.minY, extent.maxX - extent.minX, extent.maxY - extent.minY);
       return;
     }
+    case "connector": {
+      const layout = connectorLayout(object);
+      if (layout === undefined) {
+        return;
+      }
+      ctx.beginPath();
+      ctx.moveTo(layout.start.x, layout.start.y);
+      ctx.lineTo(layout.end.x, layout.end.y);
+      strokeHighlight(ctx);
+      return;
+    }
     case "math":
     case "group":
     case "value":
@@ -1164,8 +1202,10 @@ function objectHasError(object: GraphObject): boolean {
 }
 
 function drawObjectChrome(ctx: DrawingContext, camera: CameraState, object: GraphObject, suppressName: boolean): void {
-  // A group draws its name on its own tab, and a frame above its corner.
-  if (object.type === "group" || object.type === "frame") {
+  // A group draws its name on its own tab, and a frame above its corner. A
+  // connector is left with no name tag, because a label on every line of a
+  // diagram hides the diagram, and the objects at its ends name it well enough.
+  if (object.type === "group" || object.type === "frame" || object.type === "connector") {
     return;
   }
   // A copy draws the variable name as the left half of its own label, and it

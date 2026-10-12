@@ -316,8 +316,9 @@ function standingBoxes(objects: readonly GraphObject[], moving: ReadonlySet<stri
     const object = byId.get(id);
     if (object !== undefined) for (const group of ancestorGroups(object, (groupId) => byId.get(groupId))) stretching.add(group.id);
   }
+  // A connector follows the objects it joins, so nothing lines up against it.
   return displayObjects(objects)
-    .filter((object) => !moving.has(object.id) && !stretching.has(object.id))
+    .filter((object) => !moving.has(object.id) && !stretching.has(object.id) && object.type !== "connector")
     .map((object) => (object.type === "group" ? groupBoundary(object, objects) : objectExtent(object)))
     .filter((box): box is WorldExtent => box !== undefined);
 }
@@ -331,6 +332,7 @@ function unitSnapTargets(units: readonly GraphObject[], objects: readonly GraphO
   const boxes: (WorldExtent | undefined)[] = [];
   for (const unit of units) {
     moving.add(unit.id);
+    if (unit.type === "connector") continue;
     const members = groupDescendants(unit.id, objects);
     for (const member of members) moving.add(member.id);
     const content = unionOf(members.filter((member) => member.type !== "group").map(objectExtent));
@@ -382,7 +384,8 @@ export function withFrameContents(objects: readonly GraphObject[], units: readon
   const taken = new Set(units.map((unit) => unit.id));
   const result = [...units];
   for (const unit of canvasUnits(objects)) {
-    if (taken.has(unit.id)) continue;
+    // A connector moves with the objects at its ends rather than with a frame.
+    if (taken.has(unit.id) || unit.type === "connector") continue;
     const box = unit.type === "group" ? groupBoundary(unit, objects) : objectExtent(unit);
     if (box !== undefined && frames.some((frame) => box.minX >= frame.minX && box.maxX <= frame.maxX && box.minY >= frame.minY && box.maxY <= frame.maxY)) {
       taken.add(unit.id);
@@ -1009,6 +1012,10 @@ export interface DragPlan {
  * Arrangement moves objects through this, so it follows the rule of a drag.
  */
 export function planMove(object: GraphObject, objects: readonly GraphObject[], deltaX: number, deltaY: number): DragPlan {
+  // A connector has no place of its own, and follows the objects it joins.
+  if (object.type === "connector") {
+    return { operations: [], notices: [] };
+  }
   const moved = object.type === "group" ? [object, ...groupDescendants(object.id, objects)] : [object];
   return joinPlans(moved.map((each) => planDrag(each, objects, deltaX, deltaY, everyVertexOfPath(each))));
 }

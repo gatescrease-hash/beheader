@@ -1639,7 +1639,7 @@ script x=0 y=0
 image x=0 y=0
 slider x=0 y=0 [min=0] [max=10] [step=1] [value=5] [w=200]
 frame x=0 y=0 w=800 h=600
-connect rect_1 text_1 [arrow=end]
+connect rect_1 text_1 [both|start|none]
 group circle_1,rect_1
 ungroup group_1 [force]
 duplicate circle_1,rect_1
@@ -2201,8 +2201,16 @@ the boxes move away from it. A connector reads where its two objects are,
 through the graph, so a move of either redraws it.
 
 ```
-connect rect_1 text_1 [arrow=end]   // or the word alone, then two objects
+connect rect_1 text_1          // an arrowhead at text_1, the second object
+connect rect_1 text_1 both     // or start, or none, or end, which is the default
+connect rect_1 400,120         // a point as typed is a free end
+connect                        // the word alone, then a press on each end
 ```
+
+A press, or a point as typed, takes the smallest object whose box holds it, so
+a press on a shape inside a frame takes the shape rather than the frame. A press
+on empty canvas makes a free end at that point. Both ends on one object refuse,
+and so does an object with no box, such as a group.
 
 **Every object with a place carries a box.** A derived slot `box` holds the
 corners of the object's box, as two points, the top left and then the bottom
@@ -2238,7 +2246,11 @@ the same connectors along.
 
 **Drawing.** A line in the connector's stroke, with an arrowhead at the end its
 `arrow` slot names: `end`, `start`, `both` or `none`. The arrowhead scales with
-the stroke, so a heavier line has a larger head.
+the stroke, so a heavier line has a larger head, and the line stops at the base
+of each head, because a line drawn to the tip shows through its point. A
+connector draws no name tag, because a label on every line of a diagram hides
+the diagram. A press near the line selects it, and a crossing box that the line
+runs through takes it.
 
 ---
 

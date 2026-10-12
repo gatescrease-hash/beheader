@@ -605,6 +605,7 @@
             <button data-command="script"><span>⌘</span>Script</button>
             <button data-command="slider"><span>⊸</span>Slider</button>
             <button data-command="frame"><span>⬚</span>Frame</button>
+            <button data-command="connect"><span>↗</span>Connector</button>
           </div>
           <div class="section-heading objects-heading">LAYERS &amp; OBJECTS <span id="object-count">0</span></div>
           <input id="object-search" type="search" placeholder="Find an object…" aria-label="Find an object" />
@@ -630,6 +631,7 @@
               <dd>Slider places one. Drag its knob, and everything that reads <code>slider_1.value</code> moves. A formula in its value turns it into a gauge.</dd>
               <dt>Split the canvas into parts</dt>
               <dd>Frame draws a named region. Dragging it moves what lies inside. <code>view frame_1</code> goes to it, Page Down and Page Up step through the frames, and <code>export png frame_1</code> takes a picture of it alone.</dd>
+              <dd>Connector joins two objects with a line that follows both: press one object, then the other, or type <code>connect rect_1 text_1</code>. Add <code>both</code>, <code>start</code> or <code>none</code> for the arrowheads. Deleting an object deletes its connectors.</dd>
               <dt>Line things up</dt>
               <dd>A drag snaps to the edges and centres of other objects, with a pink guide, and to the grid. Hold Alt to drag freely, or type <code>snap off</code>.</dd>
               <dt>Move around</dt>

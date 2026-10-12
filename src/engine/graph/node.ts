@@ -80,6 +80,7 @@ export type ObjectType =
   | "docref"
   | "slider"
   | "frame"
+  | "connector"
   | "add";
 
 export const TABLE_TYPE: ObjectType = "table";
@@ -97,6 +98,8 @@ export const MATH_TYPE: ObjectType = "math";
 export const SLIDER_TYPE: ObjectType = "slider";
 
 export const FRAME_TYPE: ObjectType = "frame";
+
+export const CONNECTOR_TYPE: ObjectType = "connector";
 
 export interface LiteralSlot {
   readonly kind: "literal";

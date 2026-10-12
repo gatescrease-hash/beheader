@@ -43,6 +43,7 @@ import {
 } from "../engine/index.ts";
 import { screenToWorld, type ScreenPoint, type WorldPoint } from "./camera.ts";
 import { FRAME_LABEL_HEIGHT, frameLabelWidth, GROUP_TAB_HEIGHT, groupBoundary, groupTabWidth, objectExtent } from "./extent.ts";
+import { connectorLayout, distanceToConnector } from "./connector-layout.ts";
 import { tableLayout } from "./table-layout.ts";
 import { ancestorGroups, displayObjects } from "../engine/index.ts";
 import { asPointArray, readBoolean, readNumber, readShapeStyle, TABLE_CELL_HEIGHT, TABLE_CELL_WIDTH } from "./slots.ts";
@@ -147,6 +148,11 @@ function hitTestObject(object: GraphObject, worldPoint: WorldPoint, strokeTolera
       return false;
     case "polyline":
       return hitTestPolyline(object, worldPoint, strokeToleranceWorld);
+    // A connector hits along its line, within the tolerance and half its stroke.
+    case "connector": {
+      const layout = connectorLayout(object);
+      return layout !== undefined && distanceToConnector(layout, worldPoint) <= strokeToleranceWorld + layout.strokeWidth / 2;
+    }
     // A group hits on its outline and its name tab only, which hitTest checks
     // after every other object, so the space inside stays clickable.
     case "group":

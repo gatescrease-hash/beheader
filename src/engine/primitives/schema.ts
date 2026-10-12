@@ -30,6 +30,7 @@ import type { Address } from "../address.ts";
 import { STYLE_PATHS, VIEW_PATHS } from "../layers.ts";
 import { GROUP_MEMBERSHIP_PATH } from "../groups.ts";
 import { BOX_DERIVED_SLOT } from "./box.ts";
+import { CONNECTOR_ARROW_PATH, CONNECTOR_ARROWS, CONNECTOR_DERIVED_SLOTS, CONNECTOR_FROM_PATH, CONNECTOR_TO_PATH } from "./connector.ts";
 import { DOCREF_DERIVED_SLOTS } from "./doc.ts";
 import type { EvalContext } from "../eval-context.ts";
 import type { ReadRange } from "../formula/eval.ts";
@@ -40,6 +41,7 @@ import {
   GEOMETRY_STYLE_PATHS,
   STYLE_FILL_COLOR_PATH,
   STYLE_STROKE_COLOR_PATH,
+  STYLE_STROKE_WIDTH_PATH,
   computePolygonVerticesSlot,
   computePolylineVerticesSlot,
   computeRectVerticesSlot,
@@ -524,6 +526,22 @@ const FRAME_SCHEMA: ObjectSchema = {
   derivedSlots: [BOX_SLOTS],
 };
 
+/**
+ * A connector holds its two ends and its arrowheads, and derives the line
+ * between them. connector.ts gives the rule. It is left with no box, because
+ * the line it draws comes from two other objects, and a connector to a connector
+ * would join two lines rather than two things.
+ */
+const CONNECTOR_SCHEMA: ObjectSchema = {
+  type: "connector",
+  slotFormats: [{ path: STYLE_STROKE_COLOR_PATH, format: "color" }],
+  slotOptions: [{ path: CONNECTOR_ARROW_PATH, values: [...CONNECTOR_ARROWS], labels: ["at the end", "at the start", "at both ends", "no arrowhead"] }],
+  nonDerivedSlotPaths: [
+    { kind: "static", paths: [CONNECTOR_FROM_PATH, CONNECTOR_TO_PATH, CONNECTOR_ARROW_PATH, STYLE_STROKE_COLOR_PATH, STYLE_STROKE_WIDTH_PATH] },
+  ],
+  derivedSlots: [{ kind: "static", slots: CONNECTOR_DERIVED_SLOTS }],
+};
+
 const SCHEMAS: Partial<Record<ObjectType, ObjectSchema>> = {
   layer: {
     type: "layer", nonDerivedSlotPaths: [{ kind: "static", paths: STYLE_PATHS }], derivedSlots: [],
@@ -560,6 +578,7 @@ const SCHEMAS: Partial<Record<ObjectType, ObjectSchema>> = {
   math: MATH_SCHEMA,
   slider: SLIDER_SCHEMA,
   frame: FRAME_SCHEMA,
+  connector: CONNECTOR_SCHEMA,
 };
 
 /** The schema for a type, or undefined for a type with no entry yet. */

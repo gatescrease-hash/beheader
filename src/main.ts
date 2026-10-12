@@ -28,6 +28,8 @@
  * the panel container would scale it twice.
  */
 import {
+  attachedConnectors,
+  BOX_PATH,
   type CameraState,
   assignLayer, createLayer, displayObjects, inheritStyle, layerId, mintObjectId, setLiteral, stylePaths,
   type Operation, formatCellReference, parseCellReference, getTableDimensions,
@@ -747,7 +749,10 @@ export function copyToClipboard(state: AppState, cells: CellBlock | undefined, c
   const line = `${verb} ${payload.objects.length === 1 ? "1 object" : `${payload.objects.length} objects`}: ${names.join(", ")}`;
   const copied = { ...state, clipboard: payload, pasteCount: 0 };
   if (!cut) return { ...transition(withLog(copied, [line])), clipboardText: names.join("\n") };
-  const deletes: Operation[] = payload.objects.map((object) => ({ kind: "deleteObject", objectId: object.id, force: false }));
+  // A connector to a cut object goes with it, the same as a delete takes it.
+  const leaving = new Set(payload.objects.map((object) => object.id));
+  const deletes: Operation[] = [...payload.objects, ...attachedConnectors(state.document.objects, leaving)]
+    .map((object) => ({ kind: "deleteObject", objectId: object.id, force: false }));
   return { ...commitBatch(withInteraction(copied, deselect()), deletes, [line], context), clipboardText: names.join("\n") };
 }
 
@@ -959,6 +964,12 @@ export function rewireDropAddress(state: AppState, edge: Edge, point: ScreenPoin
   const target = hitTest(point, objects, camera);
   if (target === undefined) {
     return { ok: false, message: "the curve end landed on empty canvas, so nothing changed" };
+  }
+  // A curve that reads a box, such as the end of a connector, reads the box of
+  // what it lands on, even a table or a copy, which would otherwise offer a
+  // cell or a variable.
+  if (slotKey(edge.sourceSlot.path) === slotKey(BOX_PATH) && target.slots[slotKey(BOX_PATH)] !== undefined) {
+    return { ok: true, address: { objectId: target.id, path: BOX_PATH } };
   }
   if (target.type === "table") {
     const cell = editorTargetAt(point, objects, camera);

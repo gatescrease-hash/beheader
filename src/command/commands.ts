@@ -133,6 +133,18 @@ import {
   vertexHandleOutPaths,
   vertexXPath,
   vertexYPath,
+  attachedConnectors,
+  BOX_PATH,
+  boxReference,
+  CONNECTOR_ARROW_PATH,
+  CONNECTOR_ARROWS,
+  CONNECTOR_FROM_PATH,
+  CONNECTOR_TO_PATH,
+  DEFAULT_CONNECTOR_ARROW,
+  DEFAULT_CONNECTOR_STROKE,
+  DEFAULT_CONNECTOR_STROKE_WIDTH,
+  displayObjects,
+  STYLE_STROKE_WIDTH_PATH,
 } from "../engine/index.ts";
 import { copyObjects, pasteObjects } from "./clipboard.ts";
 import { buildSlotDescriptors, describeSlotValue, type SlotDescriptor } from "./props.ts";
@@ -150,6 +162,7 @@ import type {
   CreateMathCommand,
   CreateScriptCommand,
   CreateSliderCommand,
+  CreateConnectorCommand,
   CreateFrameCommand,
   CreateTableCommand,
   CreateTextCommand,
@@ -412,6 +425,8 @@ export function executeCommand(command: Command, document: Document, context: Ev
     }
     case "frame":
       return createFrame(command, document, context);
+    case "connect":
+      return createConnector(command, document, context);
     case "import": {
       if (command.format.toLowerCase() !== "csv") {
         return { ok: false, message: `import reads csv, got "${command.format}" — usage: import csv [corner]` };
@@ -460,6 +475,7 @@ export const COMMANDS_WITH_HANDLERS: readonly string[] = [
   "script",
   "slider",
   "frame",
+  "connect",
   "view",
   "math",
   "set",
@@ -502,6 +518,7 @@ function createObjectFromCommand(
   literals: readonly LiteralSlotDeclaration[],
   context: EvalContext,
   vertexCount?: number,
+  formulas: Readonly<Record<string, Slot>> = {},
 ): CommandOutcome {
   const schema = getObjectSchema(type);
   if (schema === undefined) {
@@ -516,6 +533,7 @@ function createObjectFromCommand(
   for (const literal of literals) {
     slots[slotKey(literal.path)] = { kind: "literal", value: literal.value };
   }
+  Object.assign(slots, formulas);
   const objectSoFar: GraphObject = { id: minted.id, name, type, slots };
   for (const derived of resolveDerivedSlots(objectSoFar, schema.derivedSlots)) {
     slots[slotKey(derived.path)] = { kind: "derived", value: null };
@@ -648,6 +666,61 @@ function createFrame(command: CreateFrameCommand, document: Document, context: E
     { path: STYLE_FILL_COLOR_PATH, value: DEFAULT_FRAME_FILL },
     { path: STYLE_STROKE_COLOR_PATH, value: DEFAULT_FRAME_STROKE },
   ], context);
+}
+
+/**
+ * The slot an end of a connector holds: a formula that reads the box of the
+ * named object, or of the smallest object whose box holds the point, or, for a
+ * point on empty canvas, the point itself, which is a free end. The smallest
+ * box wins because a press inside a frame or a table aims at what lies on it.
+ */
+function connectorEnd(end: CreateConnectorCommand["from"], document: Document): { readonly ok: true; readonly slot: Slot; readonly objectId?: string } | { readonly ok: false; readonly message: string } {
+  if (typeof end === "string") {
+    const object = findGraphObjectByName(end, document.objects);
+    if (object === undefined) {
+      return { ok: false, message: `no object named "${end}"${nameSuggestion(end, document.objects.map((each) => each.name))}` };
+    }
+    if (object.slots[slotKey(BOX_PATH)] === undefined) {
+      return { ok: false, message: `${object.name} is a ${object.type}, which has no box for a connector to reach` };
+    }
+    return { ok: true, slot: { kind: "formula", ast: boxReference(object.id), value: null }, objectId: object.id };
+  }
+  let best: { readonly id: string; readonly area: number } | undefined;
+  for (const object of displayObjects(document.objects)) {
+    const box = object.slots[slotKey(BOX_PATH)]?.value;
+    if (!Array.isArray(box) || box.length !== 2) continue;
+    const [min, max] = box as readonly { x: number; y: number }[];
+    if (end.x < min!.x || end.x > max!.x || end.y < min!.y || end.y > max!.y) continue;
+    const area = (max!.x - min!.x) * (max!.y - min!.y);
+    if (best === undefined || area < best.area) best = { id: object.id, area };
+  }
+  return best === undefined
+    ? { ok: true, slot: { kind: "literal", value: { x: end.x, y: end.y } } }
+    : { ok: true, slot: { kind: "formula", ast: boxReference(best.id), value: null }, objectId: best.id };
+}
+
+/**
+ * Creates a connector between two objects, each end a formula that reads the
+ * box of its object, so a move of either redraws the line. Both ends on one
+ * object refuse, because the line from a box to itself has no length.
+ */
+function createConnector(command: CreateConnectorCommand, document: Document, context: EvalContext): CommandOutcome {
+  const arrow = (command.arrow ?? DEFAULT_CONNECTOR_ARROW).toLowerCase();
+  if (!(CONNECTOR_ARROWS as readonly string[]).includes(arrow)) {
+    return { ok: false, message: `a connector draws its arrowhead at end, start, both or none, got "${command.arrow}" — usage: connect <object> <object> [end|start|both|none]` };
+  }
+  const from = connectorEnd(command.from, document);
+  if (!from.ok) return from;
+  const to = connectorEnd(command.to, document);
+  if (!to.ok) return to;
+  if (from.objectId !== undefined && from.objectId === to.objectId) {
+    return { ok: false, message: "a connector joins two different objects, and both ends are on one" };
+  }
+  return createObjectFromCommand(document, "connector", [
+    { path: CONNECTOR_ARROW_PATH, value: arrow },
+    { path: STYLE_STROKE_COLOR_PATH, value: DEFAULT_CONNECTOR_STROKE },
+    { path: STYLE_STROKE_WIDTH_PATH, value: DEFAULT_CONNECTOR_STROKE_WIDTH },
+  ], context, undefined, { [slotKey(CONNECTOR_FROM_PATH)]: from.slot, [slotKey(CONNECTOR_TO_PATH)]: to.slot });
 }
 
 /**
@@ -1120,6 +1193,10 @@ function deleteObject(command: DeleteCommand, document: Document, context: EvalC
   if (object.type === GROUP_TYPE) {
     return ungroupObject(object.name, command.force, document, context);
   }
+  // The batch that takes along the connectors to the object is the batch of a list.
+  if (attachedConnectors(document.objects, new Set([object.id])).length > 0) {
+    return deleteObjects([object.name], command.force, document, context);
+  }
 
   const result = mutate(document.objects, [{ kind: "deleteObject", objectId: object.id, force: command.force }], document.journal, context);
   if (!result.ok) {
@@ -1156,6 +1233,11 @@ function deleteObjects(names: readonly string[], force: boolean, document: Docum
       leaving.add(object.id);
       targets.push(object);
     }
+  }
+  // A connector to a deleted object goes with it, and the report names it.
+  for (const connector of attachedConnectors(document.objects, leaving)) {
+    leaving.add(connector.id);
+    targets.push(connector);
   }
   const byId = new Map(document.objects.map((object) => [object.id, object]));
   const keptGroup = (object: GraphObject): string | null => {

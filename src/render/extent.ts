@@ -28,6 +28,7 @@ import {
   VERTICES_PATH,
 } from "../engine/index.ts";
 import { asPointArray, readNumber } from "./slots.ts";
+import { connectorExtent, connectorLayout } from "./connector-layout.ts";
 
 export interface WorldExtent {
   readonly minX: number;
@@ -67,6 +68,12 @@ export function objectExtent(object: GraphObject): WorldExtent | undefined {
       return committedBox(object);
     case "group":
       return groupAnchorBox(object);
+    // A connector's box is the box around its line and heads, which it draws
+    // from two other objects rather than a place of its own.
+    case "connector": {
+      const layout = connectorLayout(object);
+      return layout === undefined ? undefined : connectorExtent(layout);
+    }
     case "value":
     case "add":
       return undefined;
